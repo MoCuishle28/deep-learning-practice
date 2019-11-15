@@ -8,6 +8,7 @@ n_data = torch.ones(100, 2)
 
 # class0 特征值 (2维?) (normal 是在某个数附近随机生成?)
 x0 = torch.normal(2*n_data, 1)		# class0 x data (tensor), shape = (100, 2)
+
 # 标签 (100 个 0)
 y0 = torch.zeros(100)				# class0 y data (tensor), shape = (100, 1)
 

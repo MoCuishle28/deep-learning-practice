@@ -9,9 +9,12 @@ pipenv install matplotlib
 安装Pillow (torchvision依赖pillow)：
 pipenv install pillow
 
+pytorch 二进制文件地址
+https://download.pytorch.org/whl/cpu/torch_stable.html
+
 安装pytorch：
 pipenv install torch-1.1.0-cp36-cp36m-win_amd64.whl
-pipenv install torchvision-0.3.0-cp36-cp36m-win_amd64.whl
+pipenv install torchvision-0.4.0+cpu-cp36-cp36m-win_amd64.whl
 
 --------------------分割线------------------------
 安装pandas
@@ -20,3 +23,6 @@ pipenv install pandas
 安装tensorflow
 pipenv install tensorflow  安装慢、可能失败
 pipenv install tensorflow-1.14.0-cp36-cp36m-win_amd64.whl   上官网下载whl、未尝试可能失败
+
+安装gym
+pipenv install gym

@@ -1,1 +1,7 @@
+*.whl
+
+/Pipfile
+
+rec-learn/ml-latest-small
+
 /my-nn/mnist_dataset
