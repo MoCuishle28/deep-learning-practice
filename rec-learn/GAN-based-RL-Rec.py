@@ -18,7 +18,9 @@ LR = 0.0001		# 学习率
 EPOCH = 5		# epoch
 dropout_probability1 = 0.5
 dropout_probability2 = 0.5
-n_embedding = 5	# 降维后
+n_embedding = 5		# 降维后
+betas = (0.9, 0.99)	# Adam
+alpha = 0.9			# RMSprop
 
 
 def process_data():
@@ -142,17 +144,17 @@ def sample(uid, movies_feature_dict, users_have_saw):
 
 
 def train(user_model, users, users_have_saw, user_history_dict, user_state_dict, user_history_train_dict, movies_tags, LOSS):
-	# plt.ion()	# 实时画图
-	# plt.show()
 	loss_list = []
 
-	optimizer = torch.optim.SGD(user_model.parameters(), lr=LR)
+	# optimizer = torch.optim.SGD(user_model.parameters(), lr=LR)
+	# optimizer = torch.optim.Adam(user_model.parameters(), lr=LR, betas=betas)
+	optimizer = torch.optim.RMSprop(user_model.parameters(), lr=LR, alpha=alpha)
 	for epoch_time in range(EPOCH):
 		ii = 0
 		epoch_plot = []
-		# r_true_T_sum = 0
-		# dis_exp_r_sum_T_sum = 0
 		for uid, one_hot_arr in user_history_train_dict.items():
+			r_true_T_sum = torch.tensor([0.0], dtype=torch.float32).view((1, 1))
+			dis_exp_r_sum_T_sum = torch.tensor([0.0], dtype=torch.float32).view((1, 1))
 			for i in range(one_hot_arr.shape[1]//2):
 				dis_exp_r_sum = 0
 				r_true = 0
@@ -169,37 +171,50 @@ def train(user_model, users, users_have_saw, user_history_dict, user_state_dict,
 				# 将新的点击 item 加入state
 				state_one_hot_matrix = torch.cat((state_one_hot_matrix[:, 1:], true_click_one_hot.t()), 1)
 
-				# r_true_T_sum += r_true
-				# dis_exp_r_sum_T_sum += dis_exp_r_sum_T_sum
+				r_true_T_sum += r_true
+				dis_exp_r_sum_T_sum += (1/eta)*torch.log(dis_exp_r_sum)
 
-				loss = LOSS(r_true, dis_exp_r_sum)
-				optimizer.zero_grad()	# 先将梯度降为0
-				loss.backward()			# 反向传递
-				optimizer.step()		# 再用 optimizer 优化梯度	
-				if ii%100 == 0:
-					logging.debug('No. ' + str(ii) + ' Loss:' + str(loss))
-				ii += 1
-				loss_list.append(loss.data)
-
+				# loss = LOSS(r_true, dis_exp_r_sum)
+				# optimizer.zero_grad()	# 先将梯度降为0
+				# loss.backward()			# 反向传递
+				# optimizer.step()		# 再用 optimizer 优化梯度	
+				# if ii%100 == 0:
+				# 	logging.debug('No. ' + str(ii) + ' Loss:' + str(loss))
+				# ii += 1
+				# loss_list.append(loss.data)
 			# epoch_plot.append(sum([x.data for x in loss_list])/len(loss_list))
 
-			# logging.debug('No. ' + str(ii) + ' Mean Loss:' + str(sum([x.data for x in loss_list])/len(loss_list)))
-			print('No.', ii, "Mean Loss:", sum([x for x in loss_list])/len(loss_list))
-			loss_list.clear()
+			# print('No.', ii, "Mean Loss:", sum([x for x in loss_list])/len(loss_list))
+			# loss_list.clear()
 
-		# print("mean Loss:", sum(epoch_plot)/len(epoch_plot))
-		# plt.cla()
-		# plt.plot(np.array([it for it in range(len(epoch_plot))]), epoch_plot, 'r-', lw=1)
+			loss = LOSS(r_true_T_sum, dis_exp_r_sum_T_sum)
+			optimizer.zero_grad()	# 先将梯度降为0
+			loss.backward(retain_graph=True)			# 反向传递, 设为 True 防止缓冲区释放
+			optimizer.step()		# 再用 optimizer 优化梯度	
+			print("Loss:", loss)
+			logging.debug("Loss: " + str(loss))
+
+			loss_list.append(loss.data)
+
+		# plt.plot(np.array([it for it in range(len(loss_list))]), loss_list, 'r-', lw=1)
 		# plt.savefig("epoch"+str(epoch_time)+"loss.png")
-		# plt.pause(0.1)
+		# plt.show()
+		# loss_list.clear()
 		# epoch_plot = []
+	plt.close()
 
 
-def GAN_loss(r_true, dis_exp_r_sum):
-	return (1/eta) * torch.log(dis_exp_r_sum + 1) - r_true
+# SGD
+# def GAN_loss(r_true, dis_exp_r_sum):
+# 	return (1/eta) * torch.log(dis_exp_r_sum + 1) - r_true
+
+# 考虑 T sum
+def GAN_loss(r_true, dis_log_exp_r_sum):
+	return dis_log_exp_r_sum - r_true
 
 
 def test_user_module(user_model, users, users_have_saw, user_history_dict, user_state_dict, user_history_train_dict, movies_tags):
+	print("start test!")
 	right = 0
 	sum_choose = 0
 	for uid, one_hot_arr in user_history_train_dict.items():
@@ -289,7 +304,7 @@ LOSS = GAN_loss
 train(user_model, users, users_have_saw, user_history_dict, user_state_dict, user_history_train_dict, movies_tags, LOSS)
 
 # 保存模型
-torch.save(user_model, "user_model_by_Adam.pkl")
+torch.save(user_model, "user_model_by_RMSprop.pkl")
 # 加载模型
 # user_model = torch.load('user_model.pkl')
 
