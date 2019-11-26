@@ -69,8 +69,12 @@ env.seed(0)
 np.random.seed(0)
 torch.manual_seed(0)
 
+actor_path = 'models/actor-v2'
+critic_path = 'models/critic-v2'
+log_name = actor_path.split('/')[-1].split('-')[-1]
+
 logging.basicConfig(level = logging.INFO,
-					filename = "log/ddpg-v1"+'.log',
+					filename = "log/" + log_name + '.log',
 					filemode = 'a')
 
 log_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -80,16 +84,15 @@ GAMMA = 0.95
 tau = 0.001
 hidden_size = 128
 
-actor_path = 'models/actor-v0'
-critic_path = 'models/critic-v0'
+
 
 params = ', '.join(["gamma:"+str(GAMMA), 'tau:'+str(tau), 'hidden_size:'+str(hidden_size)])
 logging.info("params: "+ params)
 
 agent = DDPG(gamma = GAMMA, tau = tau, hidden_size = hidden_size,
 					num_inputs = env.observation_space.shape[0], action_space = env.action_space)
-
-agent.load_model(actor_path, critic_path)
+# 加载模型
+# agent.load_model(actor_path, critic_path)
 
 memory = ReplayMemory(1000000)
 
@@ -100,7 +103,7 @@ rewards = []
 total_numsteps = 0
 updates = 0
 
-EPISODE = 200
+EPISODE = 500
 BATCH_SIZE = 256
 
 for i_episode in range(EPISODE):
@@ -131,6 +134,9 @@ for i_episode in range(EPISODE):
 
 				updates += 1
 
+				if len(memory) < BATCH_SIZE:
+					break
+
 				# log_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 				# logging.info(str(log_time)+" Loss -> "+str(value_loss)+", "+str(policy_loss))
 
@@ -145,7 +151,7 @@ for i_episode in range(EPISODE):
 			state = torch.Tensor([env.reset()])
 			while True:
 				action = agent.select_action(state)
-
+				
 				next_state, reward, done, info = env.step(action.numpy()[0])
 				episode_reward += reward
 				episode_step += 1
@@ -164,4 +170,4 @@ for i_episode in range(EPISODE):
 
 env.close()
 
-# agent.save_model('taobao', actor_path='models/actor-v0', critic_path='models/critic-v0')
+# agent.save_model('taobao', actor_path=actor_path, critic_path=critic_path)

@@ -14,13 +14,14 @@ M = 10			# 只考虑 M 个历史记录
 N = 5 			# 历史数据乘以矩阵后输出的矩阵 col
 K = 3			# k-rank 推荐	
 eta = 1			# 参数 η
-LR = 0.0001		# 学习率
+LR = 0.001		# 学习率
 EPOCH = 5		# epoch
 dropout_probability1 = 0.5
 dropout_probability2 = 0.5
 n_embedding = 5		# 降维后
 betas = (0.9, 0.99)	# Adam
 alpha = 0.9			# RMSprop
+MOMENTUM = 0.8		# momentum
 
 
 def process_data():
@@ -146,15 +147,16 @@ def sample(uid, movies_feature_dict, users_have_saw):
 def train(user_model, users, users_have_saw, user_history_dict, user_state_dict, user_history_train_dict, movies_tags, LOSS):
 	loss_list = []
 
-	# optimizer = torch.optim.SGD(user_model.parameters(), lr=LR)
+	optimizer = torch.optim.SGD(user_model.parameters(), lr=LR, momentum=MOMENTUM)
 	# optimizer = torch.optim.Adam(user_model.parameters(), lr=LR, betas=betas)
-	optimizer = torch.optim.RMSprop(user_model.parameters(), lr=LR, alpha=alpha)
+	# optimizer = torch.optim.RMSprop(user_model.parameters(), lr=LR, alpha=alpha)
 	for epoch_time in range(EPOCH):
 		ii = 0
+		mean_loss = 0
 		epoch_plot = []
 		for uid, one_hot_arr in user_history_train_dict.items():
-			r_true_T_sum = torch.tensor([0.0], dtype=torch.float32).view((1, 1))
-			dis_exp_r_sum_T_sum = torch.tensor([0.0], dtype=torch.float32).view((1, 1))
+			# r_true_T_sum = torch.tensor([0.0], dtype=torch.float32).view((1, 1))
+			# dis_exp_r_sum_T_sum = torch.tensor([0.0], dtype=torch.float32).view((1, 1))
 			for i in range(one_hot_arr.shape[1]//2):
 				dis_exp_r_sum = 0
 				r_true = 0
@@ -171,46 +173,29 @@ def train(user_model, users, users_have_saw, user_history_dict, user_state_dict,
 				# 将新的点击 item 加入state
 				state_one_hot_matrix = torch.cat((state_one_hot_matrix[:, 1:], true_click_one_hot.t()), 1)
 
-				r_true_T_sum += r_true
-				dis_exp_r_sum_T_sum += (1/eta)*torch.log(dis_exp_r_sum)
+				# r_true_T_sum += r_true
+				# dis_exp_r_sum_T_sum += (1/eta)*torch.log(dis_exp_r_sum)
 
-				# loss = LOSS(r_true, dis_exp_r_sum)
-				# optimizer.zero_grad()	# 先将梯度降为0
-				# loss.backward()			# 反向传递
-				# optimizer.step()		# 再用 optimizer 优化梯度	
-				# if ii%100 == 0:
-				# 	logging.debug('No. ' + str(ii) + ' Loss:' + str(loss))
-				# ii += 1
-				# loss_list.append(loss.data)
-			# epoch_plot.append(sum([x.data for x in loss_list])/len(loss_list))
+				loss = LOSS(r_true, dis_exp_r_sum)
+				optimizer.zero_grad()	# 先将梯度降为0
+				loss.backward()			# 反向传递
+				optimizer.step()		# 再用 optimizer 优化梯度	
+				if ii%100 == 0:
+					logging.debug('No. ' + str(ii) + ' Loss:' + str(loss))
+				ii += 1
+				mean_loss += (1/ii)*(loss - mean_loss)
 
-			# print('No.', ii, "Mean Loss:", sum([x for x in loss_list])/len(loss_list))
-			# loss_list.clear()
-
-			loss = LOSS(r_true_T_sum, dis_exp_r_sum_T_sum)
-			optimizer.zero_grad()	# 先将梯度降为0
-			loss.backward(retain_graph=True)			# 反向传递, 设为 True 防止缓冲区释放
-			optimizer.step()		# 再用 optimizer 优化梯度	
-			print("Loss:", loss)
-			logging.debug("Loss: " + str(loss))
-
-			loss_list.append(loss.data)
-
-		# plt.plot(np.array([it for it in range(len(loss_list))]), loss_list, 'r-', lw=1)
-		# plt.savefig("epoch"+str(epoch_time)+"loss.png")
-		# plt.show()
-		# loss_list.clear()
-		# epoch_plot = []
-	plt.close()
+			# epoch_plot.append(mean_loss)
+			print('No.', ii, "Mean Loss:", mean_loss)
 
 
 # SGD
-# def GAN_loss(r_true, dis_exp_r_sum):
-# 	return (1/eta) * torch.log(dis_exp_r_sum + 1) - r_true
+def GAN_loss(r_true, dis_exp_r_sum):
+	return (1/eta) * torch.log(dis_exp_r_sum + 1) - r_true
 
 # 考虑 T sum
-def GAN_loss(r_true, dis_log_exp_r_sum):
-	return dis_log_exp_r_sum - r_true
+# def GAN_loss(r_true, dis_log_exp_r_sum):
+# 	return dis_log_exp_r_sum - r_true
 
 
 def test_user_module(user_model, users, users_have_saw, user_history_dict, user_state_dict, user_history_train_dict, movies_tags):
@@ -279,7 +264,7 @@ def greedy_recommend(user_model, users, users_have_saw, user_history_dict, user_
 start = time.time()
 
 logging.basicConfig(level = logging.DEBUG,			# 控制台打印的日志级别
-					filename = str(start)+'.log',
+					filename = "log/"+str(start)+'.log',
 					filemode = 'a',					# 模式，有w和a，w就是写模式，每次都会重新写日志，覆盖之前的日志
 					# a是追加模式，默认如果不写的话，就是追加模式
 					)
@@ -293,26 +278,28 @@ logging.debug(' '.join(h_params))
 users, movies, movies_tags, users_have_saw = process_data()
 user_history_dict, user_state_dict, user_history_train_dict, movies_feature_dict = generate_data(users, movies, movies_tags)
 
+# 创建模型
 user_model = UserModel_pw(len(movies_tags), M, N, 'elu', 256, 'elu', 128, 'elu', 1)
 
 # item = user_history_train_dict[2][:, 1].clone().view((-1, len(movies_tags)))
 # reward = user_model(user_state_dict[2], item)
 # print(reward)
 
+# 加载模型
+# user_model = torch.load('user_model_by_SGD.pkl')
+
 LOSS = GAN_loss
-# LOSS = 
+# LOSS = torch.nn.MSELoss()
 train(user_model, users, users_have_saw, user_history_dict, user_state_dict, user_history_train_dict, movies_tags, LOSS)
 
 # 保存模型
-torch.save(user_model, "user_model_by_RMSprop.pkl")
-# 加载模型
-# user_model = torch.load('user_model.pkl')
+# torch.save(user_model, "user_model_by_SGD_and_MSELoss.pkl")
 
 precision = test_user_module(user_model, users, users_have_saw, user_history_dict, user_state_dict, user_history_train_dict, movies_tags)
 print('precision:', precision)
 logging.debug('precision:' + str(precision))
 
-greedy_recommend(user_model, users, users_have_saw, user_history_dict, user_state_dict, user_history_train_dict, movies_tags, movies_feature_dict)
+# greedy_recommend(user_model, users, users_have_saw, user_history_dict, user_state_dict, user_history_train_dict, movies_tags, movies_feature_dict)
 
 logging.debug("END time:" + str(time.time() - start))
 print(time.time() - start)

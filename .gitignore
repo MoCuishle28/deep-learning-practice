@@ -2,6 +2,7 @@
 *.log
 *.pkl
 *.png
+*.csv
 
 /Pipfile
 
