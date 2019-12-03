@@ -30,12 +30,12 @@ args = parser.parse_args()
 ENV_NAME = 'VirtualTB-v0'  # environment name
 RANDOMSEED = 1  # random seed
 
-EP_MAX = 1000  # total number of episodes for training
-EP_LEN = 200  # total number of steps for each episode
-GAMMA = 0.9  # reward discount
-A_LR = 0.0001  # learning rate for actor
-C_LR = 0.0002  # learning rate for critic
-BATCH = 32  # update batchsize
+EP_MAX = 1000  	# total number of episodes for training
+EP_LEN = 200  	# total number of steps for each episode
+GAMMA = 0.9  	# reward discount
+A_LR = 0.0001  	# learning rate for actor
+C_LR = 0.0002  	# learning rate for critic
+BATCH = 32  	# update batchsize
 A_UPDATE_STEPS = 10  # actor update steps
 C_UPDATE_STEPS = 10  # critic update steps
 S_DIM, A_DIM = 3, 1  # state dimension, action dimension
@@ -44,6 +44,11 @@ METHOD = [
 	dict(name='kl_pen', kl_target=0.01, lam=0.5),  # KL penalty
 	dict(name='clip', epsilon=0.2),  # Clipped surrogate objective, find this is better
 ][0]  # choose the method for optimization
+
+
+actor_path = 'model/ppo_actor.hdf5'
+old_actor_path = 'model/ppo_actor_old.hdf5'
+critic_path = 'model/ppo_critic.hdf5'
 
 ###############################  PPO  ####################################
 
@@ -231,18 +236,18 @@ class PPO(object):
 		"""
 		if not os.path.exists('model'):
 			os.makedirs('model')
-		tl.files.save_weights_to_hdf5('model/ppo_actor.hdf5', self.actor)
-		tl.files.save_weights_to_hdf5('model/ppo_actor_old.hdf5', self.actor_old)
-		tl.files.save_weights_to_hdf5('model/ppo_critic.hdf5', self.critic)
+		tl.files.save_weights_to_hdf5(actor_path, self.actor)
+		tl.files.save_weights_to_hdf5(old_actor_path, self.actor_old)
+		tl.files.save_weights_to_hdf5(critic_path, self.critic)
 
 	def load_ckpt(self):
 		"""
 		load trained weights
 		:return: None
 		"""
-		tl.files.load_hdf5_to_weights_in_order('model/ppo_actor.hdf5', self.actor)
-		tl.files.load_hdf5_to_weights_in_order('model/ppo_actor_old.hdf5', self.actor_old)
-		tl.files.load_hdf5_to_weights_in_order('model/ppo_critic.hdf5', self.critic)
+		tl.files.load_hdf5_to_weights_in_order(actor_path, self.actor)
+		tl.files.load_hdf5_to_weights_in_order(old_actor_path, self.actor_old)
+		tl.files.load_hdf5_to_weights_in_order(critic_path, self.critic)
 
 
 if __name__ == '__main__':
@@ -297,7 +302,7 @@ if __name__ == '__main__':
 			# else:
 			# 	all_ep_r.append(all_ep_r[-1] * 0.9 + ep_r * 0.1)
 
-			all_ep_r.append(ep_r)
+			all_ep_r.append(ep_r / cnt / 10)
 
 			print(
 				'Episode: {}/{}  | Episode CTR: {:.4f}  | Running Time: {:.4f}'.format(
@@ -312,19 +317,34 @@ if __name__ == '__main__':
 			plt.plot(np.arange(len(all_ep_r)), all_ep_r)
 			plt.xlabel('Episode')
 			# plt.ylabel('Moving averaged episode reward')
-			plt.ylabel('episode reward')
+			plt.ylabel('Episode CTR')
 			plt.show()
 			plt.pause(0.1)
+
 		ppo.save_ckpt()
 		plt.ioff()
+		plt.savefig('ppo-KL-CTR.png')
 		plt.show()
 
 	# test
-	# ppo.load_ckpt()
+	ppo.load_ckpt()
+	# while True:
+	# 	s = env.reset()
+	# 	for i in range(EP_LEN):
+	# 		# env.render()
+	# 		s, r, done, _ = env.step(ppo.choose_action(s))
+	# 		print('reward:', r)
+	# 		if done:
+	# 			break
+
+	s = env.reset()	
+	t = 0
+	total_r = 0
 	while True:
-		s = env.reset()
-		for i in range(EP_LEN):
-			# env.render()
-			s, r, done, _ = env.step(ppo.choose_action(s))
-			if done:
-				break
+		# env.render()
+		t += 1
+		s, r, done, _ = env.step(ppo.choose_action(s))
+		total_r += r
+		print('Times: {} | CTR: {:.4f}  | Reward: {}'.format(t, total_r / t / 10, r))
+		if done:
+			break

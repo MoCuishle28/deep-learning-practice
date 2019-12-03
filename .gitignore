@@ -3,6 +3,9 @@
 *.pkl
 *.png
 *.csv
+*.hdf5
+*.jpg
+*.npy
 
 /Pipfile
 
@@ -15,3 +18,5 @@ rec-learn/ml-latest-small
 /virtualTaoBao/virtualTB
 
 /virtualTaoBao/models
+
+/virtualTaoBao/model

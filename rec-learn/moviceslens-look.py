@@ -12,7 +12,7 @@ ratings 数据
 """
 
 ratings = pd.read_csv("ml-latest-small/ratings.csv", index_col=None)
-ratings.describe()    		# 什么用？好像去掉也行
+ratings.describe()    		# 解释，可以得到 mean、std...
 # print(ratings.head(5))
 
 
