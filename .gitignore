@@ -6,6 +6,7 @@
 *.hdf5
 *.jpg
 *.npy
+*.h5
 
 /Pipfile
 
@@ -20,3 +21,7 @@ rec-learn/ml-latest-small
 /virtualTaoBao/models
 
 /virtualTaoBao/model
+
+/nn-learn/keras/data
+
+/PyTorch-learn/tutorial/data

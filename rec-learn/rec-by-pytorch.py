@@ -22,7 +22,7 @@ record = np.array(record, dtype=int)	# 将布尔值转为 0/1  0表示未评分,
 # 假设有10种类型的电影
 num_features = 10
 LR = 1e-3
-EPOCH = 1000
+EPOCH = 5000
 
 record = torch.tensor(record, dtype=torch.float64)
 rating = torch.tensor(rating, dtype=torch.float64)

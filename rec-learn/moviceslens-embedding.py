@@ -134,45 +134,59 @@ def save_data():
 
 # 处理 embedding
 # (moviesNo, 10)
-movies_embedding = np.load('models/X_parameter_withoutNorm.npy')
+# movies_embedding = np.load('models/X_parameter_withoutNorm.npy')
 
 # col: 'movieRow', 'movieId', 'title'
 # movies_df = pd.read_csv('data/moviesProccessed.csv')
-# movieId_to_MovieRow = {}	#  mid : movieRow
 
-# for mid, mRow in zip(movies_df['movieId'], movies_df['movieRow']):
-# 	movieId_to_MovieRow[mid] = mRow
-
+movieId_to_MovieRow = {}	#  mid : movieRow
 # save_obj(movieId_to_MovieRow, 'movieId_to_MovieRow')
 
 # (9742, 10)
-print(movies_embedding.shape)
-
-movieId_to_MovieRow = load_obj('movieId_to_MovieRow')			# mid:movieRow
-movieRow_to_mid = { v:k for k,v in movieId_to_MovieRow.items()}	# mRow:mid
-tags_movies = load_obj('tags_movies')							# tag_name:[mid 1, mid 2]
-
-from sklearn.decomposition import PCA
-from matplotlib import pyplot as plt
-
-pca = PCA(n_components=2, svd_solver='arpack')
-embedding_2D = pca.fit_transform(movies_embedding)
-print(embedding_2D.shape)
+# print(movies_embedding.shape)
 
 
-tags_movies = { tag_name:set(v) for tag_name, v in tags_movies.items()}
-for i in range(500):
-	mid = movieRow_to_mid[i]
-	x = embedding_2D[i, :]
-	if mid in tags_movies['Adventure']:
-		plt.scatter(x[0], x[1], s=15, color='red',marker='x',lw = 2)
-	elif mid in tags_movies['Animation']:
-		plt.scatter(x[0], x[1], s=15, color='blue',marker='o',lw = 2)
-	elif mid in tags_movies['Drama']:
-		plt.scatter(x[0], x[1], s=15, color='yellow',marker='*',lw = 2)
-	elif mid in tags_movies['Comedy']:
-		plt.scatter(x[0], x[1], s=15, color='black',marker='+',lw = 2)
-	elif mid in tags_movies['Fantasy']:
-		plt.scatter(x[0], x[1], s=15, color='purple',marker='.',lw = 2)
+# user_click = load_obj('user_click')						# uid: [mid 1, mid 2, ...]
+# movieId_to_MovieRow = load_obj('movieId_to_MovieRow')	# mid: movieRow
 
-plt.show()
+# min_ = 9999999
+# max_ = 0
+# for _, v in user_click.items():
+# 	min_ = len(v) if len(v) < min_ else min_
+# 	max_ = len(v) if len(v) > max_ else max_
+# print(min_, max_)		# 20~2698
+
+user_click_movieRow = {}		# uid: [movieRow 1, movieRow 2, ...]
+# save_obj(user_click_movieRow, 'user_click_movieRow')
+# user_click_movieRow = load_obj('user_click_movieRow')
+
+user_has_clicked_movieRow = {}	# uid: {row 1, row 2, ...}
+# save_obj(user_has_clicked_movieRow, 'user_has_clicked_movieRow')
+# user_has_clicked_movieRow = load_obj('user_has_clicked_movieRow')
+
+
+# 验证
+# right = True
+# for uid, row_set in user_has_clicked_movieRow.items():
+# 	for row in user_click_movieRow[uid]:
+# 		if row not in row_set:
+# 			right = False
+# 			break
+# 	if not right:
+# 		print(uid)
+# 		break
+# print('right' if right else 'not right')
+
+
+# 验证
+# row_to_idx = {v:k for k, v in movieId_to_MovieRow.items()}
+# right = True
+# for uid, row_list, mid_list in zip(user_click.keys(), user_click_movieRow.values(), user_click.values()):
+# 	for row, mid in zip(row_list, mid_list):
+# 		if row_to_idx[row] != mid:
+# 			right = False
+# 			break
+# 	if not right:
+# 		print(uid)
+# 		break
+# print('right' if right else 'not right')
