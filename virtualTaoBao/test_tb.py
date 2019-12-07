@@ -20,6 +20,7 @@ while True:
 	print('state:', state)
 	print('reward:', reward)
 	print('info:', info)
+	print('done:', done)
 	print('---END Episode---')
 
 	if done: 
