@@ -53,42 +53,42 @@ epoch = 3
 lr = 1e-3
 plot_loss = []
 
+if __name__ == '__main__':
+	movie_embedding = np.load('models/X_parameter_withoutNorm.npy')
+	user_embedding = np.load('models/Theta_parameter_withoutNorm.npy')
+	user_click_movieRow = load_obj('user_click_movieRow')
 
-movie_embedding = np.load('models/X_parameter_withoutNorm.npy')
-user_embedding = np.load('models/Theta_parameter_withoutNorm.npy')
-user_click_movieRow = load_obj('user_click_movieRow')
+	cfn = CFN(10, 10)
 
-cfn = CFN(10, 10)
+	parameters = [cfn.uz, cfn.ui, cfn.wa, cfn.wi, cfn.wz, cfn.bz, cfn.bi]
+	optimizer = torch.optim.RMSprop(parameters, lr=lr)
+	loss_func = torch.nn.MSELoss()
 
-parameters = [cfn.uz, cfn.ui, cfn.wa, cfn.wi, cfn.wz, cfn.bz, cfn.bi]
-optimizer = torch.optim.RMSprop(parameters, lr=lr)
-loss_func = torch.nn.MSELoss()
+	for i in range(epoch):
+		cnt = 0
+		for uid, row_list in user_click_movieRow.items():
+			target_state = torch.tensor(user_embedding[uid-1, :], dtype=torch.float32).view(10, 1)
+			state = cfn.init_state()
 
-for i in range(epoch):
-	cnt = 0
-	for uid, row_list in user_click_movieRow.items():
-		target_state = torch.tensor(user_embedding[uid-1, :], dtype=torch.float32).view(10, 1)
-		state = cfn.init_state()
+			for row in row_list:
+				cnt += 1
+				action = torch.tensor(movie_embedding[row, :], dtype=torch.float32).view(10, 1)
+				state = cfn(state, action)
 
-		for row in row_list:
-			cnt += 1
-			action = torch.tensor(movie_embedding[row, :], dtype=torch.float32).view(10, 1)
-			state = cfn(state, action)
+			loss = loss_func(state, target_state)
 
-		loss = loss_func(state, target_state)
+			if cnt % 100 == 0:
+				plot_loss.append(loss.item())
+				print('Epoch:{}, cnt:{}, Loss:{}'.format(i, cnt, loss.item()))
 
-		if cnt % 100 == 0:
-			plot_loss.append(loss.item())
-			print('Epoch:{}, cnt:{}, Loss:{}'.format(i, cnt, loss.item()))
-
-		optimizer.zero_grad()
-		loss.backward()
-		optimizer.step()
+			optimizer.zero_grad()
+			loss.backward()
+			optimizer.step()
 
 
-torch.save(cfn, 'models/cfn.pkl')
+	torch.save(cfn, 'models/cfn.pkl')
 
-import matplotlib.pyplot as plt
+	import matplotlib.pyplot as plt
 
-plt.plot(plot_loss)
-plt.show()
+	plt.plot(plot_loss)
+	plt.show()

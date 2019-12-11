@@ -30,12 +30,11 @@ prob = tf.constant([0.2, 0.4, 0.4])
 # prob = np.array([0.2, 0.4, 0.4])
 for _ in range(5):
 	a = tl.rein.choice_action_by_probs(prob)
-	print(a, type(a), a.ravel(), type(a.ravel()))
 	# 1 <class 'numpy.int32'> [1] <class 'numpy.ndarray'>
+	print(a, type(a), a.ravel(), type(a.ravel()))
 
 
 print('----')
 for _ in range(5):
 	a = tl.rein.choice_action_by_probs([0.2, 0.4, 0.4], ['a', 'b', 'c'])
-	print(a, type(a))
-	# c <class 'numpy.str_'>
+	print(a, type(a))	# c <class 'numpy.str_'>

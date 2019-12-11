@@ -18,13 +18,14 @@ class PolicyGradient(nn.Module):
 
 		self.input_layer = nn.Linear(n_features, n_hidden)
 		self.output_layer = nn.Linear(n_hidden, n_actions)
+
 		self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
 
 
 	def forward(self, state):
 		hidden = torch.relu(self.input_layer(state))
 		out = self.output_layer(hidden)
-		return F.softmax(out, dim=1)
+		return torch.softmax(out, dim=1)
 
 
 
@@ -34,20 +35,20 @@ class PolicyGradient(nn.Module):
 		:param s: state
 		:return: act
 		"""
-		_logits = self(torch.tensor(s, torch.float32))
-		_probs = self(_logits).detach().numpy()
+		_logits = self(torch.tensor(s, dtype=torch.float32))
+		_probs = _logits.detach().numpy()
 		return tl.rein.choice_action_by_probs(_probs.ravel())
 
 
 	def choose_action_greedy(self, s, k):
 		"""
 		choose k action with greedy policy
-		:param s: state
-		:return: act
+		:param s: state -> shape (1, x)
+		:param k: top k
+		:return: n, idx  ->[[n 1, n 2, ...], [idx 1, idx 2, ...]]
 		"""
-		_probs = torch.softmax(self.model(torch.tensor(s, dtype=torch.float32))).detach().numpy()
-		# return _probs[np.argpartition(_probs, -k)[-k:]]		# top-k
-		return _probs.topk(k)	# 返回 [[n 1, n 2, ...], [idx 1, idx 2, ...]]
+		probs = self(torch.tensor(s, dtype=torch.float32))
+		return probs.topk(k)	
 
 
 	def store_transition(self, s, a, r):
@@ -64,36 +65,41 @@ class PolicyGradient(nn.Module):
 
 
 	def store_len(self):
-		return len(self.rs)
+		return len(self.ep_rs)
 
 
-	def learn(self, behavior_policy):
+	def set_state_model(self):
+		# TODO
+		pass
+
+
+	def learn(self, behavior_policy=None):
 		"""
 		off-policy update policy parameters
-		:return: None
+		:return: loss
 		"""
-		return
-		# TODO
 		# discount and normalize episode reward (是每个时刻的 return，而不是reward)
-		discounted_ep_rs_norm = self._discount_and_norm_rewards()
+		discounted_ep_rs_norm = torch.tensor(self._discount_and_norm_rewards(), dtype=torch.float32)
 
-		# 每行是 feature vec    列是这个 batch 有几个 vec
-		all_act_prob = self(torch.tensor(np.vstack(self.ep_obs)))
+		# 每行是 feature vec (batch, n_actions)
+		all_act_prob = self(torch.tensor(np.vstack(self.ep_obs), dtype=torch.float32))
 
-		# torch没有 one-hot	TODO
-		true_act_one_hot = tf.one_hot(self.ep_as, self.n_actions)
-		true_act_prob = all_act_prob * true_act_one_hot
+		# 获轨迹动作的 one-hot
+		ep_as = torch.LongTensor(self.ep_as).view(len(self.ep_as), 1)
+		# shape -> (batch, n_actions)
+		true_act_one_hot = torch.zeros(len(self.ep_as), self.n_actions).scatter_(dim=1, index=ep_as, value=1)
 
-		neg_log_prob = tf.reduce_sum(-torch.log(all_act_prob)*true_act_one_hot, axis=1)
+		neg_log_prob = torch.sum(-torch.log(all_act_prob) * true_act_one_hot, dim=1)
 
 		# discounted_ep_rs_norm 是经过 discount 的 reward（实际上是return）
-		loss = tf.reduce_mean(neg_log_prob * discounted_ep_rs_norm)  # reward(实际上是 return) guided loss
+		loss = torch.sum(neg_log_prob * discounted_ep_rs_norm)
 
-		grad = tape.gradient(loss, self.model.trainable_weights)
-		self.optimizer.apply_gradients(zip(grad, self.model.trainable_weights))
+		self.optimizer.zero_grad()
+		loss.backward()
+		self.optimizer.step()
 
 		self.ep_obs, self.ep_as, self.ep_rs = [], [], []  # empty episode data
-		return discounted_ep_rs_norm
+		return loss.item()
 
 
 	def _discount_and_norm_rewards(self):

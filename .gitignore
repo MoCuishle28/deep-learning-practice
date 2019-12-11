@@ -7,14 +7,13 @@
 *.jpg
 *.npy
 *.h5
+*.ckpt
 
 /Pipfile
 
 rec-learn/ml-latest-small
 
 /my-nn/mnist_dataset
-
-/GenerativeAdversarialUserModel
 
 /virtualTaoBao/virtualTB
 
@@ -27,3 +26,10 @@ rec-learn/ml-latest-small
 /PyTorch-learn/tutorial/data
 
 /virtualTaoBao/data
+
+/nn-learn/keras/NLP/data
+
+/paper-code
+
+/rec-learn/TPGR/pic
+/rec-learn/TPGR/models

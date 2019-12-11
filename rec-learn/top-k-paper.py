@@ -38,7 +38,7 @@ observation_space = M*10 + 10	# history movie embedding (M*10) + user embedding 
 movie_num = 9742
 RANDOMSEED = 1  # random seed
 num_episodes = 500
-n_hidden = 16
+n_hidden = 32
 
 
 def test():
@@ -46,30 +46,17 @@ def test():
 	# TODO
 
 
-def train(RL, behavior_policy):
+def train(RL, behavior_policy, state_model):
 	# train data -> (state, action, reward)
 	for uid, click_row_list in user_click_movieRow.items():
-		user = user_embedding[uid, :].reshape((1, 10))
-		movie = movie_embedding[user_history_row[uid], :]
-		state = np.vstack((movie, user))
-		# state = torch.tensor(state.ravel(), dtype=torch.float32)
+		state = np.zeros(10).reshape(1, 10)		# state-> (1, 10)
 
-		history = set(user_history_row[uid])
 		for row in click_row_list:
-			action = [row]
-			reward = 1
-			for i in range(2):
-				movieRow = random.randint(0, 9741)
-				while movieRow in history:
-					movieRow = random.randint(0, 9741)
-				action.append(movieRow)
-			for idx in action[1:]:
-				if idx in user_has_clicked_movieRow[uid]:
-					reward += 1
-			# state-> tensor.Size([60])
-			# action-> list len:3
-			# reward-> scalars
-			RL.store_transition(state, action, reward)
+			reward = 1		# reward-> scalar
+			# action-> scalar
+			RL.store_transition(state, row, reward)
+			choose_movie = movie_embedding[row, :]
+			# TODO state 变化
 
 			if RL.store_len() >= batch:
 				RL.learn(behavior_policy)	# 传入 behavior_policy
@@ -82,7 +69,8 @@ if __name__ == '__main__':
 		n_hidden = n_hidden, learning_rate = 0.001, reward_decay = 0.95)
 
 	behavior_policy = None
+	state_model = None
 
 	for i_episode in range(num_episodes):
-		train(RL, behavior_policy)
+		train(RL, behavior_policy, state_model)
 	# torch.save(RL, 'models/pg_policy.pkl')
