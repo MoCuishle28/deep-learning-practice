@@ -89,7 +89,11 @@ class PolicyGradient(nn.Module):
 		# shape -> (batch, n_actions)
 		true_act_one_hot = torch.zeros(len(self.ep_as), self.n_actions).scatter_(dim=1, index=ep_as, value=1)
 
-		neg_log_prob = torch.sum(-torch.log(all_act_prob) * true_act_one_hot, dim=1)
+		if behavior_policy == None:
+			neg_log_prob = torch.sum(-torch.log(all_act_prob) * true_act_one_hot, dim=1)
+		else:
+			# TODO
+			pass
 
 		# discounted_ep_rs_norm 是经过 discount 的 reward（实际上是return）
 		loss = torch.sum(neg_log_prob * discounted_ep_rs_norm)

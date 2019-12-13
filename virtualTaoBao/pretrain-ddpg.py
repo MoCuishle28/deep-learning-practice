@@ -45,9 +45,9 @@ ddpg = DDPG(a_dim, s_dim, a_bound)
 
 start = datetime.datetime.now()
 
-EPISODE = 1
+EPISODE = 1		# 22 分钟左右一个 epoch
 TEST_EPISODE = 100
-session_num = 100
+session_num = 60
 
 reward_buffer = []
 
@@ -76,11 +76,13 @@ if args.train:
 
 ddpg.load_ckpt()
 reward_buffer = []
+aver_ctr = []
+total_cnt = 0
 for i in range(TEST_EPISODE):
 	total_reward = 0
 	cnt = 0
 	s = env.reset()
-	# 一回合 200 个 session
+	# 一回合 session_num 个 session
 	for session in range(session_num):
 		done = False
 		while not done:
@@ -92,7 +94,10 @@ for i in range(TEST_EPISODE):
 			cnt += 1
 			if ddpg.pointer > MEMORY_CAPACITY:
 				ddpg.learn()
-	print('{}/{}  CTR:{:.4f}%'.format(i, TEST_EPISODE, (total_reward / cnt / 10)*100))
+				# ddpg.clear_memory()
+	total_cnt += cnt
+	print('{}/{} Total Cnt:{} CTR:{:.4f}%'.format(i+1, TEST_EPISODE, total_cnt, (total_reward / cnt / 10)*100))
+	aver_ctr.append((total_reward / cnt / 10)*100)
 	reward_buffer.append(total_reward / cnt / 10)
 
 	plt.ion()
@@ -104,4 +109,5 @@ for i in range(TEST_EPISODE):
 	plt.show()
 	plt.pause(0.1)
 
+print('Average CTR:{:.4f}%'.format(sum(aver_ctr)/len(aver_ctr)))
 # ddpg.save_ckpt()

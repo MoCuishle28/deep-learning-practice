@@ -20,24 +20,18 @@ def load_obj(name):
 # (9742, 10)
 movie_embedding = np.load('models/X_parameter_withoutNorm.npy')
 # (611, 10)
-user_embedding = np.load('models/Theta_parameter_withoutNorm.npy')
+# user_embedding = np.load('models/Theta_parameter_withoutNorm.npy')
 
 user_click_movieRow = load_obj('user_click_movieRow')				# uid: [row 1, row 2, ...]
-user_has_clicked_movieRow = load_obj('user_has_clicked_movieRow')	# uid: {row 1, row 2, ...}
-
-user_history_row = load_obj('user_history_row')		# uid: [row 1, row 2, ...] 作为 state 的一部分
-user_state = {}				# uid: state
-# TODO 用 RNN 求 state
+# user_has_clicked_movieRow = load_obj('user_has_clicked_movieRow')	# uid: {row 1, row 2, ...}
 
 
 ################################# 参数 #################################
-M = 5	# 最近 M 个历史选择作为 state 的一部分
-K = 3	# top-K
+K = 1	# top-K
 batch = 64
-observation_space = M*10 + 10	# history movie embedding (M*10) + user embedding (10) (之后改成RNN的)
+observation_space = 10
 movie_num = 9742
-RANDOMSEED = 1  # random seed
-num_episodes = 500
+num_episodes = 1
 n_hidden = 32
 
 
@@ -73,4 +67,5 @@ if __name__ == '__main__':
 
 	for i_episode in range(num_episodes):
 		train(RL, behavior_policy, state_model)
+
 	# torch.save(RL, 'models/pg_policy.pkl')

@@ -204,7 +204,7 @@ class DDPG(object):
 
 
 	def clear_memory(self):
-		self.memory = np.zeros((MEMORY_CAPACITY, s_dim * 2 + a_dim + 1), dtype=np.float32)
+		self.memory = np.zeros((MEMORY_CAPACITY, self.s_dim * 2 + self.a_dim + 1), dtype=np.float32)
 
 
 	def save_ckpt(self):
