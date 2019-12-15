@@ -241,9 +241,44 @@ def train_state_model(lr, epoch, movie_embedding):
 	plt.show()
 
 
+def test_behavior_policy(behavior_policy, state_model, user_click_movieRow, movie_embedding):
+	precise_list = []	# [[sum 1, len 1], [sum 2, len 2]]
+	for uid, row_list in user_click_movieRow.items():
+		state = torch.zeros(1, 10, dtype=torch.float32)
+		curr_state = [np.zeros(10) for _ in range(5)]
+		mask = []
+
+		for act_row in row_list:
+			_, action = behavior_policy.choose_greedy(state, 1)	# 返回的 action 是一个 list
+			mask.append(action[0])
+			choose_movie = movie_embedding[act_row, :]
+			
+			curr_state.pop(0)
+			curr_state.append(choose_movie)
+
+			input_data = torch.tensor(curr_state, dtype=torch.float32).reshape((1, len(curr_state), 10))
+			next_state = state_model(input_data)
+			state = next_state
+		mask = np.array(mask, dtype=np.int8)
+		row_arr = np.array(row_list, dtype=np.int8)
+		mask_sum = np.sum(mask == row_arr)
+		mask_len = len(row_list)
+		print('UID:{} precise:{:.4f}%'.format(uid, (mask_sum*1.0 / mask_len)*100))
+		precise_list.append([mask_sum, mask_len])
+
+	right_sum = 0.0
+	total_len = 0.0
+	for pair in precise_list:
+		right_sum += pair[0]
+		total_len += pair[1]
+	return right_sum / total_len
+
+
+
 def train_behavior(movie_embedding):
 	state_model = RNN(10, 16, 4, 10)
 	state_model.load_state_dict(torch.load('models/state_model.ckpt'))	# 直接加载模型
+	user_click_movieRow = load_obj('user_click_movieRow')
 
 	behavior_policy = Behavior(10, 32, 9742)
 
@@ -252,7 +287,6 @@ def train_behavior(movie_embedding):
 	optimizer = torch.optim.SGD(behavior_policy.parameters(), lr=lr)
 
 	loss_func = torch.nn.CrossEntropyLoss()
-	user_click_movieRow = load_obj('user_click_movieRow')
 	
 	plot_loss = []
 	for i in range(epoch):
@@ -300,4 +334,13 @@ if __name__ == '__main__':
 	# train0(lr, epoch, movie_embedding)
 	# train1(lr, epoch, movie_embedding)
 	# train_state_model(lr, epoch, movie_embedding)
-	train_behavior(movie_embedding)
+	# train_behavior(movie_embedding)
+
+	# 测试
+	state_model = RNN(10, 16, 4, 10)
+	state_model.load_state_dict(torch.load('models/state_model.ckpt'))	# 直接加载模型
+	behavior_policy = Behavior(10, 32, 9742)
+	behavior_policy.load_state_dict(torch.load('models/behavior_policy.ckpt'))	# 直接加载模型
+	user_click_movieRow = load_obj('user_click_movieRow')
+	precise = test_behavior_policy(behavior_policy, state_model, user_click_movieRow, movie_embedding)
+	print(str(precise*100)+"%")

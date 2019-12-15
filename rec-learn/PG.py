@@ -54,9 +54,9 @@ class PolicyGradient(nn.Module):
 	def store_transition(self, s, a, r):
 		"""
 		store data in memory buffer
-		:param s: state
+		:param s: state 	# 每个元素要是 numpy
 		:param a: act
-		:param r: reward
+		:param r: reward 	# 每个元素是 float 类型数字
 		:return:
 		"""
 		self.ep_obs.append(s)
@@ -66,11 +66,6 @@ class PolicyGradient(nn.Module):
 
 	def store_len(self):
 		return len(self.ep_rs)
-
-
-	def set_state_model(self):
-		# TODO
-		pass
 
 
 	def learn(self, behavior_policy=None):
@@ -88,12 +83,15 @@ class PolicyGradient(nn.Module):
 		ep_as = torch.LongTensor(self.ep_as).view(len(self.ep_as), 1)
 		# shape -> (batch, n_actions)
 		true_act_one_hot = torch.zeros(len(self.ep_as), self.n_actions).scatter_(dim=1, index=ep_as, value=1)
-
-		if behavior_policy == None:
-			neg_log_prob = torch.sum(-torch.log(all_act_prob) * true_act_one_hot, dim=1)
+	
+		if behavior_policy != None:
+			behavior_prob = behavior_policy(torch.tensor(np.vstack(self.ep_obs), dtype=torch.float32))
+			is_ratio = (all_act_prob * true_act_one_hot) / (behavior_prob * true_act_one_hot)
+			neg_log_prob = torch.sum(is_ratio * -torch.log(all_act_prob) * true_act_one_hot, dim=1)
+			print((behavior_prob * true_act_one_hot))	# 是0 导致 loss 为 nan
 		else:
-			# TODO
-			pass
+			neg_log_prob = torch.sum(-torch.log(all_act_prob) * true_act_one_hot, dim=1)
+
 
 		# discounted_ep_rs_norm 是经过 discount 的 reward（实际上是return）
 		loss = torch.sum(neg_log_prob * discounted_ep_rs_norm)

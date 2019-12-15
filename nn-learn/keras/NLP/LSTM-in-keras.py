@@ -4,6 +4,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Embedding
 from tensorflow.keras.layers import LSTM
 from tensorflow.keras.layers import Dense
+from tensorflow.keras import layers
 import matplotlib.pyplot as plt
 
 import os
@@ -21,7 +22,9 @@ input_test = sequence.pad_sequences(input_test, maxlen=maxlen)
 
 model = Sequential()
 model.add(Embedding(max_features, 32))
-model.add(LSTM(32))
+# model.add(LSTM(32))
+# Bidirectional LSTM
+model.add(layers.Bidirectional(layers.LSTM(32)))
 model.add(Dense(1, activation='sigmoid'))
 
 model.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['acc'])
