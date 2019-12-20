@@ -13,7 +13,7 @@ print('-----start recommender---')
 while True:
 	env.render()
 	action = env.action_space.sample()
-	print('action:', action)
+	print('action:', action, 'action shape:', action.shape)
 
 	state, reward, done, info = env.step(action)
 

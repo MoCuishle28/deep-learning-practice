@@ -272,7 +272,7 @@ if __name__ == '__main__':
             ep_r = 0
             t0 = time.time()
             for t in range(EP_LEN):  # in one episode
-                # env.render()
+                env.render()
                 a = ppo.choose_action(s)
                 s_, r, done, _ = env.step(a)
                 buffer_s.append(s)

@@ -129,7 +129,7 @@ def save_data():
 # tags_movies = load_obj('tags_movies')
 
 
-# 处理 embedding
+############### 处理 embedding ###############
 # (moviesNo, 10)
 # movies_embedding = np.load('models/X_parameter_withoutNorm.npy')
 
@@ -138,12 +138,13 @@ def save_data():
 
 movieId_to_MovieRow = {}	#  mid : movieRow
 # save_obj(movieId_to_MovieRow, 'movieId_to_MovieRow')
+movieId_to_MovieRow = load_obj('movieId_to_MovieRow')
 
 # (9742, 10)
 # print(movies_embedding.shape)
 
 
-# user_click = load_obj('user_click')						# uid: [mid 1, mid 2, ...]
+user_click = load_obj('user_click')						# uid: [mid 1, mid 2, ...]
 # movieId_to_MovieRow = load_obj('movieId_to_MovieRow')	# mid: movieRow
 
 # min_ = 9999999
@@ -153,6 +154,7 @@ movieId_to_MovieRow = {}	#  mid : movieRow
 # 	max_ = len(v) if len(v) > max_ else max_
 # print(min_, max_)		# 20~2698
 
+print(min(user_click.keys()), max(user_click.keys()))
 user_click_movieRow = {}		# uid: [movieRow 1, movieRow 2, ...]
 # save_obj(user_click_movieRow, 'user_click_movieRow')
 # user_click_movieRow = load_obj('user_click_movieRow')
