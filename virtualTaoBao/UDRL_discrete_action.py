@@ -60,7 +60,7 @@ class UpsideDownRL(object):
 
 
 	# Generate an episode using given command inputs to the B function.
-	def gen_episode(self, dr, dh):
+	def gen_episode(self, dr, dh, evaluate=False):
 		state = self.env.reset()
 		episode_data = []
 		states = []
@@ -68,7 +68,7 @@ class UpsideDownRL(object):
 		actions = []
 		total_reward = 0
 		while True:
-			action = self.select_action(state, dr, dh)
+			action = self.select_action(state, dr, dh, evaluate=evaluate)
 			next_state, reward, is_terminal, _ = self.env.step(action)
 			if self.args.render:
 				self.env.render()
@@ -105,7 +105,7 @@ class UpsideDownRL(object):
 		self.use_random_actions = False
 
 
-	def select_action(self, state, desired_return=None, desired_horizon=None):
+	def select_action(self, state, desired_return=None, desired_horizon=None, evaluate=False):
 		state = np.array(state, dtype=np.float32)
 		if self.use_random_actions:
 			action = np.random.randint(self.nb_actions)
@@ -115,9 +115,15 @@ class UpsideDownRL(object):
 									torch.from_numpy(np.array(desired_horizon, dtype=np.float32).reshape(-1, 1)),
 								)
 			action_prob = self.softmax(action_prob)
-			# create a categorical distribution over action probabilities
-			dist = Categorical(action_prob)
-			action = dist.sample().item()	# 相当于按照 softmax 的概率选择
+
+			if not evaluate:
+			# # create a categorical distribution over action probabilities
+				dist = Categorical(action_prob)
+				action = dist.sample().item()	# 相当于按照 softmax 的概率选择
+			else:
+				# 评估时改成 greedy
+				_, action = action_prob.topk(1)
+				action = action[0].item()
 		return action
 
 
@@ -150,6 +156,10 @@ class UpsideDownRL(object):
 		# experience_dict = dict(self.experience)		# 失去了顺序, 但是下面的随机选择不还是无序吗？
 		experience_values = list(self.experience.values())
 		loss_list = []	
+		if len(experience_values) <= 0:
+			print('experience_values is empty! [TODO]')
+			return loss_list
+
 		for i in range(self.args.train_iter):
 			state = []
 			dr = []
@@ -191,7 +201,7 @@ class UpsideDownRL(object):
 		testing_rewards = []
 		dr, dh = self.get_desired_return_and_horizon()
 		for i in range(self.args.evaluate_trials):
-			total_reward, states, actions, rewards = self.gen_episode(dr, dh)	# 玩一轮游戏
+			total_reward, states, actions, rewards = self.gen_episode(dr, dh, evaluate=True)	# 玩一轮游戏
 			testing_rewards.append(total_reward)
 
 		testing_rewards_mean = np.mean(testing_rewards)
@@ -266,10 +276,10 @@ def main():
 	parser.add_argument("--replay_buffer_capacity", type=int, default=500)
 	parser.add_argument("--explore_buffer_len", type=int, default=10)
 	parser.add_argument("--eval_every_k_epoch", type=int, default=3)
-	parser.add_argument("--epoch", type=int, default=10)
+	parser.add_argument("--epoch", type=int, default=30)
 	parser.add_argument("--evaluate_trials", type=int, default=20)
 	parser.add_argument("--batch_size", type=int, default=1024)
-	parser.add_argument("--train_iter", type=int, default=100)
+	parser.add_argument("--train_iter", type=int, default=50)	# 20 epoch 左右可以达到 500
 	parser.add_argument("--save_path", type=str, default="UDRL_data/")
 	
 	args = parser.parse_args()
