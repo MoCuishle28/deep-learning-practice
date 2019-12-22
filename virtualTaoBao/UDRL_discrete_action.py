@@ -17,6 +17,7 @@ from sortedcontainers import SortedDict
 import random
 import os, time, sys
 import matplotlib.pyplot as plt
+import pickle
 
 
 class BehaviorFunc(nn.Module):
@@ -142,11 +143,6 @@ class UpsideDownRL(object):
 			h.append(len(episode[1][0]))
 			r.append(episode[0])
 
-		# # 考虑整个 experience 但是效果差了很多
-		# for total_reward, episode in self.experience.items():
-		# 	h.append(len(episode[0]))
-		# 	r.append(total_reward)	
-
 		mean_horizon_len = np.mean(h)
 		mean_reward = np.random.uniform(low=np.mean(r), high=np.mean(r)+np.std(r))
 		return mean_reward, mean_horizon_len
@@ -240,6 +236,51 @@ class UpsideDownRL(object):
 				break
 
 
+	def pre_train(self):
+		with open('UDRL_data/CartPole-v1-data.pkl', 'rb') as file:
+			replay_buffer = pickle.load(file)
+
+		for i, element in enumerate(replay_buffer):
+			total_reward, states, actions, rewards = element[0], element[1], element[2], element[3]
+			self.experience.__setitem__(total_reward, (states, actions, rewards))
+			if (i+1) % self.args.replay_buffer_capacity == 0:
+				# train
+				experience_values = list(self.experience.values())
+				for j in range(self.args.train_iter*2):
+					state = []
+					dr = []
+					dh = []
+					target = []
+					indices = np.random.choice(len(experience_values), self.args.batch_size, replace=True)
+					train_episodes = [experience_values[i] for i in indices]
+					t1 = [np.random.choice(len(e[0])-2, 1) if len(e[0])>2 else [0]  for e in train_episodes]
+
+					for pair in zip(t1, train_episodes):
+						state.append(pair[1][0][pair[0][0]])
+						dr.append(np.sum(pair[1][2][pair[0][0]:]))	# t2 = T - 1
+						dh.append(len(pair[1][0])-pair[0][0])	
+						target.append(pair[1][1][pair[0][0]])
+
+					self.optimizer.zero_grad()
+
+					state = torch.from_numpy(np.array(state, dtype=np.float32).reshape((len(state), 4)))
+					dr = torch.from_numpy(np.array(dr, dtype=np.float32).reshape(-1,1))
+					dh = torch.from_numpy(np.array(dh, dtype=np.float32).reshape(-1,1))
+					target = torch.from_numpy(np.array(target)).long()
+
+					action_logits = self.B(state, dr, dh)
+					loss = nn.CrossEntropyLoss()
+					output = loss(action_logits, target).mean()
+					print('\repisode:{}/{} {}/{} LOSS:{:.8f}'.format(len(replay_buffer), i+1, self.args.train_iter*2, j+1, output.item()), end='')
+					output.backward()
+					self.optimizer.step()
+
+				print()
+				self.evaluate()		# 评估一下
+				self.experience.clear()
+		print('pretrain end!')
+
+
 def plot_loss(loss_list, fig_name='demo', save=False):
 	plt.ion()
 	plt.cla()
@@ -292,6 +333,7 @@ def main():
 	env.seed(args.seed)
 	torch.manual_seed(args.seed)
 	agent = UpsideDownRL(env, args)
+	agent.pre_train()	# 效果更差... 什么问题？
 	agent.train()
 	env.close()
 
