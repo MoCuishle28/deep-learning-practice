@@ -263,7 +263,7 @@ class UpsideDownRL(object):
 
 					self.optimizer.zero_grad()
 
-					state = torch.from_numpy(np.array(state, dtype=np.float32).reshape((len(state), 4)))
+					state = torch.from_numpy(np.array(state, dtype=np.float32).reshape((len(state), self.env.observation_space.shape[0])))
 					dr = torch.from_numpy(np.array(dr, dtype=np.float32).reshape(-1,1))
 					dh = torch.from_numpy(np.array(dh, dtype=np.float32).reshape(-1,1))
 					target = torch.from_numpy(np.array(target)).long()

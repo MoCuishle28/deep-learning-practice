@@ -38,3 +38,5 @@ rec-learn/ml-latest-small
 /virtualTaoBao/UDRL_data
 
 /nn-learn/keras/deep-learning-best-practices/callback-tensorboad/my_log_dir
+
+rec-learn/data
