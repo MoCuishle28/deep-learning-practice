@@ -54,7 +54,7 @@ if __name__ == '__main__':
 			final_epsilon)
 
 		for t in range(max_len_episode):
-			env.render()                                # 对当前帧进行渲染，绘图到屏幕
+			# env.render()                                # 对当前帧进行渲染，绘图到屏幕
 
 			if random.random() < epsilon:               # epsilon-greedy 探索策略，以 epsilon 的概率选择随机动作
 				action = env.action_space.sample()      # 选择随机动作（探索）
@@ -69,7 +69,7 @@ if __name__ == '__main__':
 			next_state, reward, done, info = env.step(action)
 			# 如果游戏Game Over，给予大的负奖励
 			reward = -10. if done else reward
-			# 将(state, action, reward, next_state)的四元组（外加 done 标签表示是否结束）放入经验回放池
+			# 将(state, action, reward, next_state, done)的5元组（外加 done 标签表示是否结束）放入经验回放池
 			replay_buffer.append((state, action, reward, next_state, 1 if done else 0))
 			# 更新当前 state
 			state = next_state
