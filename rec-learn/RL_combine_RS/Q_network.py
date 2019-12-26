@@ -102,13 +102,13 @@ class Q_Learning(object):
 
 
 def plot_loss_reward(loss_list, reward_list):
-	plt.subplot(1, 2, 1)
+	plt.subplot(1, 3, 1)
 	plt.title('LOSS')
 	plt.xlabel('episode')
 	plt.ylabel('LOSS')
 	plt.plot(range(len(loss_list)), loss_list)
 
-	plt.subplot(1, 2, 2)
+	plt.subplot(1, 3, 3)
 	plt.title('Total Reward')
 	plt.xlabel('episode')
 	plt.ylabel('Total Reward')

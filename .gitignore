@@ -40,3 +40,4 @@ rec-learn/ml-latest-small
 /nn-learn/keras/deep-learning-best-practices/callback-tensorboad/my_log_dir
 
 rec-learn/data
+rec-learn/RL_combine_RS/FM_lib

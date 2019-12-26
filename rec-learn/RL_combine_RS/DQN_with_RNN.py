@@ -60,6 +60,10 @@ class Q_Learning(object):
 		self.replay_buffer = deque(maxlen=args.maxlen)
 
 
+	def save_model(self):
+		pass
+
+
 	def train(self):
 		reward_list = []
 		loss_list = []
@@ -153,7 +157,7 @@ def main():
 	parser.add_argument('--hidden_size1', type=int, default=512)
 	parser.add_argument('--output_size', type=int, default=4020)
 	parser.add_argument('--gamma', type=float, default=0.95)
-	parser.add_argument('--epoch', type=int, default=2000)	# 610 个用户, 怎么也得 610 才能全部过一遍
+	parser.add_argument('--epoch', type=int, default=700)	# 610 个用户, 怎么也得 610 才能全部过一遍
 	# 探索过程所占的episode数量
 	parser.add_argument('--num_exploration_episodes', type=int, default=500)
 	parser.add_argument('--initial_epsilon', type=float, default=1.0)	# 探索起始时的探索率
