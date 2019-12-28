@@ -104,7 +104,7 @@ def train_without_batch(args, model, train_data, train_target, valid_data, valid
 		valid_precise_list.append(precise)
 		train_precise_list.append(train_precise)
 
-		print('{}/{} | LOSS:{:.4f}  Train Precise:{:.4f}%  Valid Precise:{:.4f}%'.format(args.epoch, i_epoch, 
+		print('{}/{} | LOSS:{:.4f}  Train Precise:{:.4f}%  Valid Precise:{:.4f}%'.format(args.epoch, i_epoch + 1, 
 			loss.item(), train_precise*100, precise*100))
 
 		optimizer.zero_grad()
@@ -134,7 +134,7 @@ def train_with_batch(args, model, train_data, train_target, valid_data, valid_ta
 
 			valid_precise_list.append(precise)
 			train_precise_list.append(train_precise)
-			print('{}/{} Step:{} | LOSS:{:.4f}  Train Precise:{:.4f}%  Valid Precise:{:.4f}%'.format(args.epoch, i_epoch, 
+			print('{}/{} Step:{} | LOSS:{:.4f}  Train Precise:{:.4f}%  Valid Precise:{:.4f}%'.format(args.epoch, i_epoch + 1, 
 				i, loss.item(), train_precise*100, precise*100))
 
 			optimizer.zero_grad()
@@ -185,8 +185,8 @@ def main():
 	parser.add_argument("--lr", type=float, default=1e-2)
 	parser.add_argument('--feature_size', type=int, default=21)
 	parser.add_argument('--k', type=int, default=10)
-	parser.add_argument('--batch_size', type=int, default=2048)
-	parser.add_argument('--epoch', type=int, default=200)
+	parser.add_argument('--batch_size', type=int, default=1024)
+	parser.add_argument('--epoch', type=int, default=10)
 	args = parser.parse_args()
 	
 	data = np.load('../data/ml20/mini_data_with_negative.npy').astype(np.float32)
@@ -206,8 +206,8 @@ def main():
 
 	fm = FM(args.feature_size, args.k)
 
-	train_with_batch(args, fm, train_data, train_target, valid_data, valid_target)
-	# train_without_batch(args, fm, train_data, train_target, valid_data, valid_target)
+	# train_with_batch(args, fm, train_data, train_target, valid_data, valid_target)
+	train_without_batch(args, fm, train_data, train_target, valid_data, valid_target)
 
 	test_result = evaluate(fm, test_data, test_target)
 	print('Test Precise:{}%'.format(test_result*100))

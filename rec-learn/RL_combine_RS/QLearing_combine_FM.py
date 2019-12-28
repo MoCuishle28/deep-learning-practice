@@ -1,6 +1,9 @@
 import pickle
 import argparse
 import random
+import logging
+import datetime
+import time
 
 import torch
 import torch.nn as nn
@@ -89,13 +92,13 @@ class DQN_combine_FM(object):
 		state_model_params = [param for param in self.state_model.parameters()]
 		q_network_params = [param for param in self.network.parameters()]
 		parameters_list = state_model_params + q_network_params
-		self.optimizer = torch.optim.Adam(parameters_list, lr=args.lr)
+		self.optimizer = torch.optim.Adam(parameters_list, lr=args.dql_lr)
 
 		self.lossFunc = nn.MSELoss()
 		self.replay_buffer = deque(maxlen=args.maxlen)
 
 		self.fm = FM(args.fm_feature_size, args.k)
-		self.fm_optimize = torch.optim.Adam(self.fm.parameters(), lr=args.lr)
+		self.fm_optimize = torch.optim.Adam(self.fm.parameters(), lr=args.fm_lr)
 		self.fm_criterion = nn.BCELoss()	# 是否点击 (CTR 预测)
 
 		self.train_data = train_data
@@ -109,6 +112,38 @@ class DQN_combine_FM(object):
 	def save_model(self):
 		# TODO
 		pass
+
+
+	def evaluate(self, data, target):
+		batch_state = []
+		batch_action = []
+		fm_input_data = []
+
+		total_reward = 0
+		for x in data:
+			state = self.env.get_history_embedding(x[0], x[1])
+
+			action = self.network(
+				self.state_model(torch.tensor(state, dtype=torch.float32))).detach().numpy()
+			action = np.argmax(action)
+		
+			# 若分类正确则用户点击了, next_state: 加上点击后的 embedding
+			genres_one_hot = np.zeros(self.args.output_size, dtype=np.float32)
+			genres_one_hot[action] = 1
+			x = np.concatenate([x, genres_one_hot])		# fm 的输入
+			x = self.normalize_uid_mid(x)
+			fm_input_data.append(x)		# list
+
+			batch_state.append(state)
+			batch_action.append(action)
+
+		predict, _ = self.train_fm(fm_input_data, target)
+
+		predict_labels = np.array([1 if prob > 0.5 else 0 for prob in predict])
+		batch_reward = (predict_labels == target).astype(np.int8)
+		
+		total_reward = np.sum(batch_reward)
+		return total_reward*1.0 / batch_reward.shape[0]
 
 
 	def train_fm(self, fm_input_data, target):
@@ -136,6 +171,7 @@ class DQN_combine_FM(object):
 		reward_list = []
 		DQN_loss_list = []
 		fm_loss_list = []
+		valid_precise_list = []
 		for epoch_i in range(self.args.epoch):
 			# 计算当前探索率
 			epsilon = max(
@@ -186,6 +222,10 @@ class DQN_combine_FM(object):
 
 				total_reward = np.sum(batch_reward)
 				reward_list.append(total_reward*1.0 / self.args.batch_size)
+				# TODO 太慢了
+				valid_precise = 0
+				# valid_precise = self.evaluate(self.valid_data, self.valid_target)
+				# valid_precise_list.append(valid_precise)
 
 				if len(self.replay_buffer) >= self.args.batch_size:
 					# 从经验回放池中随机取一个批次的 4 元组 
@@ -213,14 +253,24 @@ class DQN_combine_FM(object):
 					loss = self.lossFunc(next_predict, curr_predict)
 					DQN_loss_list.append(loss.item())
 
-					print('Epoch:{}/{}, Batch Reward:{}, FM Loss:{:.4f}, DQN Loss:{}'.format(self.args.epoch, epoch_i+1, 
-						total_reward, fm_loss, loss.item()))
+					print(('Epoch:{}/{}, Train Precise:{:.4f}%, Valid Precise:{:.4f}%, ' + 
+							'FM Loss:{:.4f}, DQN Loss:{:.8f}').format(
+							self.args.epoch, epoch_i+1, 
+							total_reward*1.0 / self.args.batch_size * 100, 
+							valid_precise*100, fm_loss, loss.item()))
+					logging.debug(('Train Precise:{:.4f}, Valid Precise:{:.4f}, ' + 
+							'FM Loss:{:.4f}, DQN Loss:{:.8f}').format(
+							total_reward*1.0 / self.args.batch_size, 
+							valid_precise, fm_loss, loss.item()))
 					
 					self.optimizer.zero_grad()
 					loss.backward()
 					self.optimizer.step()
 
-		self.plot_loss_reward(DQN_loss_list, fm_loss_list, reward_list)
+		test_precise = self.evaluate(self.test_data, self.test_target)
+		print('TEST Precise:{:.4f}'.format(test_precise))
+		logging.debug('TEST Precise:{:.4f}'.format(test_precise))
+		self.plot_loss_reward(DQN_loss_list, fm_loss_list, reward_list, valid_precise_list)
 
 
 	def normalize_uid_mid(self, data):
@@ -229,7 +279,8 @@ class DQN_combine_FM(object):
 		return data
 
 
-	def plot_loss_reward(self, DQN_loss_list, fm_loss_list, reward_list):
+	def plot_loss_reward(self, DQN_loss_list, fm_loss_list, reward_list, valid_precise):
+		plt.figure(figsize=(15, 8))
 		plt.subplot(5, 1, 1)
 		plt.title('DQN LOSS')
 		plt.xlabel('Step')
@@ -243,10 +294,11 @@ class DQN_combine_FM(object):
 		plt.plot([i for i in range(len(fm_loss_list))], fm_loss_list)
 
 		plt.subplot(5, 1, 5)
-		plt.title('Classfiy Precise')
+		plt.title('Train Classfiy Precise')
 		plt.xlabel('Step')
 		plt.ylabel('Precise')
-		plt.plot([i for i in range(len(reward_list))], reward_list)
+		plt.plot([i for i in range(len(reward_list))], reward_list, label='train precise', color='blue')
+		plt.plot([i for i in range(len(valid_precise))], valid_precise, label='valid precise', color='red')
 
 		plt.show()
 
@@ -367,11 +419,30 @@ def generate_valid_test_data(data, target):
 	return train_data, train_target, valid_data, valid_target, test_data, test_target
 
 
+def init_log(args):
+	start = datetime.datetime.now()
+	logging.basicConfig(level = logging.DEBUG,			# 控制台打印的日志级别
+					filename = "data/log/"+str(time.time())+'.log',
+					filemode = 'a',					# 模式，有w和a，w就是写模式，每次都会重新写日志，覆盖之前的日志
+					# a是追加模式，默认如果不写的话，就是追加模式
+					)
+	logging.debug('start! '+str(start))
+	logging.debug('Parameter: ')
+	logging.debug('fm_lr:' + str(args.fm_lr) + ', dql_lr:' + str(args.dql_lr) + ', epoch:'+str(args.epoch))
+	logging.debug('batch_size:'+ str(args.batch_size) + ', state_size:' + str(args.state_size) + ', state_model_hidden_size:' + str(args.state_model_hidden_size))
+	logging.debug('state_model_layer_num:' + str(args.state_model_layer_num) + ', hidden_size0:' + str(args.hidden_size0))
+	logging.debug('hidden_size1:'+ str(args.hidden_size1) + ', output_size:' + str(args.output_size) + ', gamma:' + str(args.gamma))
+	logging.debug('num_exploration_episodes:' + str(args.num_exploration_episodes) + ', initial_epsilon:' + str(args.initial_epsilon) + ', final_epsilon:' + str(args.final_epsilon))
+	logging.debug('maxlen:' + str(args.maxlen) + ', fm_feature_size:' + str(args.fm_feature_size) + ', k:' + str(args.k))
+	logging.debug('-------------------------------------------------------------')
+
+
 def main():
 	parser = argparse.ArgumentParser(description="Hyperparameters for Q-Learning and FM")
-	parser.add_argument("--lr", type=float, default=1e-3)
+	parser.add_argument("--fm_lr", type=float, default=1e-2)
+	parser.add_argument("--dql_lr", type=float, default=1e-2)
 	parser.add_argument('--epoch', type=int, default=5)
-	parser.add_argument('--batch_size', type=int, default=512)
+	parser.add_argument('--batch_size', type=int, default=1024)
 
 	parser.add_argument('--state_size', type=int, default=128)
 	parser.add_argument('--state_model_hidden_size', type=int, default=256)
@@ -384,11 +455,13 @@ def main():
 	parser.add_argument('--num_exploration_episodes', type=int, default=500)
 	parser.add_argument('--initial_epsilon', type=float, default=1.0)	# 探索起始时的探索率
 	parser.add_argument('--final_epsilon', type=float, default=0.01)	# 探索终止时的探索率
-	parser.add_argument('--maxlen', type=int, default=1000)
+	parser.add_argument('--maxlen', type=int, default=4096)
 
 	parser.add_argument('--fm_feature_size', type=int, default=40)	# 在原来基础上加上 DQN 选的 gerne one-hot
 	parser.add_argument('--k', type=int, default=20)
 	args = parser.parse_args()
+
+	init_log(args)
 
 	# # 构造带负样本的数据集
 	# data = np.load('../data/ml20/mini_data.npy').astype(np.float32)
@@ -409,6 +482,9 @@ def main():
 	generator = GenerateHistoryEmbedding()
 	model = DQN_combine_FM(args, generator, train_data, train_target, valid_data, valid_target, test_data, test_target)
 	model.train_DQN()
+
+	logging.debug(datetime.datetime.now())
+	logging.debug('---------------------END---------------------')
 
 
 if __name__ == '__main__':
