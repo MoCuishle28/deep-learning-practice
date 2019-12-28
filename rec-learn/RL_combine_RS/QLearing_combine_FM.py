@@ -80,7 +80,7 @@ class Network(nn.Module):
 
 
 class DQN_combine_FM(object):
-	def __init__(self, args, env, data, target):
+	def __init__(self, args, env, train_data, train_target, valid_data, valid_target, test_data, test_target):
 		self.args = args
 		self.env = env
 		self.state_model = StateModel(args.state_size, args.state_model_hidden_size, args.state_model_layer_num, args.state_size)
@@ -94,11 +94,16 @@ class DQN_combine_FM(object):
 		self.lossFunc = nn.MSELoss()
 		self.replay_buffer = deque(maxlen=args.maxlen)
 
-		self.fm = FM(args.feature_size, args.k)
-		self.fm_optimize = torch.optm.Adam(fm.parameters(), lr=args.lr)
+		self.fm = FM(args.fm_feature_size, args.k)
+		self.fm_optimize = torch.optim.Adam(self.fm.parameters(), lr=args.lr)
 		self.fm_criterion = nn.BCELoss()	# 是否点击 (CTR 预测)
-		self.data = data
-		self.target = target
+
+		self.train_data = train_data
+		self.train_target = train_target
+		self.valid_data = valid_data
+		self.valid_target = valid_target
+		self.test_data = test_data
+		self.test_target = test_target
 
 
 	def save_model(self):
@@ -106,59 +111,98 @@ class DQN_combine_FM(object):
 		pass
 
 
-	def train_fm(self):
-		# TODO
-		pass
+	def train_fm(self, fm_input_data, target):
+		fm_input_data = torch.tensor(fm_input_data, dtype=torch.float32)
+		predict = self.fm(fm_input_data)
+		target = torch.tensor(target, dtype=torch.float32).reshape((target.shape[0], 1))
+		loss = self.fm_criterion(predict, target)
+
+		self.fm_optimize.zero_grad()
+		loss.backward()
+		self.fm_optimize.step()
+
+		return predict.detach().numpy(), loss.item()
+
+
+	def get_batch(self, batch):
+		for i in range(0, self.train_data.shape[0], batch):
+			if i+batch < self.train_data.shape[0]:
+				yield self.train_data[i:i+batch, :], self.train_target[i:i+batch]
+			else:
+				yield self.train_data[i:, :], self.train_target[i:]
 
 
 	def train_DQN(self):
-		# TODO 应该从 data 中取数据训练
 		reward_list = []
-		loss_list = []
-		for episode_i in range(self.args.epoch):
+		DQN_loss_list = []
+		fm_loss_list = []
+		for epoch_i in range(self.args.epoch):
 			# 计算当前探索率
 			epsilon = max(
 				self.args.initial_epsilon * 
-				(self.args.num_exploration_episodes - episode_i) / self.args.num_exploration_episodes, 
+				(self.args.num_exploration_episodes - epoch_i) / self.args.num_exploration_episodes, 
 				self.args.final_epsilon)
 
-			total_reward = 0
-			while True:
-				if random.random() < epsilon:
-					action = random.choice(range(self.args.output_size))	# 0~18 选一个
-				else:
-					action = self.network(self.state_model(state)).detach().numpy()
-					action = np.argmax(action)
-				# 让环境执行动作，获得执行完动作的下一个状态，动作的奖励，游戏是否已结束以及额外信息
-				next_state, reward, done = self.env.step(action)
-				
-				# (state, action, reward, next_state, done) 5 元组
-				self.replay_buffer.append((state.detach().numpy(), action, reward, next_state.detach().numpy(), 1 if done else 0))
-				state = next_state
-				total_reward += reward
+			for data, target in self.get_batch(self.args.batch_size):
+				batch_state = []
+				batch_next_state = []
+				batch_action = []
+				fm_input_data = []
 
-				if done:
-					print('Episode:{}/{} Total Reward:{}'.format(self.args.epoch, episode_i+1, 
-						total_reward))
-					reward_list.append(total_reward)
-					break
+				total_reward = 0
+				for x in data:
+					state = self.env.get_history_embedding(x[0], x[1])
+
+					if random.random() < epsilon:
+						action = random.choice(range(self.args.output_size))	# 0~18 选一个
+					else:
+						action = self.network(
+							self.state_model(torch.tensor(state, dtype=torch.float32))).detach().numpy()
+						action = np.argmax(action)
+				
+					# 若分类正确则用户点击了, next_state: 加上点击后的 embedding
+					genres_one_hot = np.zeros(self.args.output_size, dtype=np.float32)
+					genres_one_hot[action] = 1
+					x = np.concatenate([x, genres_one_hot])		# fm 的输入
+					x = self.normalize_uid_mid(x)
+					fm_input_data.append(x)		# list
+
+					batch_state.append(state)
+					batch_action.append(action)
+
+				predict, fm_loss = self.train_fm(fm_input_data, target)
+				fm_loss_list.append(fm_loss)
+
+				predict_labels = np.array([1 if prob > 0.5 else 0 for prob in predict])
+				batch_reward = (predict_labels == target).astype(np.int8)
+
+				# 如果没有点击, 则 state 不变
+				for curr_state, reward, x in zip(batch_state, batch_reward, data):
+					batch_next_state.append(self.env.get_next_state(curr_state, x[1]) if reward == 1 else curr_state)
+				
+				# (state, action, reward, next_state) 4 元组
+				for state, action, reward, next_state in zip(batch_state, batch_action, batch_reward, batch_next_state):
+					self.replay_buffer.append((state, action, reward, next_state))
+
+				total_reward = np.sum(batch_reward)
+				reward_list.append(total_reward*1.0 / self.args.batch_size)
 
 				if len(self.replay_buffer) >= self.args.batch_size:
-					# 从经验回放池中随机取一个批次的 5 元组 
-					batch_state, batch_action, batch_reward, batch_next_state, batch_done = zip(
+					# 从经验回放池中随机取一个批次的 4 元组 
+					batch_state, batch_action, batch_reward, batch_next_state = zip(
 						*random.sample(self.replay_buffer, self.args.batch_size))
 
 					# 转换为 torch.Tensor
-					batch_state, batch_reward, batch_next_state, batch_done = \
+					batch_state, batch_reward, batch_next_state = \
 						[torch.tensor(a, dtype=torch.float32) 
-						for a in [batch_state, batch_reward, batch_next_state, batch_done]]
+						for a in [batch_state, batch_reward, batch_next_state]]
 					batch_action = torch.LongTensor(batch_action).view(len(batch_action), 1)
 
 					batch_next_state = batch_next_state.reshape((batch_next_state.shape[0], batch_next_state.shape[2], batch_next_state.shape[3]))
 					batch_state = batch_state.reshape((batch_state.shape[0], batch_state.shape[2], batch_state.shape[3]))
 
 					q_value = self.network(self.state_model(batch_next_state))
-					next_predict = batch_reward + (self.args.gamma * torch.max(q_value, dim=-1).values) * (1 - batch_done)
+					next_predict = batch_reward + (self.args.gamma * torch.max(q_value, dim=-1).values)
 
 					curr_state_q_value = self.network(self.state_model(batch_state))
 					# (batch, action space)
@@ -167,11 +211,44 @@ class DQN_combine_FM(object):
 
 					# 最小化对下一步 Q-value 的预测和当前对 Q-value 的预测的差距 (TD)
 					loss = self.lossFunc(next_predict, curr_predict)
-					loss_list.append(loss)
+					DQN_loss_list.append(loss.item())
+
+					print('Epoch:{}/{}, Batch Reward:{}, FM Loss:{:.4f}, DQN Loss:{}'.format(self.args.epoch, epoch_i+1, 
+						total_reward, fm_loss, loss.item()))
 					
 					self.optimizer.zero_grad()
 					loss.backward()
 					self.optimizer.step()
+
+		self.plot_loss_reward(DQN_loss_list, fm_loss_list, reward_list)
+
+
+	def normalize_uid_mid(self, data):
+		data[0] = (data[0] - 1) / (610 - 1)
+		data[1] = (data[1] - 1) / (117590 - 1)
+		return data
+
+
+	def plot_loss_reward(self, DQN_loss_list, fm_loss_list, reward_list):
+		plt.subplot(5, 1, 1)
+		plt.title('DQN LOSS')
+		plt.xlabel('Step')
+		plt.ylabel('LOSS')
+		plt.plot([i for i in range(len(DQN_loss_list))], DQN_loss_list)
+
+		plt.subplot(5, 1, 3)
+		plt.title('FM LOSS')
+		plt.xlabel('Step')
+		plt.ylabel('LOSS')
+		plt.plot([i for i in range(len(fm_loss_list))], fm_loss_list)
+
+		plt.subplot(5, 1, 5)
+		plt.title('Classfiy Precise')
+		plt.xlabel('Step')
+		plt.ylabel('Precise')
+		plt.plot([i for i in range(len(reward_list))], reward_list)
+
+		plt.show()
 
 
 class GenerateHistoryEmbedding(object):
@@ -208,7 +285,14 @@ class GenerateHistoryEmbedding(object):
 			history_embedding.insert(0, torch.zeros(128, dtype=torch.float32))
 		# (batch:1, seq:window, embedding_size:128)
 		input_data = torch.stack(history_embedding).reshape((1, len(history_embedding), 128))
-		return input_data
+		return input_data.detach().numpy()
+
+
+	def get_next_state(self, curr_state, add_mid):
+		curr_state = curr_state.tolist()
+		curr_state[0].pop(0)
+		curr_state[0].append(self.movie_embedding_128_mini[add_mid].detach().numpy())
+		return np.array(curr_state)
 
 
 
@@ -244,10 +328,50 @@ def generate_negative_samples(data, target):
 	return data, target
 
 
+def generate_valid_test_data(data, target):
+	'''
+	8:1:1
+	return: train_data, train_target, valid_data, valid_target, test_data, test_target
+	'''
+	unit = data.shape[0] // 10
+	train_size, valid_size, test_size = data.shape[0] - 2*unit, unit, unit
+	all_index_list = [i for i in range(data.shape[0])]
+
+	valid_index = random.sample(all_index_list, valid_size)
+	sample_set = set(valid_index)
+	all_index_list = [i for i in all_index_list if i not in sample_set]		# 删去已经抽出的数据索引
+	
+	test_index = random.sample(all_index_list, test_size)
+	sample_set = set(test_index)
+	all_index_list = [i for i in all_index_list if i not in sample_set]
+
+	random.shuffle(all_index_list)
+	train_index = all_index_list
+
+	data = data.tolist()
+	target = target.tolist()
+
+	train_data, train_target = np.array([data[i] for i in train_index]), np.array([target[i] for i in train_index])
+	valid_data, valid_target = np.array([data[i] for i in valid_index]), np.array([target[i] for i in valid_index])
+	test_data, test_target = np.array([data[i] for i in test_index]), np.array([target[i] for i in test_index])
+
+	# np.save('../data/ml20/train_mini_data_with_negative.npy', train_data)
+	# np.save('../data/ml20/train_mini_target_with_negative.npy', train_target)
+
+	# np.save('../data/ml20/valid_mini_data_with_negative.npy', valid_data)
+	# np.save('../data/ml20/valid_mini_target_with_negative.npy', valid_target)
+
+	# np.save('../data/ml20/test_mini_data_with_negative.npy', test_data)
+	# np.save('../data/ml20/test_mini_target_with_negative.npy', test_target)
+
+	return train_data, train_target, valid_data, valid_target, test_data, test_target
+
+
 def main():
 	parser = argparse.ArgumentParser(description="Hyperparameters for Q-Learning and FM")
 	parser.add_argument("--lr", type=float, default=1e-3)
-	parser.add_argument('--epoch', type=int, default=1000)
+	parser.add_argument('--epoch', type=int, default=5)
+	parser.add_argument('--batch_size', type=int, default=512)
 
 	parser.add_argument('--state_size', type=int, default=128)
 	parser.add_argument('--state_model_hidden_size', type=int, default=256)
@@ -260,11 +384,10 @@ def main():
 	parser.add_argument('--num_exploration_episodes', type=int, default=500)
 	parser.add_argument('--initial_epsilon', type=float, default=1.0)	# 探索起始时的探索率
 	parser.add_argument('--final_epsilon', type=float, default=0.01)	# 探索终止时的探索率
-	parser.add_argument('--batch_size', type=int, default=128)
 	parser.add_argument('--maxlen', type=int, default=1000)
 
-	parser.add_argument('--fm_feature_size', type=int, default=23)	# 在原来基础上加上 DQN 选的 gerne rating
-	parser.add_argument('--k', type=int, default=10)
+	parser.add_argument('--fm_feature_size', type=int, default=40)	# 在原来基础上加上 DQN 选的 gerne one-hot
+	parser.add_argument('--k', type=int, default=20)
 	args = parser.parse_args()
 
 	# # 构造带负样本的数据集
@@ -277,11 +400,15 @@ def main():
 	# 正样本是按照时间顺序的
 	data = np.load('../data/ml20/mini_data_with_negative.npy').astype(np.float32)
 	target = np.load('../data/ml20/mini_target_with_negative.npy').astype(np.int8)
-	
+
+	# 划分数据集
+	train_data, train_target, valid_data, valid_target, test_data, test_target = generate_valid_test_data(data, target)
+	del data
+	del target
+
 	generator = GenerateHistoryEmbedding()
-	model = DQN_combine_FM(args, generator, data, target)
-	# 训练 TODO
-	
+	model = DQN_combine_FM(args, generator, train_data, train_target, valid_data, valid_target, test_data, test_target)
+	model.train_DQN()
 
 
 if __name__ == '__main__':
