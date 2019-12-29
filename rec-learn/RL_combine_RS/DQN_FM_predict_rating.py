@@ -92,7 +92,7 @@ class DQN_combine_FM(object):
 		state_model_params = [param for param in self.state_model.parameters()]
 		q_network_params = [param for param in self.network.parameters()]
 		parameters_list = state_model_params + q_network_params
-		self.optimizer = torch.optim.Adam(parameters_list, lr=args.dql_lr)
+		self.optimizer = torch.optim.Adam(parameters_list, lr=args.dqn_lr)
 
 		self.lossFunc = nn.MSELoss()
 		self.replay_buffer = deque(maxlen=args.maxlen)
@@ -382,7 +382,7 @@ def init_log(args):
 					)
 	logging.debug('start! '+str(start))
 	logging.debug('Parameter: ')
-	logging.debug('fm_lr:' + str(args.fm_lr) + ', dql_lr:' + str(args.dql_lr) + ', epoch:'+str(args.epoch))
+	logging.debug('fm_lr:' + str(args.fm_lr) + ', dqn_lr:' + str(args.dqn_lr) + ', epoch:'+str(args.epoch))
 	logging.debug('batch_size:'+ str(args.batch_size) + ', state_size:' + str(args.state_size) + ', state_model_hidden_size:' + str(args.state_model_hidden_size))
 	logging.debug('state_model_layer_num:' + str(args.state_model_layer_num) + ', hidden_size0:' + str(args.hidden_size0))
 	logging.debug('hidden_size1:'+ str(args.hidden_size1) + ', output_size:' + str(args.output_size) + ', gamma:' + str(args.gamma))
@@ -394,7 +394,7 @@ def init_log(args):
 def main():
 	parser = argparse.ArgumentParser(description="Hyperparameters for Q-Learning and FM")
 	parser.add_argument("--fm_lr", type=float, default=1e-2)
-	parser.add_argument("--dql_lr", type=float, default=1e-3)
+	parser.add_argument("--dqn_lr", type=float, default=1e-3)
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=1024)
 

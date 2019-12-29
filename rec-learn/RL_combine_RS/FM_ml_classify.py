@@ -186,7 +186,7 @@ def main():
 	parser.add_argument('--feature_size', type=int, default=21)
 	parser.add_argument('--k', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=2048)
-	parser.add_argument('--epoch', type=int, default=5)
+	parser.add_argument('--epoch', type=int, default=100)
 	args = parser.parse_args()
 	
 	data = np.load('../data/ml20/mini_data_with_negative.npy').astype(np.float32)
@@ -206,8 +206,8 @@ def main():
 
 	fm = FM(args.feature_size, args.k)
 
-	train_with_batch(args, fm, train_data, train_target, valid_data, valid_target)
-	# train_without_batch(args, fm, train_data, train_target, valid_data, valid_target)
+	# train_with_batch(args, fm, train_data, train_target, valid_data, valid_target)
+	train_without_batch(args, fm, train_data, train_target, valid_data, valid_target)
 
 	test_result = evaluate(fm, test_data, test_target)
 	print('Test Precise:{}%'.format(test_result*100))
