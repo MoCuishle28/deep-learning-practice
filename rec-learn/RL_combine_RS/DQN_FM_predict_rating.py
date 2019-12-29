@@ -46,7 +46,7 @@ class FM(nn.Module):
 		inter_2 = torch.mm((X**2), (self.v**2))
 		interaction = (0.5*torch.sum((inter_1**2) - inter_2, dim=1)).reshape(X.shape[0], 1)
 		predict = self.w0 + torch.mm(X, self.w1) + interaction
-		return torch.sigmoid(predict)
+		return predict
 
 
 class StateModel(nn.Module):
@@ -99,7 +99,7 @@ class DQN_combine_FM(object):
 
 		self.fm = FM(args.fm_feature_size, args.k)
 		self.fm_optimize = torch.optim.Adam(self.fm.parameters(), lr=args.fm_lr)
-		self.fm_criterion = nn.BCELoss()	# 是否点击 (CTR 预测)
+		self.fm_criterion = nn.MSELoss()
 
 		self.train_data = train_data
 		self.train_target = train_target
@@ -119,7 +119,6 @@ class DQN_combine_FM(object):
 		batch_action = []
 		fm_input_data = []
 
-		total_reward = 0
 		for x in data:
 			state = self.env.get_history_embedding(x[0], x[1])
 
@@ -138,12 +137,10 @@ class DQN_combine_FM(object):
 			batch_action.append(action)
 
 		predict, _ = self.train_fm(fm_input_data, target)
-
-		predict_labels = np.array([1 if prob > 0.5 else 0 for prob in predict])
-		batch_reward = (predict_labels == target).astype(np.int8)
-		
-		total_reward = np.sum(batch_reward)
-		return total_reward*1.0 / batch_reward.shape[0]
+		predict = torch.tensor(predict, dtype=torch.float32)
+		target = torch.tensor(target, dtype=torch.float32).reshape((target.shape[0], 1))
+		rmse = torch.sqrt(torch.sum((target - predict)**2) / predict.shape[0])
+		return rmse.item()
 
 
 	def train_fm(self, fm_input_data, target):
@@ -168,10 +165,10 @@ class DQN_combine_FM(object):
 
 
 	def train_DQN(self):
-		reward_list = []
+		train_rmse_list = []
 		DQN_loss_list = []
 		fm_loss_list = []
-		valid_precise_list = []
+		valid_rmse_list = []
 		for epoch_i in range(self.args.epoch):
 			# 计算当前探索率
 			epsilon = max(
@@ -185,7 +182,6 @@ class DQN_combine_FM(object):
 				batch_action = []
 				fm_input_data = []
 
-				total_reward = 0
 				for x in data:
 					state = self.env.get_history_embedding(x[0], x[1])
 
@@ -209,23 +205,25 @@ class DQN_combine_FM(object):
 				predict, fm_loss = self.train_fm(fm_input_data, target)
 				fm_loss_list.append(fm_loss)
 
-				predict_labels = np.array([1 if prob > 0.5 else 0 for prob in predict])
-				batch_reward = (predict_labels == target).astype(np.int8)
+				target = target.reshape((target.shape[0], 1))
+				error = -np.abs(target - predict)	# 负的误差作为 reward
+				batch_reward = error[:, 0]		# 要只有一维的
 
 				# 如果没有点击, 则 state 不变
-				for curr_state, reward, x in zip(batch_state, batch_reward, data):
-					batch_next_state.append(self.env.get_next_state(curr_state, x[1]) if reward == 1 else curr_state)
+				for curr_state, x in zip(batch_state, data):
+					batch_next_state.append(self.env.get_next_state(curr_state, x[1]))
 				
 				# (state, action, reward, next_state) 4 元组
 				for state, action, reward, next_state in zip(batch_state, batch_action, batch_reward, batch_next_state):
 					self.replay_buffer.append((state, action, reward, next_state))
 
-				total_reward = np.sum(batch_reward)
-				reward_list.append(total_reward*1.0 / self.args.batch_size)
-				# TODO 太慢了
-				valid_precise = 0
-				# valid_precise = self.evaluate(self.valid_data, self.valid_target)
-				# valid_precise_list.append(valid_precise)
+				train_rmse = self.evaluate(data, target)
+				train_rmse_list.append(train_rmse)
+
+				# 太慢 TODO
+				valid_rmse = 0
+				# valid_rmse = self.evaluate(self.valid_data, self.valid_target)
+				# valid_rmse_list.append(valid_rmse)
 
 				if len(self.replay_buffer) >= self.args.batch_size:
 					# 从经验回放池中随机取一个批次的 4 元组 
@@ -253,30 +251,28 @@ class DQN_combine_FM(object):
 					loss = self.lossFunc(next_predict, curr_predict)
 					DQN_loss_list.append(loss.item())
 
-					print(('Epoch:{}/{}, Train Precise:{:.4f}%, Valid Precise:{:.4f}%, ' + 
+					print(('Epoch:{}/{}, Train RMSE:{:.4f}, Valid RMSE:{:.4f}, ' + 
 							'FM Loss:{:.4f}, DQN Loss:{:.8f}').format(
 							self.args.epoch, epoch_i+1, 
-							total_reward*1.0 / self.args.batch_size * 100, 
-							valid_precise*100, fm_loss, loss.item()))
-					logging.debug(('Train Precise:{:.4f}, Valid Precise:{:.4f}, ' + 
+							train_rmse, valid_rmse, fm_loss, loss.item()))
+					logging.debug(('Train RMSE:{:.4f}, Valid RMSE:{:.4f}, ' + 
 							'FM Loss:{:.4f}, DQN Loss:{:.8f}').format(
-							total_reward*1.0 / self.args.batch_size, 
-							valid_precise, fm_loss, loss.item()))
+							train_rmse, valid_rmse, fm_loss, loss.item()))
 					
 					self.optimizer.zero_grad()
 					loss.backward()
 					self.optimizer.step()
 
 			# 每训练一个 epoch 评估一次
-			valid_precise = self.evaluate(self.valid_data, self.valid_target)
-			valid_precise_list.append(valid_precise)
-			logging.debug('Valid Precise:{:.4f}'.format(valid_precise))
-			print('Valid Precise:{:.4f}%'.format(valid_precise*100))
+			valid_rmse = self.evaluate(self.valid_data, self.valid_target)
+			valid_rmse_list.append(valid_rmse)
+			logging.debug('Valid RMSE:{:.4f}'.format(valid_rmse))
+			print('Valid RMSE:{:.4f}'.format(valid_rmse))
 
 		test_precise = self.evaluate(self.test_data, self.test_target)
-		print('TEST Precise:{:.4f}'.format(test_precise))
-		logging.debug('TEST Precise:{:.4f}'.format(test_precise))
-		self.plot_loss_reward(DQN_loss_list, fm_loss_list, reward_list, valid_precise_list)
+		print('TEST RMSE:{:.4f}'.format(test_precise))
+		logging.debug('TEST RMSE:{:.4f}'.format(test_precise))
+		self.plot_loss_reward(DQN_loss_list, fm_loss_list, train_rmse_list, valid_rmse_list)
 
 
 	def normalize_uid_mid(self, data):
@@ -285,7 +281,7 @@ class DQN_combine_FM(object):
 		return data
 
 
-	def plot_loss_reward(self, DQN_loss_list, fm_loss_list, reward_list, valid_precise):
+	def plot_loss_reward(self, DQN_loss_list, fm_loss_list, train_rmse_list, valid_rmse_list):
 		plt.figure(figsize=(15, 8))
 		plt.subplot(5, 1, 1)
 		plt.title('DQN LOSS')
@@ -300,11 +296,11 @@ class DQN_combine_FM(object):
 		plt.plot([i for i in range(len(fm_loss_list))], fm_loss_list)
 
 		plt.subplot(5, 1, 5)
-		plt.title('Train Classfiy Precise')
+		plt.title('RMSE')
 		plt.xlabel('Step')
-		plt.ylabel('Precise')
-		train_line, = plt.plot([i for i in range(len(reward_list))], reward_list, label='train precise', color='blue')
-		valid_line, = plt.plot([i for i in range(len(valid_precise))], valid_precise, label='valid precise', color='red')
+		plt.ylabel('RMSE')
+		train_line, = plt.plot([i for i in range(len(train_rmse_list))], train_rmse_list, label='train RMSE', color='blue')
+		valid_line, = plt.plot([i for i in range(len(valid_rmse_list))], valid_rmse_list, label='valid RMSE', color='red')
 		plt.legend(handles=[train_line, valid_line], loc='best')
 
 		plt.show()
@@ -315,13 +311,6 @@ class GenerateHistoryEmbedding(object):
 		self.movie_embedding_128_mini = load_obj('movie_embedding_128_mini')	# mid:embedding
 		self.users_behavior = load_obj('users_rating')	# uid:[[mid, rating, timestamp], ...] 有序
 		self.users_has_clicked = load_obj('users_has_clicked_mini')
-
-		# uid:{mid:rating, ...}
-		# self.users_rating = {k:{x[0]:x[1] for x in v} for k,v in self.users_behavior.items()}
-		# self.uid_map_uRow = load_obj('uid_map_uRow')
-		# self.uRow_map_uid = {uRow:uid for uid, uRow in self.uid_map_uRow.items()}
-		# self.mid_map_mRow = load_obj('mid_map_mRow')
-		# self.mRow_map_mid = {mRow:mid for mid, mRow in self.mid_map_mRow.items()}
 
 		self.window = 5					# 考虑最近多少部电影, 不够补 0 向量
 
@@ -354,39 +343,6 @@ class GenerateHistoryEmbedding(object):
 		return np.array(curr_state)
 
 
-
-def generate_negative_samples(data, target):
-	users_rating = load_obj('users_rating')
-	movie_genres = load_obj('movie_genres')		# mid:[genres idx, genres idx, ...]
-	# uid:{mid, mid, ...}
-	users_has_clicked = {
-		uid : set([item[0] for item in item_list]) for uid, item_list in users_rating.items()}
-	del users_rating
-
-	target[:] = 1		# 用于分类问题, 把 rating 改为 0/1
-	data = data.tolist()
-	target = target.tolist()
-	all_mid = set(movie_genres.keys())
-
-	# 产生负样本的数量要等于正样本
-	for uid, mid_set in users_has_clicked.items():
-		sample_set = all_mid - mid_set
-		negative_mid_list = random.sample(sample_set, len(mid_set))
-		for mid in negative_mid_list:
-			x = np.zeros(21, dtype=np.int)
-			x[0], x[1] = uid, mid			# uid, mid
-			genes_list = movie_genres[mid]
-			for idx in genes_list:
-				x[idx+2] = 1
-
-			data.append(x)
-			target.append(0)
-
-	data = np.array(data)
-	target = np.array(target)
-	return data, target
-
-
 def generate_valid_test_data(data, target):
 	'''
 	8:1:1
@@ -414,22 +370,13 @@ def generate_valid_test_data(data, target):
 	valid_data, valid_target = np.array([data[i] for i in valid_index]), np.array([target[i] for i in valid_index])
 	test_data, test_target = np.array([data[i] for i in test_index]), np.array([target[i] for i in test_index])
 
-	# np.save('../data/ml20/train_mini_data_with_negative.npy', train_data)
-	# np.save('../data/ml20/train_mini_target_with_negative.npy', train_target)
-
-	# np.save('../data/ml20/valid_mini_data_with_negative.npy', valid_data)
-	# np.save('../data/ml20/valid_mini_target_with_negative.npy', valid_target)
-
-	# np.save('../data/ml20/test_mini_data_with_negative.npy', test_data)
-	# np.save('../data/ml20/test_mini_target_with_negative.npy', test_target)
-
 	return train_data, train_target, valid_data, valid_target, test_data, test_target
 
 
 def init_log(args):
 	start = datetime.datetime.now()
 	logging.basicConfig(level = logging.DEBUG,			# 控制台打印的日志级别
-					filename = "data/log/"+str(time.time())+'.log',
+					filename = "data/log/predict-rating-"+str(time.time())+'.log',
 					filemode = 'a',					# 模式，有w和a，w就是写模式，每次都会重新写日志，覆盖之前的日志
 					# a是追加模式，默认如果不写的话，就是追加模式
 					)
@@ -447,7 +394,7 @@ def init_log(args):
 def main():
 	parser = argparse.ArgumentParser(description="Hyperparameters for Q-Learning and FM")
 	parser.add_argument("--fm_lr", type=float, default=1e-2)
-	parser.add_argument("--dql_lr", type=float, default=1e-2)
+	parser.add_argument("--dql_lr", type=float, default=1e-3)
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=1024)
 
@@ -470,16 +417,10 @@ def main():
 
 	init_log(args)
 
-	# # 构造带负样本的数据集
-	# data = np.load('../data/ml20/mini_data.npy').astype(np.float32)
-	# target = np.load('../data/ml20/mini_target.npy')
-	# data, target = generate_negative_samples(data, target)
-	# np.save('../data/ml20/mini_data_with_negative.npy', data)
-	# np.save('../data/ml20/mini_target_with_negative.npy', target)
 
 	# 正样本是按照时间顺序的
-	data = np.load('../data/ml20/mini_data_with_negative.npy').astype(np.float32)
-	target = np.load('../data/ml20/mini_target_with_negative.npy').astype(np.int8)
+	data = np.load('../data/ml20/mini_data.npy').astype(np.float32)
+	target = np.load('../data/ml20/mini_target.npy').astype(np.int8)
 
 	# 划分数据集
 	train_data, train_target, valid_data, valid_target, test_data, test_target = generate_valid_test_data(data, target)

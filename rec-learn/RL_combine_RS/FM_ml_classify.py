@@ -64,17 +64,17 @@ def evaluate(fm, data, target):
 def plot_loss_precise(loss_list, valid_precise_list, train_precise_list, args):
 	plt.subplot(3, 1, 1)
 	plt.title('FM LOSS')
-	plt.xlabel('epoch')
+	plt.xlabel('step')
 	plt.ylabel('LOSS')
 	plt.plot([i for i in range(len(loss_list))], loss_list)
 
 	plt.subplot(3, 1, 3)
-	plt.title('FM valid Precise')
-	plt.xlabel('epoch')
+	plt.title('FM Precise')
+	plt.xlabel('step')
 	plt.ylabel('Precise')
-	plt.plot([i for i in range(len(valid_precise_list))], valid_precise_list, label='valid precise', color='red')
-	plt.plot([i for i in range(len(train_precise_list))], train_precise_list, label='train precise', color='blue')
-
+	valid_precise, = plt.plot([i for i in range(len(valid_precise_list))], valid_precise_list, label='valid precise', color='red')
+	train_precise, = plt.plot([i for i in range(len(train_precise_list))], train_precise_list, label='train precise', color='blue')
+	plt.legend(handles=[valid_precise, train_precise], loc='best')
 	plt.show()
 
 
@@ -185,8 +185,8 @@ def main():
 	parser.add_argument("--lr", type=float, default=1e-2)
 	parser.add_argument('--feature_size', type=int, default=21)
 	parser.add_argument('--k', type=int, default=10)
-	parser.add_argument('--batch_size', type=int, default=1024)
-	parser.add_argument('--epoch', type=int, default=10)
+	parser.add_argument('--batch_size', type=int, default=2048)
+	parser.add_argument('--epoch', type=int, default=5)
 	args = parser.parse_args()
 	
 	data = np.load('../data/ml20/mini_data_with_negative.npy').astype(np.float32)
@@ -206,8 +206,8 @@ def main():
 
 	fm = FM(args.feature_size, args.k)
 
-	# train_with_batch(args, fm, train_data, train_target, valid_data, valid_target)
-	train_without_batch(args, fm, train_data, train_target, valid_data, valid_target)
+	train_with_batch(args, fm, train_data, train_target, valid_data, valid_target)
+	# train_without_batch(args, fm, train_data, train_target, valid_data, valid_target)
 
 	test_result = evaluate(fm, test_data, test_target)
 	print('Test Precise:{}%'.format(test_result*100))
