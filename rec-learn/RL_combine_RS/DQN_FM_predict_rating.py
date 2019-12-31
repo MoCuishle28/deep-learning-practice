@@ -307,11 +307,12 @@ class DQN_combine_FM(object):
 
 
 class GenerateHistoryEmbedding(object):
-	def __init__(self):
-		self.movie_embedding_128_mini = load_obj('movie_embedding_128_mini')	# mid:embedding
+	def __init__(self, args):
+		self.movie_embedding_128_mini = load_obj('mini_ml20_mid_map_one_hot')	# mid:one-hot (20 维)
 		self.users_behavior = load_obj('users_rating')	# uid:[[mid, rating, timestamp], ...] 有序
 		self.users_has_clicked = load_obj('users_has_clicked_mini')
 
+		self.args = args
 		self.window = 5					# 考虑最近多少部电影, 不够补 0 向量
 
 
@@ -325,21 +326,26 @@ class GenerateHistoryEmbedding(object):
 			if item[0] != curr_mid:
 				if len(history_embedding) == self.window:
 					history_embedding.pop()
-				history_embedding.append(self.movie_embedding_128_mini[item[0]])
+				# 加上 uid
+				new_one_hot = np.concatenate([np.array([uid]), self.movie_embedding_128_mini[item[0]]])
+				history_embedding.append(new_one_hot)
 			else:
 				break
 
 		while len(history_embedding) < self.window:
-			history_embedding.insert(0, torch.zeros(128, dtype=torch.float32))
+			history_embedding.insert(0, np.concatenate([np.array([uid]), np.zeros(20, dtype=np.float32)]))
 		# (batch:1, seq:window, embedding_size:128)
-		input_data = torch.stack(history_embedding).reshape((1, len(history_embedding), 128))
-		return input_data.detach().numpy()
+		input_data = np.stack(history_embedding)
+		input_data = input_data.reshape((1, len(history_embedding), self.args.state_size))
+		return input_data
 
 
 	def get_next_state(self, curr_state, add_mid):
 		curr_state = curr_state.tolist()
 		curr_state[0].pop(0)
-		curr_state[0].append(self.movie_embedding_128_mini[add_mid].detach().numpy())
+		# 加上 uid
+		new_one_hot = np.concatenate([np.array([curr_state[0][0][0]]), self.movie_embedding_128_mini[add_mid]])
+		curr_state[0].append(new_one_hot)
 		return np.array(curr_state)
 
 
@@ -398,8 +404,8 @@ def main():
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=1024)
 
-	parser.add_argument('--state_size', type=int, default=128)
-	parser.add_argument('--state_model_hidden_size', type=int, default=256)
+	parser.add_argument('--state_size', type=int, default=21)
+	parser.add_argument('--state_model_hidden_size', type=int, default=128)
 	parser.add_argument('--state_model_layer_num', type=int, default=2)
 	parser.add_argument('--hidden_size0', type=int, default=256)
 	parser.add_argument('--hidden_size1', type=int, default=512)
@@ -427,7 +433,7 @@ def main():
 	del data
 	del target
 
-	generator = GenerateHistoryEmbedding()
+	generator = GenerateHistoryEmbedding(args)
 	model = DQN_combine_FM(args, generator, train_data, train_target, valid_data, valid_target, test_data, test_target)
 	model.train_DQN()
 
