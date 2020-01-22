@@ -1,5 +1,6 @@
 练习深度学习相关代码
 
+在 win10 下容易安装失败, 可通过下载 .whl 文件安装
 安装numpy：
 pipenv install numpy-1.17.2-cp36-cp36m-win_amd64.whl
 
