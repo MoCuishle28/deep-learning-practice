@@ -1,15 +1,67 @@
 import sys
 import os
+from collections import namedtuple
+import random
 
 import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch.autograd import Variable
 import torch.nn.functional as F
+import numpy as np
 
 """
 From: https://github.com/ikostrikov/pytorch-ddpg-naf
 """
+
+
+Transition = namedtuple(
+	'Transition', ('state', 'action', 'mask', 'next_state', 'reward'))
+
+class ReplayMemory(object):
+	def __init__(self, capacity):
+		self.capacity = capacity
+		self.memory = []
+		self.position = 0
+
+
+	def push(self, *args):
+		"""Saves a transition."""
+		if len(self.memory) < self.capacity:
+			self.memory.append(None)
+		self.memory[self.position] = Transition(*args)
+		self.position = (self.position + 1) % self.capacity
+
+
+	def sample(self, batch_size):
+		return random.sample(self.memory, batch_size)
+
+
+	def __len__(self):
+		return len(self.memory)
+
+
+class OUNoise:
+	def __init__(self, action_dimension, scale=0.1, mu=0, theta=0.15, sigma=0.2):
+		self.action_dimension = action_dimension
+		self.scale = scale
+		self.mu = mu
+		self.theta = theta
+		self.sigma = sigma
+		self.state = np.ones(self.action_dimension) * self.mu
+		self.reset()
+
+
+	def reset(self):
+		self.state = np.ones(self.action_dimension) * self.mu
+
+
+	def noise(self):
+		x = self.state
+		dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(len(x))
+		self.state = x + dx
+		return self.state * self.scale
+
 
 def soft_update(target, source, tau):
     for target_param, param in zip(target.parameters(), source.parameters()):
@@ -51,17 +103,20 @@ class Actor(nn.Module):
     def __init__(self, hidden_size, num_inputs, action_space):
         super(Actor, self).__init__()
         self.action_space = action_space
-        num_outputs = action_space.shape[0]
+        num_outputs = action_space.shape[0]		# TODO
 
         self.linear1 = nn.Linear(num_inputs, hidden_size)
         self.ln1 = nn.LayerNorm(hidden_size)
+        # self.ln1 = nn.LayerNorm(hidden_size, affine=False)	# 加了 affine=False, 效果很差
 
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
-        self.ln2 = nn.LayerNorm(hidden_size)
+        self.linear2 = nn.Linear(hidden_size, hidden_size*2)
+        self.ln2 = nn.LayerNorm(hidden_size*2)
+        # self.ln2 = nn.LayerNorm(hidden_size*2, affine=False)
 
-        self.mu = nn.Linear(hidden_size, num_outputs)
-        self.mu.weight.data.mul_(0.1)
-        self.mu.bias.data.mul_(0.1)
+        self.mu = nn.Linear(hidden_size*2, num_outputs)
+        # why?
+        # self.mu.weight.data.mul_(0.1)
+        # self.mu.bias.data.mul_(0.1)
 
 
     def forward(self, inputs):
@@ -71,8 +126,13 @@ class Actor(nn.Module):
         x = F.relu(x)
         x = self.linear2(x)
         x = self.ln2(x)
-        x = F.relu(x)
-        mu = torch.tanh(self.mu(x))
+
+        # x = F.relu(x)
+        # mu = torch.tanh(self.mu(x))
+
+        x = torch.tanh(x)
+        mu = self.mu(x)
+
         return mu
 
 
@@ -80,17 +140,20 @@ class Critic(nn.Module):
     def __init__(self, hidden_size, num_inputs, action_space):
         super(Critic, self).__init__()
         self.action_space = action_space
-        num_outputs = action_space.shape[0]
+        num_outputs = action_space.shape[0]		# TODO
+
+        # 加上 GRU 计算 state, 修改后面的输入维度 TODO
 
         self.linear1 = nn.Linear(num_inputs, hidden_size)
         self.ln1 = nn.LayerNorm(hidden_size)
 
-        self.linear2 = nn.Linear(hidden_size+num_outputs, hidden_size)
-        self.ln2 = nn.LayerNorm(hidden_size)
+        self.linear2 = nn.Linear(hidden_size + num_outputs, (hidden_size + num_outputs)*2)
+        self.ln2 = nn.LayerNorm((hidden_size + num_outputs)*2)
 
-        self.V = nn.Linear(hidden_size, 1)
-        self.V.weight.data.mul_(0.1)
-        self.V.bias.data.mul_(0.1)
+        self.V = nn.Linear((hidden_size + num_outputs)*2, 1)
+        # why?
+        # self.V.weight.data.mul_(0.1)
+        # self.V.bias.data.mul_(0.1)
 
 
     def forward(self, inputs, actions):
@@ -108,7 +171,7 @@ class Critic(nn.Module):
 
 
 class DDPG(object):
-    def __init__(self, gamma, tau, hidden_size, num_inputs, action_space):
+    def __init__(self, gamma, tau, hidden_size, num_inputs, action_space, actor_lr, critic_lr):
 
         self.num_inputs = num_inputs
         self.action_space = action_space
@@ -116,11 +179,11 @@ class DDPG(object):
         self.actor = Actor(hidden_size, self.num_inputs, self.action_space)
         self.actor_target = Actor(hidden_size, self.num_inputs, self.action_space)
         self.actor_perturbed = Actor(hidden_size, self.num_inputs, self.action_space)
-        self.actor_optim = Adam(self.actor.parameters(), lr=1e-4)
+        self.actor_optim = Adam(self.actor.parameters(), lr=actor_lr)
 
         self.critic = Critic(hidden_size, self.num_inputs, self.action_space)
         self.critic_target = Critic(hidden_size, self.num_inputs, self.action_space)
-        self.critic_optim = Adam(self.critic.parameters(), lr=1e-3)
+        self.critic_optim = Adam(self.critic.parameters(), lr=critic_lr)
 
         self.gamma = gamma
         self.tau = tau
@@ -142,7 +205,8 @@ class DDPG(object):
         if action_noise is not None:
             mu += torch.Tensor(action_noise.noise())
 
-        return mu.clamp(-1, 1)      # 超出 [-1, 1] 区间的一律用 -1\1 替代
+        # return mu.clamp(-1, 1)      # 超出 [-1, 1] 区间的一律用 -1\1 替代
+        return mu 		# 返回的是	torch.tensor
 
 
     def update_parameters(self, batch):
@@ -169,6 +233,7 @@ class DDPG(object):
 
         self.actor_optim.zero_grad()
 
+        # actor 要最大化 Q-value
         policy_loss = -self.critic((state_batch),self.actor((state_batch)))
 
         policy_loss = policy_loss.mean()
@@ -199,7 +264,8 @@ class DDPG(object):
         if actor_path is None:
             actor_path = "models/ddpg_actor_{}_{}".format(env_name, suffix) 
         if critic_path is None:
-            critic_path = "models/ddpg_critic_{}_{}".format(env_name, suffix) 
+            critic_path = "models/ddpg_critic_{}_{}".format(env_name, suffix)
+             
         print('Saving models to {} and {}'.format(actor_path, critic_path))
         torch.save(self.actor.state_dict(), actor_path)
         torch.save(self.critic.state_dict(), critic_path)
