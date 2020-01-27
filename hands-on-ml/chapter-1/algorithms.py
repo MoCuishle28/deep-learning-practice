@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-HOUSING_PATH = os.path.join("..\\datasets", "housing")
+HOUSING_PATH = os.path.join("../datasets", "housing")
 
 
 def load_housing_data(housing_path=HOUSING_PATH):
@@ -78,3 +78,26 @@ print(strat_test_set["income_cat"].value_counts() / len(strat_test_set))
 # Now you should remove the income_cat attribute so the data is back to its original state
 for set_ in (strat_train_set, strat_test_set):
 	set_.drop("income_cat", axis=1, inplace=True)
+
+# Discover and Visualize the Data to Gain Insights
+# create a copy so you can play with it without harming the training set
+housing = strat_train_set.copy()
+# # 可视化地理数据
+# # 设 alpha 方便观察不同经纬度上点分布的密度
+# housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.4, 
+# 	s=housing["population"]/100, label="population", figsize=(10, 7), 
+# 	# c: 代表房价中位数, cmap=jet: 价格数字越大, 颜色越红, colorbar=True: 开启
+# 	c="median_house_value", cmap=plt.get_cmap("jet"), colorbar=True)
+# plt.legend()
+# plt.show()
+# # 可以根据图片增加特征, 以加强特征向量的表示
+# # It will probably be useful to use a clustering algorithm to detect the main clusters, 
+# # and add new features that measure the proximity to the cluster centers.
+
+# standard correlation coefficient (also called Pearson’s r) 
+corr_matrix = housing.corr()
+# 例如： median_house_value 和其他属性的相关性
+# print(corr_matrix["median_house_value"].sort_values(ascending=False))
+# 相关系数范围：-1~1, 接近0意味着没有线性相关, 接近-1意味着负相关.(correlation coefficient 只测量线性相关)
+
+# 另一种测量相关性的方法 TODO
