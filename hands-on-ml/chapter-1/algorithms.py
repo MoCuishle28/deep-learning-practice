@@ -100,4 +100,25 @@ corr_matrix = housing.corr()
 # print(corr_matrix["median_house_value"].sort_values(ascending=False))
 # 相关系数范围：-1~1, 接近0意味着没有线性相关, 接近-1意味着负相关.(correlation coefficient 只测量线性相关)
 
-# 另一种测量相关性的方法 TODO
+# 另一种测量相关性的方法, 画出所有属性与其他属性的关系
+from pandas.plotting import scatter_matrix
+# 这里只画 4^2 个
+attributes = ["median_house_value", "median_income", "total_rooms", "housing_median_age"]
+
+# plots every numerical attribute against every other numerical attribute.
+# scatter_matrix(housing[attributes], figsize=(12, 8))
+# plt.show()
+# 与 median_income 最相关的是 median_house_value
+# housing.plot(kind="scatter", x="median_income", y="median_house_value", alpha=0.1)
+# plt.show()
+
+# Experimenting with Attribute Combinations
+# 构造新特征 (households->家庭数)
+housing["rooms_per_household"] = housing["total_rooms"] / housing["households"]	# 平均每户家庭几套房
+housing["bedrooms_per_room"] = housing["total_bedrooms"] / housing["total_rooms"]
+housing["population_per_household"]=housing["population"] / housing["households"]
+
+# 构造完新特征再查看特征相关度
+corr_matrix = housing.corr()
+# bedrooms_per_room 和 median house value 的相关度高于 the total number of rooms or bedrooms.
+print(corr_matrix["median_house_value"].sort_values(ascending=False))
