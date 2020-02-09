@@ -96,7 +96,7 @@ class LayerNorm(nn.Module):
             y = self.gamma.view(*shape) * y + self.beta.view(*shape)
         return y
 
-nn.LayerNorm = LayerNorm
+# nn.LayerNorm = LayerNorm
 
 
 class Actor(nn.Module):
@@ -106,12 +106,15 @@ class Actor(nn.Module):
         num_outputs = action_space.shape[0]		# TODO
 
         self.linear1 = nn.Linear(num_inputs, hidden_size)
-        self.ln1 = nn.LayerNorm(hidden_size)
+        # self.ln1 = nn.LayerNorm(hidden_size)
         # self.ln1 = nn.LayerNorm(hidden_size, affine=False)	# 加了 affine=False, 效果很差
+        # pytorch 自带的
+        self.ln1 = nn.LayerNorm(hidden_size, elementwise_affine=True)
 
         self.linear2 = nn.Linear(hidden_size, hidden_size*2)
-        self.ln2 = nn.LayerNorm(hidden_size*2)
+        # self.ln2 = nn.LayerNorm(hidden_size*2)
         # self.ln2 = nn.LayerNorm(hidden_size*2, affine=False)
+        self.ln2 = nn.LayerNorm(hidden_size*2, elementwise_affine=True)
 
         self.mu = nn.Linear(hidden_size*2, num_outputs)
         # why?
@@ -145,10 +148,10 @@ class Critic(nn.Module):
         # 加上 GRU 计算 state, 修改后面的输入维度 TODO
 
         self.linear1 = nn.Linear(num_inputs, hidden_size)
-        self.ln1 = nn.LayerNorm(hidden_size)
+        self.ln1 = nn.LayerNorm(hidden_size, elementwise_affine=True)
 
         self.linear2 = nn.Linear(hidden_size + num_outputs, (hidden_size + num_outputs)*2)
-        self.ln2 = nn.LayerNorm((hidden_size + num_outputs)*2)
+        self.ln2 = nn.LayerNorm((hidden_size + num_outputs)*2, elementwise_affine=True)
 
         self.V = nn.Linear((hidden_size + num_outputs)*2, 1)
         # why?

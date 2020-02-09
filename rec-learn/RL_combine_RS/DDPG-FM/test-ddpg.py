@@ -28,7 +28,7 @@ critic_path = 'models/critic-v0'
 log_name = time.time()
 
 logging.basicConfig(level = logging.INFO,
-					filename = "../data/ddpg-fm/log/" + str(log_name) + '.log',
+					filename = "../data/ddpg-fm/test-ddpg/" + str(log_name) + '.log',
 					filemode = 'a')
 
 log_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
