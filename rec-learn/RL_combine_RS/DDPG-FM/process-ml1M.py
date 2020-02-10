@@ -160,7 +160,7 @@ def save_matrix(train_data, train_target, valid_data, valid_target, test_data, t
 
 # save_matrix(train_data, train_target, valid_data, valid_target, test_data, test_target)
 
-
+# 每一行: uid, mid, genres 1, genres 2, ...
 train_data = np.load('../../data/new_ml_1M/train_data.npy')
 train_target = np.load('../../data/new_ml_1M/train_target.npy')
 valid_data = np.load('../../data/new_ml_1M/valid_data.npy')
