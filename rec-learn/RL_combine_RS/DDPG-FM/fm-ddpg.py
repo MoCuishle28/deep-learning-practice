@@ -74,6 +74,10 @@ class Algorithm(object):
 		return data
 
 
+	def Normalize_uid_mid(self, data):
+		pass
+
+
 	def get_rmse(self, prediction, target):
 		rmse = torch.sqrt(torch.sum((target - prediction)**2) / prediction.shape[0])
 		return rmse.item()
@@ -160,11 +164,11 @@ class Algorithm(object):
 				prediction, predictor_loss = self.predictor.train(input_data, target)
 				rmse = self.get_rmse(prediction, target)
 
-				predictor_loss_mean = -predictor_loss.mean().item()
+				predictor_loss_mean = predictor_loss.mean().item()
 				mean_predictor_loss_list.append(predictor_loss_mean)
 				rmse_list.append(rmse)
 				# Average Reward e.g. Negative Average predictor loss
-				reward = predictor_loss_mean
+				reward = -predictor_loss_mean
 				# reward = -rmse
 
 				print('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
@@ -275,7 +279,7 @@ def init_log(args):
 
 def main():
 	seq_output_size = 32
-	actor_output = 32
+	actor_output = 16
 
 	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and FM")
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
