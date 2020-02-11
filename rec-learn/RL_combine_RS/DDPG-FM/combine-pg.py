@@ -16,7 +16,7 @@ from seqddpg import DDPG
 from seqddpg import Transition
 from seqddpg import ReplayMemory
 from seqddpg import OUNoise
-from myfm import FM, Net
+from myfm import FM
 from myfm import Predictor
 
 
@@ -321,9 +321,7 @@ def main():
 
 	agent = DDPG(args)
 	# 后面还可以改成 nn 或其他的预测 rating 算法
-	# predictor = Predictor(args, FM(args.fm_feature_size, args.k))
-	predictor = Predictor(args, Net(args.fm_feature_size, 64, 128, 1))
-
+	predictor = Predictor(args, FM(args.fm_feature_size, args.k))
 	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list)
 	algorithm.train()
 

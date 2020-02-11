@@ -8,6 +8,7 @@
 *.npy
 *.h5
 *.ckpt
+*.pyc
 
 /Pipfile
 

@@ -28,6 +28,31 @@ class FM(nn.Module):
 		return predict
 
 
+class Net(nn.Module):
+	def __init__(self, input_num, hidden_num0, hidden_num1, output_num):
+		super(Net, self).__init__()
+		self.in_layer = nn.Linear(input_num, hidden_num0)
+		self.in_norm = nn.LayerNorm(hidden_num0, elementwise_affine=True)
+
+		self.hidden_layer = nn.Linear(hidden_num0, hidden_num1)
+		self.hidden_norm = nn.LayerNorm(hidden_num1, elementwise_affine=True)
+
+		self.out_layer = nn.Linear(hidden_num1, output_num)
+
+
+	def forward(self, x):
+		x = self.in_layer(x)
+		x = self.in_norm(x)
+		x = torch.relu(x)
+
+		x = self.hidden_layer(x)
+		x = self.hidden_norm(x)
+		x = torch.relu(x)
+
+		x = self.out_layer(x)
+		return x
+
+
 class Predictor(object):
 	def __init__(self, args, predictor):
 		super(Predictor, self).__init__()
