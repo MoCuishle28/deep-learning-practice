@@ -92,12 +92,14 @@ class Algorithm(object):
 		input_data = torch.stack(input_data)
 		prediction, predictor_loss = self.predictor.predict(input_data, target)
 		rmse = self.get_rmse(prediction, target)
-
 		# Average Reward e.g. Negative Average predictor loss
+		reward = -predictor_loss.mean().item()
+		# reward = -rmse
+
 		print(title + ' RMSE:{:.6}, Average Reward:{:.8}'.format(
-			rmse, -predictor_loss.mean().item()))
+			rmse, reward))
 		logging.info(title + ' RMSE:{:.6}, Average Reward:{:.8}'.format(
-			rmse, -predictor_loss.mean().item()))
+			rmse, reward))
 		return rmse
 
 
@@ -120,8 +122,12 @@ class Algorithm(object):
 			# one_target (1, 1) 即:(batch=1, 1)
 			one_target = torch.tensor([target[i_data]], dtype=torch.float32).reshape((1, 1))
 			# 先不训练 (或者考虑如何预训练？ TODO)
-			_, predictor_loss = self.predictor.predict(input_data, one_target)
-			reward = torch.tensor([-predictor_loss], dtype=torch.float32)
+			prediction, predictor_loss = self.predictor.predict(input_data, one_target)
+			# predictor loss 的负数作为 reward
+			reward = torch.tensor([-predictor_loss.item()], dtype=torch.float32)
+			# rmse 的负数作为 reward
+			# reward = torch.tensor([-self.get_rmse(prediction, one_target)], dtype=torch.float32)
+
 			self.memory.push(state, action, mask, next_state, reward)
 
 
@@ -157,13 +163,15 @@ class Algorithm(object):
 				predictor_loss_mean = -predictor_loss.mean().item()
 				mean_predictor_loss_list.append(predictor_loss_mean)
 				rmse_list.append(rmse)
+				# Average Reward e.g. Negative Average predictor loss
+				reward = predictor_loss_mean
+				# reward = -rmse
 
 				print('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
-					i_batch+1, rmse, predictor_loss_mean), end = ', ')
+					i_batch+1, rmse, reward), end = ', ')
 				print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
-				# Average Reward e.g. Negative Average predictor loss
 				logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
-					i_batch+1, rmse, predictor_loss_mean))
+					i_batch+1, rmse, reward))
 
 			valid_rmse_list.append(self.evaluate(self.valid_data, self.valid_target))
 		self.evaluate(self.test_data, self.test_target, title='[Test]')
@@ -266,6 +274,9 @@ def init_log(args):
 
 
 def main():
+	seq_output_size = 32
+	actor_output = 32
+
 	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and FM")
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
@@ -276,19 +287,19 @@ def main():
 	# seq model
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
-	parser.add_argument('--seq_layer_num', type=int, default=1)
-	parser.add_argument('--seq_output_size', type=int, default=32)
+	parser.add_argument('--seq_layer_num', type=int, default=2)
+	parser.add_argument('--seq_output_size', type=int, default=seq_output_size)
 	# ddpg
-	parser.add_argument("--actor_lr", type=float, default=1e-3)
-	parser.add_argument("--critic_lr", type=float, default=1e-3)
-	parser.add_argument('--num_input', type=int, default=32)
+	parser.add_argument("--actor_lr", type=float, default=1e-4)
+	parser.add_argument("--critic_lr", type=float, default=1e-4)
+	parser.add_argument('--num_input', type=int, default=seq_output_size)	# 等于 seq_output_size
 	parser.add_argument('--hidden_size', type=int, default=128)
-	parser.add_argument('--actor_output', type=int, default=32)
-	parser.add_argument('--gamma', type=float, default=0.95)
+	parser.add_argument('--actor_output', type=int, default=actor_output)
+	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--tau', type=float, default=0.01)
 	# FM
-	parser.add_argument("--fm_lr", type=float, default=1e-2)
-	parser.add_argument('--fm_feature_size', type=int, default=22+32)	# 在原来基础上加上 ddpg 的输出
+	parser.add_argument("--fm_lr", type=float, default=1e-3)
+	parser.add_argument('--fm_feature_size', type=int, default=22+actor_output)	# 原来基础加上 actor_output
 	parser.add_argument('--k', type=int, default=20)
 	args = parser.parse_args()
 	init_log(args)

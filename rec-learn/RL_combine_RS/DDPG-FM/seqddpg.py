@@ -129,13 +129,13 @@ class Critic(nn.Module):
 		super(Critic, self).__init__()
 		self.seq_model = seq_model
 
-		self.linear1 = nn.Linear(num_input, hidden_size)
+		self.linear1 = nn.Linear(num_input + actor_output, hidden_size)
 		self.ln1 = nn.LayerNorm(hidden_size, elementwise_affine=True)
 
-		self.linear2 = nn.Linear(hidden_size + actor_output, (hidden_size + actor_output)*2)
-		self.ln2 = nn.LayerNorm((hidden_size + actor_output)*2, elementwise_affine=True)
+		self.linear2 = nn.Linear(hidden_size, hidden_size*2)
+		self.ln2 = nn.LayerNorm(hidden_size*2, elementwise_affine=True)
 
-		self.V = nn.Linear((hidden_size + actor_output)*2, 1)
+		self.V = nn.Linear(hidden_size*2, 1)
 		# why?
 		# self.V.weight.data.mul_(0.1)
 		# self.V.bias.data.mul_(0.1)
@@ -144,11 +144,11 @@ class Critic(nn.Module):
 		x = inputs
 		x = self.seq_model(inputs)
 
+		x = torch.cat((x, actions), 1)
 		x = self.linear1(x)
 		x = self.ln1(x)
 		x = F.relu(x)
 
-		x = torch.cat((x, actions), 1)
 		x = self.linear2(x)
 		x = self.ln2(x)
 		x = F.relu(x)
