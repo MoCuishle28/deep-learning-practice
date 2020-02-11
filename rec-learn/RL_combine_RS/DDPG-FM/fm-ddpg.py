@@ -285,6 +285,7 @@ def main():
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--history_window', type=int, default=5)
+	parser.add_argument('--predictor', default='net')
 	# seq model
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
@@ -292,15 +293,19 @@ def main():
 	parser.add_argument('--seq_output_size', type=int, default=32)
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-4)
-	parser.add_argument("--critic_lr", type=float, default=1e-4)
+	parser.add_argument("--critic_lr", type=float, default=1e-2)
 	parser.add_argument('--hidden_size', type=int, default=128)
 	parser.add_argument('--actor_output', type=int, default=16)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--tau', type=float, default=0.01)
-	# FM
+	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-4)
+	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
 	parser.add_argument('--k', type=int, default=10)
+	# network
+	parser.add_argument('--hidden_0', type=int, default=128)
+	parser.add_argument('--hidden_1', type=int, default=256)
 	args = parser.parse_args()
 	init_log(args)
 
@@ -314,11 +319,20 @@ def main():
 	target_list = [train_target] + [valid_target] + [test_target]
 
 	env = HistoryGenerator(args)
-
 	agent = DDPG(args)
-	# 后面还可以改成 nn 或其他的预测 rating 算法
-	predictor = Predictor(args, FM(args.fm_feature_size + args.actor_output, args.k))
-	# predictor = Predictor(args, Net(args.fm_feature_size + args.actor_output, 128, 256, 1))
+
+	# 后面还可以改成他的预测 rating 算法
+	predictor_model = None
+	if args.predictor == 'net':
+		print('predictor_model is network.')
+		logging.info('predictor_model is network.')
+		predictor_model = Net(args.fm_feature_size + args.actor_output, args.hidden_0, args.hidden_1, 1)
+	elif args.predictor == 'fm':
+		print('predictor_model is FM.')
+		logging.info('predictor_model is FM.')
+		predictor_model = FM(args.fm_feature_size + args.actor_output, args.k)
+
+	predictor = Predictor(args, predictor_model)
 
 	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list)
 	algorithm.train()
