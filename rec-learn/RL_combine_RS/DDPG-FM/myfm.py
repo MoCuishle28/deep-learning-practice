@@ -57,7 +57,7 @@ class Predictor(object):
 	def __init__(self, args, predictor):
 		super(Predictor, self).__init__()
 		self.predictor = predictor
-		self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.fm_lr)
+		self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.predictor_lr)
 		self.criterion = nn.MSELoss()
 
 

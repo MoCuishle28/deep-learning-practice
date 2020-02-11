@@ -278,9 +278,6 @@ def init_log(args):
 
 
 def main():
-	seq_output_size = 32
-	actor_output = 16
-
 	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and FM")
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
@@ -292,19 +289,18 @@ def main():
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
-	parser.add_argument('--seq_output_size', type=int, default=seq_output_size)
+	parser.add_argument('--seq_output_size', type=int, default=32)
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-4)
 	parser.add_argument("--critic_lr", type=float, default=1e-4)
-	parser.add_argument('--num_input', type=int, default=seq_output_size)	# 等于 seq_output_size
 	parser.add_argument('--hidden_size', type=int, default=128)
-	parser.add_argument('--actor_output', type=int, default=actor_output)
+	parser.add_argument('--actor_output', type=int, default=16)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--tau', type=float, default=0.01)
 	# FM
-	parser.add_argument("--fm_lr", type=float, default=1e-3)
-	parser.add_argument('--fm_feature_size', type=int, default=22+actor_output)	# 原来基础加上 actor_output
-	parser.add_argument('--k', type=int, default=20)
+	parser.add_argument("--predictor_lr", type=float, default=1e-4)
+	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
+	parser.add_argument('--k', type=int, default=10)
 	args = parser.parse_args()
 	init_log(args)
 
@@ -321,8 +317,8 @@ def main():
 
 	agent = DDPG(args)
 	# 后面还可以改成 nn 或其他的预测 rating 算法
-	# predictor = Predictor(args, FM(args.fm_feature_size, args.k))
-	predictor = Predictor(args, Net(args.fm_feature_size, 64, 128, 1))
+	predictor = Predictor(args, FM(args.fm_feature_size + args.actor_output, args.k))
+	# predictor = Predictor(args, Net(args.fm_feature_size + args.actor_output, 128, 256, 1))
 
 	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list)
 	algorithm.train()

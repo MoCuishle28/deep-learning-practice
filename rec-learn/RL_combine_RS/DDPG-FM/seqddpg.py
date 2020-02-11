@@ -161,14 +161,14 @@ class DDPG(object):
 		self.seq_model = SeqModel(args)
 		seq_params = [param for param in self.seq_model.parameters()]
 
-		self.actor = Actor(args.hidden_size, args.num_input, args.actor_output, self.seq_model)
-		self.actor_target = Actor(args.hidden_size, args.num_input, args.actor_output, self.seq_model)
-		self.actor_perturbed = Actor(args.hidden_size, args.num_input, args.actor_output, self.seq_model)
+		self.actor = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
+		self.actor_target = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
+		self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
 		actor_params = seq_params + [param for param in self.actor.parameters()]
 		self.actor_optim = Adam(actor_params, lr=args.actor_lr)
 
-		self.critic = Critic(args.hidden_size, args.num_input, args.actor_output, self.seq_model)
-		self.critic_target = Critic(args.hidden_size, args.num_input, args.actor_output, self.seq_model)
+		self.critic = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
+		self.critic_target = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
 		critic_params = seq_params + [param for param in self.critic.parameters()]
 		self.critic_optim = Adam(critic_params, lr=args.critic_lr)
 
