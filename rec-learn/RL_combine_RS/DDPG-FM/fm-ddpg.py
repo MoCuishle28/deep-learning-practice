@@ -79,7 +79,8 @@ class Algorithm(object):
 
 
 	def get_rmse(self, prediction, target):
-		rmse = torch.sqrt(torch.sum((target - prediction)**2) / prediction.shape[0])
+		prediction = prediction.squeeze()
+		rmse = torch.sqrt(torch.sum((prediction - target)**2) / prediction.shape[0])
 		return rmse.item()
 
 
@@ -183,7 +184,7 @@ class Algorithm(object):
 
 
 	def plot_result(self, rmse_list, valid_rmse_list, mean_predictor_loss_list):
-		plt.figure(figsize=(15, 8))
+		plt.figure(figsize=(8, 8))
 		plt.subplot(5, 1, 1)
 		plt.title('Train RMSE')
 		plt.xlabel('Step')
@@ -267,7 +268,7 @@ class HistoryGenerator(object):
 def init_log(args):
 	start = datetime.datetime.now()
 	logging.basicConfig(level = logging.INFO,
-					filename = args.base_log_dir + str(time.time()) + '.log',
+					filename = args.base_log_dir + args.v + '-' + str(time.time()) + '.log',
 					filemode = 'a',		# 模式，有w和a，w就是写模式，每次都会重新写日志，覆盖之前的日志
 					# a是追加模式，默认如果不写的话，就是追加模式
 					)
@@ -279,6 +280,7 @@ def init_log(args):
 
 def main():
 	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and FM")
+	parser.add_argument('--v', default="v")
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
 	parser.add_argument('--memory_size', type=int, default=4096)
@@ -292,17 +294,17 @@ def main():
 	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=32)
 	# ddpg
-	parser.add_argument("--actor_lr", type=float, default=1e-4)
-	parser.add_argument("--critic_lr", type=float, default=1e-2)
+	parser.add_argument("--actor_lr", type=float, default=1e-3)
+	parser.add_argument("--critic_lr", type=float, default=1e-3)
 	parser.add_argument('--hidden_size', type=int, default=128)
 	parser.add_argument('--actor_output', type=int, default=16)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--tau', type=float, default=0.01)
 	# predictor
-	parser.add_argument("--predictor_lr", type=float, default=1e-4)
+	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
-	parser.add_argument('--k', type=int, default=10)
+	parser.add_argument('--k', type=int, default=128)
 	# network
 	parser.add_argument('--hidden_0', type=int, default=128)
 	parser.add_argument('--hidden_1', type=int, default=256)

@@ -1,6 +1,12 @@
 import torch
 import torch.nn as nn
 
+# 测试用
+import argparse
+import torch.utils.data as Data
+import numpy as np
+import matplotlib.pyplot as plt
+
 
 class FM(nn.Module):
 	def __init__(self, feature_size, k):
@@ -78,5 +84,120 @@ class Predictor(object):
 		return prediction, loss
 
 
-	def evaluate(self, data, target):
-		pass
+def get_rmse(prediction, target):
+	prediction = prediction.squeeze()
+	rmse = torch.sqrt(torch.sum((prediction - target)**2) / prediction.shape[0])
+	return rmse.item()
+
+
+def Standardization_uid_mid(data):
+	uid_mean = data[:, 0].mean()
+	uid_std = data[:, 0].std()
+	mid_mean = data[:, 1].mean()
+	mid_std = data[:, 1].std()
+	data[:, 0] = (data[:, 0] - uid_mean) / uid_std
+	data[:, 1] = (data[:, 1] - mid_mean) / mid_std
+	return data
+
+
+def evaluate(predictor, data, target, title='[Valid]'):
+	prediction, loss = predictor.train(data, target)
+	rmse = get_rmse(prediction, target)
+	print(title + ' loss:{:.5}, RMSE:{:.5}'.format(loss.item(), rmse))
+	return rmse
+
+
+def train(args, predictor):
+	rmse_list, valid_rmse_list, loss_list = [], [], []
+
+	train_data = torch.tensor(np.load(args.base_data_dir + 'train_data.npy').astype(np.float32), dtype=torch.float32)
+	train_target = torch.tensor(np.load(args.base_data_dir + 'train_target.npy').astype(np.float32), dtype=torch.float32)
+	valid_data = torch.tensor(np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32), dtype=torch.float32)
+	valid_target = torch.tensor(np.load(args.base_data_dir + 'valid_target.npy').astype(np.float32), dtype=torch.float32)
+	test_data = torch.tensor(np.load(args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32)
+	test_target = torch.tensor(np.load(args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32)
+
+	train_data = Standardization_uid_mid(train_data)
+	valid_data = Standardization_uid_mid(valid_data)
+	test_data = Standardization_uid_mid(test_data)
+
+	train_data_set = Data.TensorDataset(train_data, train_target)
+	train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=False)
+
+	for epoch in range(args.epoch):
+		for i_batch, (data, target) in enumerate(train_data_loader):
+			prediction, loss = predictor.train(data, target)
+			rmse = get_rmse(prediction, target)
+			
+			if (i_batch + 1) % 10 == 0:
+				print('epoch:{}, i_batch:{}, loss:{:.5}, RMSE:{:.5}'.format(epoch + 1, 
+					i_batch+1, loss.item(), rmse))
+
+				rmse_list.append(rmse)
+				loss_list.append(loss.item())
+		
+		valid_rmse = evaluate(predictor, valid_data, valid_target)
+		valid_rmse_list.append(valid_rmse)
+
+	evaluate(predictor, test_data, test_target, title='[Test]')
+	return rmse_list, valid_rmse_list, loss_list
+
+
+
+def plot_result(rmse_list, valid_rmse_list, loss_list):
+	plt.figure(figsize=(8, 8))
+	plt.subplot(5, 1, 1)
+	plt.title('Train RMSE')
+	plt.xlabel('Step')
+	plt.ylabel('RMSE')
+	plt.plot(rmse_list)
+
+	plt.subplot(5, 1, 3)
+	plt.title('Valid RMSE')
+	plt.xlabel('Step')
+	plt.ylabel('RMSE')
+	plt.plot(valid_rmse_list)
+
+	plt.subplot(5, 1, 5)
+	plt.title('Predictor LOSS')
+	plt.xlabel('Step')
+	plt.ylabel('LOSS')
+	plt.plot(loss_list)
+
+	plt.show()
+
+
+def main():
+	parser = argparse.ArgumentParser(description="Hyperparameters for Predictor")
+	parser.add_argument('--v', default="v")
+	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
+	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
+	parser.add_argument('--epoch', type=int, default=100)
+	parser.add_argument('--batch_size', type=int, default=512)
+	parser.add_argument('--predictor', default='fm')
+	# predictor
+	parser.add_argument("--predictor_lr", type=float, default=1e-3)
+	# FM
+	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
+	parser.add_argument('--k', type=int, default=128)
+	# network
+	parser.add_argument('--hidden_0', type=int, default=128)
+	parser.add_argument('--hidden_1', type=int, default=256)
+	args = parser.parse_args()
+
+	model = None
+	if args.predictor == 'fm':
+		print('Predictor is FM.')
+		model = FM(args.fm_feature_size, args.k)
+	elif args.predictor == 'net':
+		print('Predictor is Network.')
+		model = Net(args.fm_feature_size, args.hidden_0, args.hidden_1, 1)
+
+	predictor = Predictor(args, model)
+	rmse_list, valid_rmse_list, loss_list = train(args, predictor)
+	plot_result(rmse_list, valid_rmse_list, loss_list)
+
+
+
+if __name__ == '__main__':
+	main()
