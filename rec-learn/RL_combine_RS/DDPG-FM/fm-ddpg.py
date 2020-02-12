@@ -177,7 +177,6 @@ class Algorithm(object):
 				print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
 				logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
 					i_batch+1, rmse, reward))
-
 			valid_rmse_list.append(self.evaluate(self.valid_data, self.valid_target))
 		self.evaluate(self.test_data, self.test_target, title='[Test]')
 		self.plot_result(rmse_list, valid_rmse_list, mean_predictor_loss_list)
@@ -185,24 +184,25 @@ class Algorithm(object):
 
 	def plot_result(self, rmse_list, valid_rmse_list, mean_predictor_loss_list):
 		plt.figure(figsize=(8, 8))
-		plt.subplot(5, 1, 1)
+		plt.subplot(1, 5, 1)
 		plt.title('Train RMSE')
 		plt.xlabel('Step')
 		plt.ylabel('RMSE')
 		plt.plot(rmse_list)
 
-		plt.subplot(5, 1, 3)
+		plt.subplot(1, 5, 3)
 		plt.title('Valid RMSE')
 		plt.xlabel('Step')
 		plt.ylabel('RMSE')
 		plt.plot(valid_rmse_list)
 
-		plt.subplot(5, 1, 5)
+		plt.subplot(1, 5, 5)
 		plt.title('Mean Predictor LOSS')
 		plt.xlabel('Step')
 		plt.ylabel('LOSS')
 		plt.plot(mean_predictor_loss_list)
 
+		plt.savefig(self.args.base_pic_dir + self.args.v + '.png')
 		plt.show()
 
 
@@ -279,9 +279,10 @@ def init_log(args):
 
 
 def main():
-	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and FM")
+	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and Predictor")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
+	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/pic/")
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
 	parser.add_argument('--memory_size', type=int, default=4096)
 	parser.add_argument('--epoch', type=int, default=5)
@@ -326,8 +327,8 @@ def main():
 	# 后面还可以改成他的预测 rating 算法
 	predictor_model = None
 	if args.predictor == 'net':
-		print('predictor_model is network.')
-		logging.info('predictor_model is network.')
+		print('predictor_model is Network.')
+		logging.info('predictor_model is Network.')
 		predictor_model = Net(args.fm_feature_size + args.actor_output, args.hidden_0, args.hidden_1, 1)
 	elif args.predictor == 'fm':
 		print('predictor_model is FM.')

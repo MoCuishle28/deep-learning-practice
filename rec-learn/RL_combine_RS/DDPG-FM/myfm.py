@@ -6,6 +6,9 @@ import argparse
 import torch.utils.data as Data
 import numpy as np
 import matplotlib.pyplot as plt
+import logging
+import datetime
+import time
 
 
 class FM(nn.Module):
@@ -101,9 +104,10 @@ def Standardization_uid_mid(data):
 
 
 def evaluate(predictor, data, target, title='[Valid]'):
-	prediction, loss = predictor.train(data, target)
+	prediction, loss = predictor.predict(data, target)
 	rmse = get_rmse(prediction, target)
 	print(title + ' loss:{:.5}, RMSE:{:.5}'.format(loss.item(), rmse))
+	logging.info(title + ' loss:{:.5}, RMSE:{:.5}'.format(loss.item(), rmse))
 	return rmse
 
 
@@ -122,19 +126,21 @@ def train(args, predictor):
 	test_data = Standardization_uid_mid(test_data)
 
 	train_data_set = Data.TensorDataset(train_data, train_target)
-	train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=False)
+	train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=True)
 
 	for epoch in range(args.epoch):
 		for i_batch, (data, target) in enumerate(train_data_loader):
 			prediction, loss = predictor.train(data, target)
 			rmse = get_rmse(prediction, target)
 			
-			if (i_batch + 1) % 10 == 0:
+			if (i_batch + 1) % 50 == 0:
 				print('epoch:{}, i_batch:{}, loss:{:.5}, RMSE:{:.5}'.format(epoch + 1, 
 					i_batch+1, loss.item(), rmse))
 
 				rmse_list.append(rmse)
 				loss_list.append(loss.item())
+				logging.info('epoch:{}, i_batch:{}, loss:{:.5}, RMSE:{:.5}'.format(epoch + 1, 
+					i_batch+1, loss.item(), rmse))
 		
 		valid_rmse = evaluate(predictor, valid_data, valid_target)
 		valid_rmse_list.append(valid_rmse)
@@ -167,10 +173,23 @@ def plot_result(rmse_list, valid_rmse_list, loss_list):
 	plt.show()
 
 
+def init_log(args):
+	start = datetime.datetime.now()
+	logging.basicConfig(level = logging.INFO,
+					filename = args.base_log_dir + args.v + '-' + str(time.time()) + '.log',
+					filemode = 'a',		# 模式，有w和a，w就是写模式，每次都会重新写日志，覆盖之前的日志
+					# a是追加模式，默认如果不写的话，就是追加模式
+					)
+	logging.info('start! '+str(start))
+	logging.info('Parameter:')
+	logging.info(str(args))
+	logging.info('\n-------------------------------------------------------------\n')
+
+
 def main():
 	parser = argparse.ArgumentParser(description="Hyperparameters for Predictor")
-	parser.add_argument('--v', default="v")
-	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
+	parser.add_argument('--v', default="predictor-v-")
+	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/")
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=512)
@@ -185,12 +204,16 @@ def main():
 	parser.add_argument('--hidden_1', type=int, default=256)
 	args = parser.parse_args()
 
+	init_log(args)
+
 	model = None
 	if args.predictor == 'fm':
 		print('Predictor is FM.')
+		logging.info('Predictor is FM.')
 		model = FM(args.fm_feature_size, args.k)
 	elif args.predictor == 'net':
 		print('Predictor is Network.')
+		logging.info('Predictor is Network.')
 		model = Net(args.fm_feature_size, args.hidden_0, args.hidden_1, 1)
 
 	predictor = Predictor(args, model)
