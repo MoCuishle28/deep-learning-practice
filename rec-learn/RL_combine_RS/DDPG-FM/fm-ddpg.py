@@ -295,14 +295,15 @@ def main():
 	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=32)
 	# ddpg
-	parser.add_argument("--actor_lr", type=float, default=1e-3)
-	parser.add_argument("--critic_lr", type=float, default=1e-3)
+	parser.add_argument("--actor_lr", type=float, default=1e-5)
+	parser.add_argument("--critic_lr", type=float, default=1e-2)
 	parser.add_argument('--hidden_size', type=int, default=128)
-	parser.add_argument('--actor_output', type=int, default=16)
+	parser.add_argument('--actor_output', type=int, default=32)
 	parser.add_argument('--gamma', type=float, default=0.99)
-	parser.add_argument('--tau', type=float, default=0.01)
+	parser.add_argument('--actor_tau', type=float, default=0.01)
+	parser.add_argument('--critic_tau', type=float, default=0.05)
 	# predictor
-	parser.add_argument("--predictor_lr", type=float, default=1e-3)
+	parser.add_argument("--predictor_lr", type=float, default=1e-4)
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
 	parser.add_argument('--k', type=int, default=128)

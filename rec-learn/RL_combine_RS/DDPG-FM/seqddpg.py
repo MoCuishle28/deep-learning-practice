@@ -173,7 +173,8 @@ class DDPG(object):
 		self.critic_optim = Adam(critic_params, lr=args.critic_lr)
 
 		self.gamma = args.gamma
-		self.tau = args.tau
+		self.actor_tau = args.actor_tau
+		self.critic_tau = args.critic_tau
 
 		hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
 		hard_update(self.critic_target, self.critic)
@@ -226,8 +227,8 @@ class DDPG(object):
 		policy_loss.backward()
 		self.actor_optim.step()
 
-		soft_update(self.actor_target, self.actor, self.tau)
-		soft_update(self.critic_target, self.critic, self.tau)
+		soft_update(self.actor_target, self.actor, self.actor_tau)
+		soft_update(self.critic_target, self.critic, self.critic_tau)
 
 		return value_loss.item(), policy_loss.item()
 

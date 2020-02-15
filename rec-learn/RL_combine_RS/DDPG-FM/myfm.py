@@ -150,26 +150,27 @@ def train(args, predictor):
 
 
 
-def plot_result(rmse_list, valid_rmse_list, loss_list):
+def plot_result(args, rmse_list, valid_rmse_list, loss_list):
 	plt.figure(figsize=(8, 8))
-	plt.subplot(5, 1, 1)
+	plt.subplot(1, 5, 1)
 	plt.title('Train RMSE')
 	plt.xlabel('Step')
 	plt.ylabel('RMSE')
 	plt.plot(rmse_list)
 
-	plt.subplot(5, 1, 3)
+	plt.subplot(1, 5, 3)
 	plt.title('Valid RMSE')
 	plt.xlabel('Step')
 	plt.ylabel('RMSE')
 	plt.plot(valid_rmse_list)
 
-	plt.subplot(5, 1, 5)
+	plt.subplot(1, 5, 5)
 	plt.title('Predictor LOSS')
 	plt.xlabel('Step')
 	plt.ylabel('LOSS')
 	plt.plot(loss_list)
 
+	plt.savefig(args.base_pic_dir + args.v + '.png')
 	plt.show()
 
 
@@ -189,7 +190,8 @@ def init_log(args):
 def main():
 	parser = argparse.ArgumentParser(description="Hyperparameters for Predictor")
 	parser.add_argument('--v', default="predictor-v-")
-	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/")
+	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/traditional-model/")
+	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/traditional-model/")
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=512)
@@ -218,7 +220,7 @@ def main():
 
 	predictor = Predictor(args, model)
 	rmse_list, valid_rmse_list, loss_list = train(args, predictor)
-	plot_result(rmse_list, valid_rmse_list, loss_list)
+	plot_result(args, rmse_list, valid_rmse_list, loss_list)
 
 
 
