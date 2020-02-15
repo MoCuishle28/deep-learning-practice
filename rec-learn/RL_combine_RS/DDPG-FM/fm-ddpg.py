@@ -182,6 +182,27 @@ class Algorithm(object):
 		self.plot_result(rmse_list, valid_rmse_list, mean_predictor_loss_list)
 
 
+	def pretrain_predictor(self):
+		train_data_set = Data.TensorDataset(self.train_data, self.train_target)
+		data_loader = Data.DataLoader(dataset=train_data_set, batch_size=self.args.batch_size, 
+			shuffle=True)
+		for epoch in range(self.args.pretrain_predictor_epoch):
+			for i_batch, (data, target) in enumerate(data_loader):
+				data_list = []
+				# 补上 agent 输出的那部分为 0 向量
+				for feature_vec in data:
+					zero_vec = torch.zeros(self.args.actor_output)
+					data_list.append(torch.cat([zero_vec, feature_vec[2:]]))
+
+				data = torch.stack(data_list)
+				prediction, loss = self.predictor.train(data, target)
+				rmse = self.get_rmse(prediction, target)
+				
+				if (i_batch + 1) % 50 == 0:
+					print('pretrain epoch:{}, i_batch:{}, loss:{:.5}, RMSE:{:.5}'.format(epoch + 1, 
+						i_batch+1, loss.item(), rmse))
+
+
 	def plot_result(self, rmse_list, valid_rmse_list, mean_predictor_loss_list):
 		plt.figure(figsize=(8, 8))
 		plt.subplot(1, 5, 1)
@@ -263,7 +284,7 @@ class HistoryGenerator(object):
 					torch.tensor([rating], dtype=torch.float32)])
 		curr_history.append(history_feature)
 		return torch.tensor(curr_history)
-		
+
 
 def init_log(args):
 	start = datetime.datetime.now()
@@ -285,10 +306,12 @@ def main():
 	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/pic/")
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
 	parser.add_argument('--memory_size', type=int, default=4096)
+	parser.add_argument('--pretrain_predictor_epoch', type=int, default=100)
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--history_window', type=int, default=5)
 	parser.add_argument('--predictor', default='net')
+	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	# seq model
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
@@ -339,6 +362,11 @@ def main():
 	predictor = Predictor(args, predictor_model)
 
 	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list)
+	if args.pretrain == 'y':
+		# 暂时未发现有明显效果
+		print('----------------------------------pretrain start----------------------------------')
+		algorithm.pretrain_predictor()
+		print('----------------------------------pretrain end----------------------------------')
 	algorithm.train()
 
 
