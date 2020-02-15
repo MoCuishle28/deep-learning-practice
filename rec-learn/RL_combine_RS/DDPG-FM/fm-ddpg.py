@@ -324,7 +324,7 @@ def main():
 	parser.add_argument('--actor_output', type=int, default=32)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--actor_tau', type=float, default=0.01)
-	parser.add_argument('--critic_tau', type=float, default=0.05)
+	parser.add_argument('--critic_tau', type=float, default=0.01)
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-4)
 	# FM
@@ -367,6 +367,7 @@ def main():
 		print('----------------------------------pretrain start----------------------------------')
 		algorithm.pretrain_predictor()
 		print('----------------------------------pretrain end----------------------------------')
+	print('no pretrain')
 	algorithm.train()
 
 
