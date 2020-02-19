@@ -66,7 +66,13 @@ class Predictor(object):
 	def __init__(self, args, predictor):
 		super(Predictor, self).__init__()
 		self.predictor = predictor
-		self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.predictor_lr)
+		if args.predictor_optim == 'adam':
+			self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.predictor_lr)
+		elif args.predictor_optim == 'sgd':
+			self.optim = torch.optim.SGD(self.predictor.parameters(), lr=args.predictor_lr, momentum=args.momentum)
+		elif args.predictor_optim == 'rmsprop':
+			self.optim = torch.optim.RMSprop(self.predictor.parameters(), lr=args.predictor_lr)
+
 		self.criterion = nn.MSELoss()
 
 
@@ -196,6 +202,8 @@ def main():
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--predictor', default='fm')
+	parser.add_argument('--predictor_optim', default='sgd')
+	parser.add_argument('--momentum', type=float, default=0.8)
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM

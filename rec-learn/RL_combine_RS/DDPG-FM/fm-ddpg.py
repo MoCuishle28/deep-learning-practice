@@ -79,7 +79,8 @@ class Algorithm(object):
 
 
 	def get_rmse(self, prediction, target):
-		prediction = prediction.squeeze()
+		if prediction.shape != target.shape:
+			prediction = prediction.squeeze()
 		rmse = torch.sqrt(torch.sum((prediction - target)**2) / prediction.shape[0])
 		return rmse.item()
 
@@ -97,9 +98,12 @@ class Algorithm(object):
 		input_data = torch.stack(input_data)
 		prediction, predictor_loss = self.predictor.predict(input_data, target)
 		rmse = self.get_rmse(prediction, target)
-		# Average Reward e.g. Negative Average predictor loss
-		reward = -predictor_loss.mean().item()
-		# reward = -rmse
+		reward = 0
+		if self.args.reward == 'loss':
+			# Average Reward e.g. Negative Average predictor loss
+			reward = -predictor_loss.mean().item()
+		elif self.args.reward == 'rmse':
+			reward = -rmse
 
 		print(title + ' RMSE:{:.6}, Average Reward:{:.8}'.format(
 			rmse, reward))
@@ -113,7 +117,7 @@ class Algorithm(object):
 		for i_data, raw_feature in enumerate(data):
 			mask = torch.tensor([True], dtype=torch.float32)
 			state = self.env.get_history(raw_feature[0].item(), raw_feature[1].item())
-			next_state = self.env.get_next_history(state, raw_feature[1].item())
+			next_state = self.env.get_next_history(state, raw_feature[1].item(), raw_feature[0].item())
 
 			# 转成符合 RNN 的输入数据形式
 			state = state.reshape((-1, state.shape[0], state.shape[1]))
@@ -126,12 +130,15 @@ class Algorithm(object):
 			input_data = input_data.reshape((1, input_data.shape[0]))
 			# one_target (1, 1) 即:(batch=1, 1)
 			one_target = torch.tensor([target[i_data]], dtype=torch.float32).reshape((1, 1))
-			# 先不训练 (或者考虑如何预训练？ TODO)
+			# 先不训练
 			prediction, predictor_loss = self.predictor.predict(input_data, one_target)
 			# predictor loss 的负数作为 reward
-			reward = torch.tensor([-predictor_loss.item()], dtype=torch.float32)
-			# rmse 的负数作为 reward
-			# reward = torch.tensor([-self.get_rmse(prediction, one_target)], dtype=torch.float32)
+			reward = 0
+			if self.args.reward == 'loss':
+				reward = torch.tensor([-predictor_loss.item()], dtype=torch.float32)
+			elif self.args.reward == 'rmse':
+				# rmse 的负数作为 reward
+				reward = torch.tensor([-self.get_rmse(prediction, one_target)], dtype=torch.float32)
 
 			self.memory.push(state, action, mask, next_state, reward)
 
@@ -168,9 +175,12 @@ class Algorithm(object):
 				predictor_loss_mean = predictor_loss.mean().item()
 				mean_predictor_loss_list.append(predictor_loss_mean)
 				rmse_list.append(rmse)
-				# Average Reward e.g. Negative Average predictor loss
-				reward = -predictor_loss_mean
-				# reward = -rmse
+				reward = 0
+				if self.args.reward == 'loss':
+					# Average Reward e.g. Negative Average predictor loss
+					reward = -predictor_loss_mean
+				elif self.args.reward == 'rmse':
+					reward = -rmse
 
 				print('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
 					i_batch+1, rmse, reward), end = ', ')
@@ -235,6 +245,27 @@ class HistoryGenerator(object):
 		self.users_rating = load_obj('users_rating_without_timestamp') # uid:[[mid, rating], ...] 有序
 		# self.users_has_clicked = load_obj('users_has_clicked')	# uid:{mid, mid, ...}
 		self.window = args.history_window
+		self.compute_mean_std()
+
+
+	def compute_mean_std(self):
+		rating_list = []
+		uid_list = []
+		mid_set = set()
+		for uid, behavior_list in self.users_rating.items():
+			uid_list.append(uid)
+			for pair in behavior_list:
+				rating_list.append(pair[-1])
+				mid_set.add(pair[0])
+
+		uid_tensor = torch.tensor(uid_list, dtype=torch.float32)
+		self.uid_mean, self.uid_std = uid_tensor.mean(), uid_tensor.std()
+
+		rating_tensor = torch.tensor(rating_list, dtype=torch.float32)
+		self.rating_mean, self.rating_std = rating_tensor.mean(), rating_tensor.std()
+
+		mid_tensor = torch.tensor(list(mid_set), dtype=torch.float32)
+		self.mid_mean, self.mid_std = mid_tensor.mean(), mid_tensor.std()
 
 
 	def get_history(self, uid, curr_mid):
@@ -260,11 +291,14 @@ class HistoryGenerator(object):
 				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32), 
 					mfeature, 
 					torch.tensor([rating], dtype=torch.float32)])
+			history_feature[0] = (history_feature[0] - self.uid_mean) / self.uid_std
+			history_feature[1] = (history_feature[1] - self.mid_mean) / self.mid_std
+			history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std
 			ret_data.append(history_feature)
 		return torch.stack(ret_data)
 
 
-	def get_next_history(self, curr_history, new_mid):
+	def get_next_history(self, curr_history, new_mid, curr_uid):
 		'''
 		这个 state 的转移方式没有考虑 action(即: trasition probability = 1) TODO
 		curr_history: tensor (window, feature size)
@@ -272,7 +306,7 @@ class HistoryGenerator(object):
 		'''
 		curr_history = curr_history.tolist()
 		curr_history.pop(0)
-		uid = curr_history[0][0]
+		uid = curr_uid
 		rating = -1
 		for behavior in self.users_rating[uid]:
 			if new_mid == behavior[0]:
@@ -312,6 +346,11 @@ def main():
 	parser.add_argument('--history_window', type=int, default=5)
 	parser.add_argument('--predictor', default='net')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
+	parser.add_argument('--reward', default='loss')
+	parser.add_argument('--predictor_optim', default='sgd')
+	parser.add_argument('--actor_optim', default='sgd')
+	parser.add_argument('--critic_optim', default='sgd')
+	parser.add_argument('--momentum', type=float, default=0.8)
 	# seq model
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
@@ -367,7 +406,10 @@ def main():
 		print('----------------------------------pretrain start----------------------------------')
 		algorithm.pretrain_predictor()
 		print('----------------------------------pretrain end----------------------------------')
-	print('no pretrain')
+		logging.info('pre-train.')
+	else:
+		print('no pretrain')
+		logging.info('no pre-train.')
 	algorithm.train()
 
 

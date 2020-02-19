@@ -19,6 +19,7 @@ Changed a little
 Transition = namedtuple(
 	'Transition', ('state', 'action', 'mask', 'next_state', 'reward'))
 
+
 class ReplayMemory(object):
 	def __init__(self, capacity):
 		self.capacity = capacity
@@ -165,12 +166,24 @@ class DDPG(object):
 		self.actor_target = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
 		self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
 		actor_params = seq_params + [param for param in self.actor.parameters()]
-		self.actor_optim = Adam(actor_params, lr=args.actor_lr)
+
+		if args.actor_optim == 'adam':
+			self.actor_optim = Adam(actor_params, lr=args.actor_lr)
+		elif args.actor_optim == 'sgd':
+			self.actor_optim = torch.optim.SGD(actor_params, lr=args.actor_lr, momentum=args.momentum)
+		elif args.actor_optim == 'rmsprop':
+			self.actor_optim = torch.optim.RMSprop(actor_params, lr=args.actor_lr)
 
 		self.critic = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
 		self.critic_target = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
 		critic_params = seq_params + [param for param in self.critic.parameters()]
-		self.critic_optim = Adam(critic_params, lr=args.critic_lr)
+
+		if args.critic_optim == 'adam':
+			self.critic_optim = Adam(critic_params, lr=args.critic_lr)
+		elif args.critic_optim == 'sgd':
+			self.critic_optim = torch.optim.SGD(critic_params, lr=args.critic_lr, momentum=args.momentum)
+		elif args.critic_optim == 'rmsprop':
+			self.critic_optim = torch.optim.RMSprop(critic_params, lr=args.critic_lr)
 
 		self.gamma = args.gamma
 		self.actor_tau = args.actor_tau
