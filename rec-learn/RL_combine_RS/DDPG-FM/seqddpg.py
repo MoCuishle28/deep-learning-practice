@@ -87,6 +87,8 @@ class SeqModel(nn.Module):
 			nn.init.normal_(self.fc.bias.data, std=args.init_std)
 		elif args.init == 'kaiming':
 			nn.init.kaiming_normal_(self.fc.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+		else:
+			print('default init')
 
 
 	def forward(self, x):
@@ -128,6 +130,8 @@ class Actor(nn.Module):
 			nn.init.kaiming_normal_(self.linear1.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 			nn.init.kaiming_normal_(self.linear2.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 			nn.init.kaiming_normal_(self.mu.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+		else:
+			print('default init')
 
 
 	def forward(self, inputs):
@@ -170,6 +174,8 @@ class Critic(nn.Module):
 			nn.init.kaiming_normal_(self.linear1.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 			nn.init.kaiming_normal_(self.linear2.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 			nn.init.kaiming_normal_(self.V.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+		else:
+			print('default init')
 
 
 	def forward(self, inputs, actions):
@@ -288,23 +294,25 @@ class DDPG(object):
 			param += torch.randn(param.shape) * param_noise.current_stddev
 
 
-	def save_model(self, env_name, suffix="", actor_path=None, critic_path=None):
+	def save_model(self, env_name='rec', suffix="tmp", actor_path=None, critic_path=None):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
 
 		if actor_path is None:
-			actor_path = "models/ddpg_actor_{}_{}".format(env_name, suffix) 
+			actor_path = "models/ddpg_actor_{}_{}.pkl".format(env_name, suffix) 
 		if critic_path is None:
-			critic_path = "models/ddpg_critic_{}_{}".format(env_name, suffix)
+			critic_path = "models/ddpg_critic_{}_{}.pkl".format(env_name, suffix)
 			 
-		print('Saving models to {} and {}'.format(actor_path, critic_path))
-		torch.save(self.actor.state_dict(), actor_path)
-		torch.save(self.critic.state_dict(), critic_path)
+		print('Saving models to {}.pkl and {}.pkl'.format(actor_path, critic_path))
+		torch.save(self.actor.state_dict(), 'models/' + actor_path + '.pkl')
+		torch.save(self.critic.state_dict(), 'models/' + critic_path + '.pkl')
 
 
 	def load_model(self, actor_path, critic_path):
-		print('Loading models from {} and {}'.format(actor_path, critic_path))
+		print('Loading models from {}.pkl and {}.pkl'.format(actor_path, critic_path))
 		if actor_path is not None:
-			self.actor.load_state_dict(torch.load(actor_path))
+			self.actor.load_state_dict(torch.load('models/' + actor_path + '.pkl'))
+			hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
 		if critic_path is not None: 
-			self.critic.load_state_dict(torch.load(critic_path))
+			self.critic.load_state_dict(torch.load('models/' + critic_path + '.pkl'))
+			hard_update(self.critic_target, self.critic)

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import os
 # 测试用
 import argparse
 import torch.utils.data as Data
@@ -60,6 +60,8 @@ class Net(nn.Module):
 			nn.init.kaiming_normal_(self.in_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 			nn.init.kaiming_normal_(self.hidden_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 			nn.init.kaiming_normal_(self.out_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+		else:
+			print('default init')
 
 
 	def forward(self, x):
@@ -104,6 +106,18 @@ class Predictor(object):
 		self.optim.step()
 
 		return prediction, loss
+
+
+	def save(self, name):
+		if not os.path.exists('models/'):
+			os.makedirs('models/')
+			 
+		print('Saving predictor to {}'.format(name))
+		torch.save(self.predictor.state_dict(), 'models/' + name + '.pkl')
+
+
+	def load(self, name):
+		self.predictor.load_state_dict(torch.load('models/' + name + '.pkl'))
 
 
 def get_rmse(prediction, target):

@@ -188,6 +188,7 @@ class Algorithm(object):
 				print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
 				logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
 					i_batch+1, rmse, reward))
+				break
 			valid_rmse_list.append(self.evaluate(self.valid_data, self.valid_target))
 		self.evaluate(self.test_data, self.test_target, title='[Test]')
 		self.plot_result(rmse_list, valid_rmse_list, mean_predictor_loss_list)
@@ -346,14 +347,22 @@ def main():
 	parser.add_argument('--predictor', default='net')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
+
 	parser.add_argument('--predictor_optim', default='sgd')
 	parser.add_argument('--actor_optim', default='sgd')
 	parser.add_argument('--critic_optim', default='sgd')
 	parser.add_argument('--momentum', type=float, default=0.8)
-	parser.add_argument('--init', default='normal')
+
+	parser.add_argument('--save', default='n')
+	parser.add_argument('--load', default='n')
+	parser.add_argument('--a_name', default='a_v')
+	parser.add_argument('--c_name', default='c_v')
+	parser.add_argument('--p_name', default='p_v')
+	# init weight
+	parser.add_argument('--init', default='def')
 	parser.add_argument('--kaiming_mode', default='fan_in')
 	parser.add_argument('--kaiming_func', default='relu')
-	parser.add_argument('--init_std', type=float, default=0.01)
+	parser.add_argument('--init_std', type=float, default=1)
 	# seq model
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
@@ -388,20 +397,26 @@ def main():
 	target_list = [train_target] + [valid_target] + [test_target]
 
 	env = HistoryGenerator(args)
-	agent = DDPG(args)
+	agent = DDPG(args)	
 
 	# 后面还可以改成他的预测 rating 算法
 	predictor_model = None
 	if args.predictor == 'net':
+		predictor_model = Net(args.fm_feature_size + args.actor_output, args.hidden_0, args.hidden_1, 1, args)
 		print('predictor_model is Network.')
 		logging.info('predictor_model is Network.')
-		predictor_model = Net(args.fm_feature_size + args.actor_output, args.hidden_0, args.hidden_1, 1, args)
 	elif args.predictor == 'fm':
+		predictor_model = FM(args.fm_feature_size + args.actor_output, args.k, args)
 		print('predictor_model is FM.')
 		logging.info('predictor_model is FM.')
-		predictor_model = FM(args.fm_feature_size + args.actor_output, args.k, args)
 
 	predictor = Predictor(args, predictor_model)
+
+	# 加载模型
+	if args.load == 'y':
+		agent.load_model(actor_path=args.a_name, critic_path=args.c_name)
+		predictor.load(args.p_name)
+		logging.info('Loading models from models/{}, models/{} and models/{}'.format(args.a_name, args.c_name, args.p_name))
 
 	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list)
 	if args.pretrain == 'y':
@@ -414,6 +429,12 @@ def main():
 		print('no pretrain')
 		logging.info('no pre-train.')
 	algorithm.train()
+
+	# 保存模型
+	if args.save == 'y':
+		algorithm.agent.save_model(actor_path=args.a_name, critic_path=args.c_name)
+		predictor.save(args.p_name)
+		logging.info('Saving models to models/{}, models/{} and models/{}'.format(args.a_name, args.c_name, args.p_name))
 
 
 if __name__ == '__main__':
