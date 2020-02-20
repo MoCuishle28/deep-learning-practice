@@ -79,7 +79,15 @@ class SeqModel(nn.Module):
 		self.seq_output_size = args.seq_output_size
 		# batch_first = True 则输入输出的数据格式为 (batch, seq, feature)
 		self.gru = nn.GRU(self.seq_input_size, self.hidden_size, self.seq_layer_num, batch_first=True)
+		self.ln1 = nn.LayerNorm(self.hidden_size, elementwise_affine=True)
 		self.fc = nn.Linear(self.hidden_size, self.seq_output_size)
+
+		if args.init == 'normal':
+			nn.init.normal_(self.fc.weight.data, std=args.init_std)
+			nn.init.normal_(self.fc.bias.data, std=args.init_std)
+		elif args.init == 'kaiming':
+			nn.init.kaiming_normal_(self.fc.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+
 
 	def forward(self, x):
 		'''
@@ -89,12 +97,13 @@ class SeqModel(nn.Module):
 		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size)
 		
 		out, _ = self.gru(x, h0)  # out: tensor of shape (batch_size, seq_length, hidden_size)
-		out = self.fc(out[:, -1, :])    # 最后时刻的 seq 作为输出
+		out = self.ln1(out[:, -1, :])    # 最后时刻的 seq 作为输出
+		out = self.fc(out)
 		return out
 		
 
 class Actor(nn.Module):
-	def __init__(self, hidden_size, num_input, actor_output, seq_model):
+	def __init__(self, hidden_size, num_input, actor_output, seq_model, args):
 		super(Actor, self).__init__()
 		self.seq_model = seq_model
 
@@ -106,9 +115,20 @@ class Actor(nn.Module):
 		self.ln2 = nn.LayerNorm(hidden_size*2, elementwise_affine=True)
 
 		self.mu = nn.Linear(hidden_size*2, actor_output)
-		# why?
-		# self.mu.weight.data.mul_(0.1)
-		# self.mu.bias.data.mul_(0.1)
+
+		if args.init == 'normal':
+			nn.init.normal_(self.linear1.weight.data, std=args.init_std)
+			nn.init.normal_(self.linear2.weight.data, std=args.init_std)
+			nn.init.normal_(self.mu.weight.data, std=args.init_std)
+
+			nn.init.normal_(self.linear1.bias.data, std=args.init_std)
+			nn.init.normal_(self.linear2.bias.data, std=args.init_std)
+			nn.init.normal_(self.mu.bias.data, std=args.init_std)
+		elif args.init == 'kaiming':
+			nn.init.kaiming_normal_(self.linear1.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+			nn.init.kaiming_normal_(self.linear2.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+			nn.init.kaiming_normal_(self.mu.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+
 
 	def forward(self, inputs):
 		x = inputs
@@ -126,7 +146,7 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-	def __init__(self, hidden_size, num_input, actor_output, seq_model):
+	def __init__(self, hidden_size, num_input, actor_output, seq_model, args):
 		super(Critic, self).__init__()
 		self.seq_model = seq_model
 
@@ -137,9 +157,20 @@ class Critic(nn.Module):
 		self.ln2 = nn.LayerNorm(hidden_size*2, elementwise_affine=True)
 
 		self.V = nn.Linear(hidden_size*2, 1)
-		# why?
-		# self.V.weight.data.mul_(0.1)
-		# self.V.bias.data.mul_(0.1)
+		
+		if args.init == 'normal':
+			nn.init.normal_(self.linear1.weight.data, std=args.init_std)
+			nn.init.normal_(self.linear2.weight.data, std=args.init_std)
+			nn.init.normal_(self.V.weight.data, std=args.init_std)
+
+			nn.init.normal_(self.linear1.bias.data, std=args.init_std)
+			nn.init.normal_(self.linear2.bias.data, std=args.init_std)
+			nn.init.normal_(self.V.bias.data, std=args.init_std)
+		elif args.init == 'kaiming':
+			nn.init.kaiming_normal_(self.linear1.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+			nn.init.kaiming_normal_(self.linear2.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+			nn.init.kaiming_normal_(self.V.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+
 
 	def forward(self, inputs, actions):
 		x = inputs
@@ -162,9 +193,9 @@ class DDPG(object):
 		self.seq_model = SeqModel(args)
 		seq_params = [param for param in self.seq_model.parameters()]
 
-		self.actor = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
-		self.actor_target = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
-		self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
+		self.actor = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
+		self.actor_target = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
+		self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
 		actor_params = seq_params + [param for param in self.actor.parameters()]
 
 		if args.actor_optim == 'adam':
@@ -174,8 +205,8 @@ class DDPG(object):
 		elif args.actor_optim == 'rmsprop':
 			self.actor_optim = torch.optim.RMSprop(actor_params, lr=args.actor_lr)
 
-		self.critic = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
-		self.critic_target = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model)
+		self.critic = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
+		self.critic_target = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
 		critic_params = seq_params + [param for param in self.critic.parameters()]
 
 		if args.critic_optim == 'adam':

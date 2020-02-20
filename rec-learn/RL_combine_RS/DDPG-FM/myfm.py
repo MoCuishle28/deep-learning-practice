@@ -12,10 +12,10 @@ import time
 
 
 class FM(nn.Module):
-	def __init__(self, feature_size, k):
+	def __init__(self, feature_size, k, args):
 		super(FM, self).__init__()
 		self.w0 = nn.Parameter(torch.empty(1, dtype=torch.float32))
-		nn.init.normal_(self.w0)
+		nn.init.normal_(self.w0, std=args.init_std)
 
 		# 不加初始化会全 0
 		self.w1 = nn.Parameter(torch.empty(feature_size, 1, dtype=torch.float32))
@@ -38,7 +38,7 @@ class FM(nn.Module):
 
 
 class Net(nn.Module):
-	def __init__(self, input_num, hidden_num0, hidden_num1, output_num):
+	def __init__(self, input_num, hidden_num0, hidden_num1, output_num, args):
 		super(Net, self).__init__()
 		self.in_layer = nn.Linear(input_num, hidden_num0)
 		self.in_norm = nn.LayerNorm(hidden_num0, elementwise_affine=True)
@@ -47,6 +47,19 @@ class Net(nn.Module):
 		self.hidden_norm = nn.LayerNorm(hidden_num1, elementwise_affine=True)
 
 		self.out_layer = nn.Linear(hidden_num1, output_num)
+
+		if args.init == 'normal':
+			nn.init.normal_(self.in_layer.weight.data, std=args.init_std)
+			nn.init.normal_(self.hidden_layer.weight.data, std=args.init_std)
+			nn.init.normal_(self.out_layer.weight.data, std=args.init_std)
+
+			nn.init.normal_(self.in_layer.bias.data, std=args.init_std)
+			nn.init.normal_(self.hidden_layer.bias.data, std=args.init_std)
+			nn.init.normal_(self.out_layer.bias.data, std=args.init_std)
+		elif args.init == 'kaiming':
+			nn.init.kaiming_normal_(self.in_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+			nn.init.kaiming_normal_(self.hidden_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
+			nn.init.kaiming_normal_(self.out_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 
 
 	def forward(self, x):
@@ -204,6 +217,10 @@ def main():
 	parser.add_argument('--predictor', default='fm')
 	parser.add_argument('--predictor_optim', default='sgd')
 	parser.add_argument('--momentum', type=float, default=0.8)
+	parser.add_argument('--init', default='normal')
+	parser.add_argument('--kaiming_mode', default='fan_in')
+	parser.add_argument('--kaiming_func', default='relu')
+	parser.add_argument('--init_std', type=float, default=0.01)
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM
@@ -220,11 +237,11 @@ def main():
 	if args.predictor == 'fm':
 		print('Predictor is FM.')
 		logging.info('Predictor is FM.')
-		model = FM(args.fm_feature_size, args.k)
+		model = FM(args.fm_feature_size, args.k, args)
 	elif args.predictor == 'net':
 		print('Predictor is Network.')
 		logging.info('Predictor is Network.')
-		model = Net(args.fm_feature_size, args.hidden_0, args.hidden_1, 1)
+		model = Net(args.fm_feature_size, args.hidden_0, args.hidden_1, 1, args)
 
 	predictor = Predictor(args, model)
 	rmse_list, valid_rmse_list, loss_list = train(args, predictor)

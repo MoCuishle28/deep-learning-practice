@@ -350,6 +350,10 @@ def main():
 	parser.add_argument('--actor_optim', default='sgd')
 	parser.add_argument('--critic_optim', default='sgd')
 	parser.add_argument('--momentum', type=float, default=0.8)
+	parser.add_argument('--init', default='normal')
+	parser.add_argument('--kaiming_mode', default='fan_in')
+	parser.add_argument('--kaiming_func', default='relu')
+	parser.add_argument('--init_std', type=float, default=0.01)
 	# seq model
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
@@ -357,7 +361,7 @@ def main():
 	parser.add_argument('--seq_output_size', type=int, default=32)
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-5)
-	parser.add_argument("--critic_lr", type=float, default=1e-2)
+	parser.add_argument("--critic_lr", type=float, default=1e-3)
 	parser.add_argument('--hidden_size', type=int, default=128)
 	parser.add_argument('--actor_output', type=int, default=32)
 	parser.add_argument('--gamma', type=float, default=0.99)
@@ -391,11 +395,11 @@ def main():
 	if args.predictor == 'net':
 		print('predictor_model is Network.')
 		logging.info('predictor_model is Network.')
-		predictor_model = Net(args.fm_feature_size + args.actor_output, args.hidden_0, args.hidden_1, 1)
+		predictor_model = Net(args.fm_feature_size + args.actor_output, args.hidden_0, args.hidden_1, 1, args)
 	elif args.predictor == 'fm':
 		print('predictor_model is FM.')
 		logging.info('predictor_model is FM.')
-		predictor_model = FM(args.fm_feature_size + args.actor_output, args.k)
+		predictor_model = FM(args.fm_feature_size + args.actor_output, args.k, args)
 
 	predictor = Predictor(args, predictor_model)
 
