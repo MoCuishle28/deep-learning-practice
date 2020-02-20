@@ -113,11 +113,11 @@ class Predictor(object):
 			os.makedirs('models/')
 			 
 		print('Saving predictor to {}'.format(name))
-		torch.save(self.predictor.state_dict(), 'models/' + name + '.pkl')
+		torch.save(self.predictor.state_dict(), 'models/p_' + name + '.pkl')
 
 
 	def load(self, name):
-		self.predictor.load_state_dict(torch.load('models/' + name + '.pkl'))
+		self.predictor.load_state_dict(torch.load('models/p_' + name + '.pkl'))
 
 
 def get_rmse(prediction, target):

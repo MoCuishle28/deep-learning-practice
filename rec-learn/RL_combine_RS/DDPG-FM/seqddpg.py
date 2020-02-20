@@ -303,16 +303,16 @@ class DDPG(object):
 		if critic_path is None:
 			critic_path = "models/ddpg_critic_{}_{}.pkl".format(env_name, suffix)
 			 
-		print('Saving models to {}.pkl and {}.pkl'.format(actor_path, critic_path))
-		torch.save(self.actor.state_dict(), 'models/' + actor_path + '.pkl')
-		torch.save(self.critic.state_dict(), 'models/' + critic_path + '.pkl')
+		print('Saving models to a_{}.pkl and c_{}.pkl'.format(actor_path, critic_path))
+		torch.save(self.actor.state_dict(), 'models/a_' + actor_path + '.pkl')
+		torch.save(self.critic.state_dict(), 'models/c_' + critic_path + '.pkl')
 
 
 	def load_model(self, actor_path, critic_path):
-		print('Loading models from {}.pkl and {}.pkl'.format(actor_path, critic_path))
+		print('Loading models from models/a_{}.pkl and models/c_{}.pkl'.format(actor_path, critic_path))
 		if actor_path is not None:
-			self.actor.load_state_dict(torch.load('models/' + actor_path + '.pkl'))
+			self.actor.load_state_dict(torch.load('models/a_' + actor_path + '.pkl'))
 			hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
 		if critic_path is not None: 
-			self.critic.load_state_dict(torch.load('models/' + critic_path + '.pkl'))
+			self.critic.load_state_dict(torch.load('models/c_' + critic_path + '.pkl'))
 			hard_update(self.critic_target, self.critic)

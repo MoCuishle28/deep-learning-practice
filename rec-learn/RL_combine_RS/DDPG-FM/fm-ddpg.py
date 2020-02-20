@@ -188,7 +188,6 @@ class Algorithm(object):
 				print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
 				logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
 					i_batch+1, rmse, reward))
-				break
 			valid_rmse_list.append(self.evaluate(self.valid_data, self.valid_target))
 		self.evaluate(self.test_data, self.test_target, title='[Test]')
 		self.plot_result(rmse_list, valid_rmse_list, mean_predictor_loss_list)
@@ -352,12 +351,9 @@ def main():
 	parser.add_argument('--actor_optim', default='sgd')
 	parser.add_argument('--critic_optim', default='sgd')
 	parser.add_argument('--momentum', type=float, default=0.8)
-
+	# save/load model 的名字为 --v
 	parser.add_argument('--save', default='n')
 	parser.add_argument('--load', default='n')
-	parser.add_argument('--a_name', default='a_v')
-	parser.add_argument('--c_name', default='c_v')
-	parser.add_argument('--p_name', default='p_v')
 	# init weight
 	parser.add_argument('--init', default='def')
 	parser.add_argument('--kaiming_mode', default='fan_in')
@@ -414,9 +410,9 @@ def main():
 
 	# 加载模型
 	if args.load == 'y':
-		agent.load_model(actor_path=args.a_name, critic_path=args.c_name)
-		predictor.load(args.p_name)
-		logging.info('Loading models from models/{}, models/{} and models/{}'.format(args.a_name, args.c_name, args.p_name))
+		agent.load_model(actor_path=args.v, critic_path=args.v)
+		predictor.load(args.v)
+		logging.info('Loading models from models/a_{}, models/c_{} and models/p_{}'.format(args.v, args.v, args.v))
 
 	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list)
 	if args.pretrain == 'y':
@@ -432,9 +428,9 @@ def main():
 
 	# 保存模型
 	if args.save == 'y':
-		algorithm.agent.save_model(actor_path=args.a_name, critic_path=args.c_name)
-		predictor.save(args.p_name)
-		logging.info('Saving models to models/{}, models/{} and models/{}'.format(args.a_name, args.c_name, args.p_name))
+		algorithm.agent.save_model(actor_path=args.v, critic_path=args.v)
+		predictor.save(args.v)
+		logging.info('Saving models to models/a_{}, models/c_{} and models/p_{}'.format(args.v, args.v, args.v))
 
 
 if __name__ == '__main__':
