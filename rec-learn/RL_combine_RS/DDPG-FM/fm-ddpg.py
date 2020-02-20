@@ -117,7 +117,8 @@ class Algorithm(object):
 		for i_data, raw_feature in enumerate(data):
 			mask = torch.tensor([True], dtype=torch.float32)
 			state = self.env.get_history(raw_feature[0].item(), raw_feature[1].item())
-			next_state = self.env.get_next_history(state, raw_feature[1].item(), raw_feature[0].item())
+			next_state = self.env.get_next_history(state, raw_feature[1].item(), 
+				raw_feature[0].item(), target[i_data].item())
 
 			# 转成符合 RNN 的输入数据形式
 			state = state.reshape((-1, state.shape[0], state.shape[1]))
@@ -298,7 +299,7 @@ class HistoryGenerator(object):
 		return torch.stack(ret_data)
 
 
-	def get_next_history(self, curr_history, new_mid, curr_uid):
+	def get_next_history(self, curr_history, new_mid, curr_uid, rating):
 		'''
 		这个 state 的转移方式没有考虑 action(即: trasition probability = 1) TODO
 		curr_history: tensor (window, feature size)
@@ -307,15 +308,9 @@ class HistoryGenerator(object):
 		curr_history = curr_history.tolist()
 		curr_history.pop(0)
 		uid = curr_uid
-		rating = -1
-		for behavior in self.users_rating[uid]:
-			if new_mid == behavior[0]:
-				rating = behavior[1]
-				break
 		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32)
-		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32), 
-					mfeature, 
-					torch.tensor([rating], dtype=torch.float32)])
+		rating = torch.tensor([rating], dtype=torch.float32)
+		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32), mfeature, rating])
 		curr_history.append(history_feature)
 		return torch.tensor(curr_history)
 
