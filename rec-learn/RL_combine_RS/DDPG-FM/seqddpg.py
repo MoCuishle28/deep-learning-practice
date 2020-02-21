@@ -198,10 +198,11 @@ class DDPG(object):
 	def __init__(self, args):
 		self.seq_model = SeqModel(args)
 		seq_params = [param for param in self.seq_model.parameters()]
+		self.target_seq_model = SeqModel(args)	# 还需要一个 seq_model 给 target network
 
 		self.actor = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
-		self.actor_target = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
-		self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
+		self.actor_target = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args)
+		self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args)
 		actor_params = seq_params + [param for param in self.actor.parameters()]
 
 		if args.actor_optim == 'adam':
@@ -212,7 +213,7 @@ class DDPG(object):
 			self.actor_optim = torch.optim.RMSprop(actor_params, lr=args.actor_lr)
 
 		self.critic = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
-		self.critic_target = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
+		self.critic_target = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args)
 		critic_params = seq_params + [param for param in self.critic.parameters()]
 
 		if args.critic_optim == 'adam':
@@ -228,6 +229,7 @@ class DDPG(object):
 
 		hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
 		hard_update(self.critic_target, self.critic)
+		hard_update(self.target_seq_model, self.seq_model)
 
 
 	def select_action(self, state, action_noise=None, param_noise=None):
@@ -279,6 +281,7 @@ class DDPG(object):
 
 		soft_update(self.actor_target, self.actor, self.actor_tau)
 		soft_update(self.critic_target, self.critic, self.critic_tau)
+		soft_update(self.target_seq_model, self.seq_model, self.actor_tau)
 
 		return value_loss.item(), policy_loss.item()
 
@@ -294,25 +297,21 @@ class DDPG(object):
 			param += torch.randn(param.shape) * param_noise.current_stddev
 
 
-	def save_model(self, env_name='rec', suffix="tmp", actor_path=None, critic_path=None):
+	def save_model(self, version='v'):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
 
-		if actor_path is None:
-			actor_path = "models/ddpg_actor_{}_{}.pkl".format(env_name, suffix) 
-		if critic_path is None:
-			critic_path = "models/ddpg_critic_{}_{}.pkl".format(env_name, suffix)
-			 
-		print('Saving models to a_{}.pkl and c_{}.pkl'.format(actor_path, critic_path))
-		torch.save(self.actor.state_dict(), 'models/a_' + actor_path + '.pkl')
-		torch.save(self.critic.state_dict(), 'models/c_' + critic_path + '.pkl')
+		torch.save(self.actor.state_dict(), 'models/a_' + version + '.pkl')
+		torch.save(self.critic.state_dict(), 'models/c_' + version + '.pkl')
+		torch.save(self.seq_model.state_dict(), 'models/s_' + version + '.pkl')
 
 
-	def load_model(self, actor_path, critic_path):
-		print('Loading models from models/a_{}.pkl and models/c_{}.pkl'.format(actor_path, critic_path))
-		if actor_path is not None:
-			self.actor.load_state_dict(torch.load('models/a_' + actor_path + '.pkl'))
-			hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
-		if critic_path is not None: 
-			self.critic.load_state_dict(torch.load('models/c_' + critic_path + '.pkl'))
-			hard_update(self.critic_target, self.critic)
+	def load_model(self, version):
+		self.actor.load_state_dict(torch.load('models/a_' + version + '.pkl'))
+		hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
+
+		self.critic.load_state_dict(torch.load('models/c_' + version + '.pkl'))
+		hard_update(self.critic_target, self.critic)
+
+		self.seq_model.load_state_dict(torch.load('models/s_'+ version + '.pkl'))
+		hard_update(self.target_seq_model, self.seq_model)

@@ -118,7 +118,6 @@ class Predictor(object):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
 			 
-		print('Saving predictor to {}'.format(name))
 		torch.save(self.predictor.state_dict(), 'models/p_' + name + '.pkl')
 
 

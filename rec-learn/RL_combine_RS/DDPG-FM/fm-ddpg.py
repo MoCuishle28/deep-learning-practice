@@ -416,9 +416,10 @@ def main():
 
 	# 加载模型
 	if args.load == 'y':
-		agent.load_model(actor_path=args.v, critic_path=args.v)
+		agent.load_model(version=args.v)
 		predictor.load(args.v)
-		logging.info('Loading models from models/a_{}, models/c_{} and models/p_{}'.format(args.v, args.v, args.v))
+		print('Loading version:{} models'.format(args.v))
+		logging.info('Loading version:{} models'.format(args.v))
 
 	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list)
 	if args.pretrain == 'y':
@@ -434,9 +435,10 @@ def main():
 
 	# 保存模型
 	if args.save == 'y':
-		algorithm.agent.save_model(actor_path=args.v, critic_path=args.v)
+		algorithm.agent.save_model(version=args.v)
 		predictor.save(args.v)
-		logging.info('Saving models to models/a_{}, models/c_{} and models/p_{}'.format(args.v, args.v, args.v))
+		print('Saving version:{} models'.format(args.v))
+		logging.info('Saving version:{} models'.format(args.v))
 
 
 if __name__ == '__main__':
