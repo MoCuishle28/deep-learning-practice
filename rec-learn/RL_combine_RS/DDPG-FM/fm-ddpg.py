@@ -235,7 +235,8 @@ class Algorithm(object):
 		plt.plot(mean_predictor_loss_list)
 
 		plt.savefig(self.args.base_pic_dir + self.args.v + '.png')
-		plt.show()
+		if self.args.show_pic == 'y':
+			plt.show()
 
 
 class HistoryGenerator(object):
@@ -292,6 +293,7 @@ class HistoryGenerator(object):
 				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32), 
 					mfeature, 
 					torch.tensor([rating], dtype=torch.float32)])
+
 			history_feature[0] = (history_feature[0] - self.uid_mean) / self.uid_std
 			history_feature[1] = (history_feature[1] - self.mid_mean) / self.mid_std
 			history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std
@@ -354,11 +356,12 @@ def main():
 	# save/load model 的名字为 --v
 	parser.add_argument('--save', default='n')
 	parser.add_argument('--load', default='n')
+	parser.add_argument('--show_pic', default='n')
 	# init weight
 	parser.add_argument('--init', default='def')
 	parser.add_argument('--kaiming_mode', default='fan_in')
 	parser.add_argument('--kaiming_func', default='relu')
-	parser.add_argument('--init_std', type=float, default=1)
+	parser.add_argument('--init_std', type=float, default=0.1)
 	# seq model
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)

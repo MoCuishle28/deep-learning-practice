@@ -15,15 +15,21 @@ class FM(nn.Module):
 	def __init__(self, feature_size, k, args):
 		super(FM, self).__init__()
 		self.w0 = nn.Parameter(torch.empty(1, dtype=torch.float32))
-		nn.init.normal_(self.w0, std=args.init_std)
 
 		# 不加初始化会全 0
 		self.w1 = nn.Parameter(torch.empty(feature_size, 1, dtype=torch.float32))
-		nn.init.xavier_normal_(self.w1)
 
 		# 不加初始化会全 0
 		self.v = nn.Parameter(torch.empty(feature_size, k, dtype=torch.float32))
-		nn.init.xavier_normal_(self.v)
+
+		if args.init == 'normal':
+			nn.init.normal_(self.w0, std=args.init_std)
+			nn.init.normal_(self.w1, std=args.init_std)
+			nn.init.normal_(self.v, std=args.init_std)
+		else:
+			nn.init.normal_(self.w0, std=args.init_std)
+			nn.init.xavier_normal_(self.w1)
+			nn.init.xavier_normal_(self.v)
 
 
 	def forward(self, X):
@@ -61,7 +67,7 @@ class Net(nn.Module):
 			nn.init.kaiming_normal_(self.hidden_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 			nn.init.kaiming_normal_(self.out_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 		else:
-			print('default init')
+			print('Net default init')
 
 
 	def forward(self, x):

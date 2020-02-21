@@ -88,7 +88,7 @@ class SeqModel(nn.Module):
 		elif args.init == 'kaiming':
 			nn.init.kaiming_normal_(self.fc.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 		else:
-			print('default init')
+			print('seq_model default init')
 
 
 	def forward(self, x):
@@ -131,7 +131,7 @@ class Actor(nn.Module):
 			nn.init.kaiming_normal_(self.linear2.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 			nn.init.kaiming_normal_(self.mu.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 		else:
-			print('default init')
+			print('actor default init')
 
 
 	def forward(self, inputs):
@@ -175,7 +175,7 @@ class Critic(nn.Module):
 			nn.init.kaiming_normal_(self.linear2.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 			nn.init.kaiming_normal_(self.V.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
 		else:
-			print('default init')
+			print('critic default init')
 
 
 	def forward(self, inputs, actions):
