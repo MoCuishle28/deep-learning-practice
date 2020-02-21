@@ -47,7 +47,9 @@ class Algorithm(object):
 		self.process_data()
 
 		train_data_set = Data.TensorDataset(self.train_data, self.train_target)
-		self.train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=False)
+		shuffle = True if args.shuffle == 'y' else False
+		print('shuffle train data...{}'.format(shuffle))
+		self.train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=shuffle)
 
 
 	def process_data(self):
@@ -348,6 +350,7 @@ def main():
 	parser.add_argument('--predictor', default='net')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
+	parser.add_argument('--shuffle', default='n')
 
 	parser.add_argument('--predictor_optim', default='sgd')
 	parser.add_argument('--actor_optim', default='sgd')
