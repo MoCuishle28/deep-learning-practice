@@ -14,6 +14,7 @@ import time
 class FM(nn.Module):
 	def __init__(self, feature_size, k, args):
 		super(FM, self).__init__()
+		self.args = args
 		self.w0 = nn.Parameter(torch.empty(1, dtype=torch.float32))
 
 		# 不加初始化会全 0
@@ -40,12 +41,13 @@ class FM(nn.Module):
 		inter_2 = torch.mm((X**2), (self.v**2))
 		interaction = (0.5*torch.sum((inter_1**2) - inter_2, dim=1)).reshape(X.shape[0], 1)
 		predict = self.w0 + torch.mm(X, self.w1) + interaction
-		return predict
+		return predict.clamp(min=self.args.min, max=self.args.max)
 
 
 class Net(nn.Module):
 	def __init__(self, input_num, hidden_num0, hidden_num1, output_num, args):
 		super(Net, self).__init__()
+		self.args = args
 		self.in_layer = nn.Linear(input_num, hidden_num0)
 		self.in_norm = nn.LayerNorm(hidden_num0, elementwise_affine=True)
 
@@ -80,7 +82,7 @@ class Net(nn.Module):
 		x = torch.relu(x)
 
 		x = self.out_layer(x)
-		return x
+		return x.clamp(min=self.args.min, max=self.args.max)
 
 
 class Predictor(object):
@@ -240,6 +242,8 @@ def main():
 	parser.add_argument('--kaiming_mode', default='fan_in')
 	parser.add_argument('--kaiming_func', default='relu')
 	parser.add_argument('--init_std', type=float, default=0.01)
+	parser.add_argument('--min', type=float, default=0.0)
+	parser.add_argument('--max', type=float, default=5.0)
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM

@@ -350,7 +350,10 @@ def main():
 	parser.add_argument('--predictor', default='net')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
-	parser.add_argument('--shuffle', default='n')
+	parser.add_argument('--shuffle', default='y')
+	# rating 范围
+	parser.add_argument('--min', type=float, default=0.0)
+	parser.add_argument('--max', type=float, default=5.0)
 
 	parser.add_argument('--predictor_optim', default='sgd')
 	parser.add_argument('--actor_optim', default='sgd')
