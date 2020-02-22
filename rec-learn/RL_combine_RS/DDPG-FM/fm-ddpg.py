@@ -103,9 +103,9 @@ class Algorithm(object):
 		reward = 0
 		if self.args.reward == 'loss':
 			# Average Reward e.g. Negative Average predictor loss
-			reward = -predictor_loss.mean().item()
+			reward = -(predictor_loss.mean().item() * self.args.alpha)
 		elif self.args.reward == 'rmse':
-			reward = -rmse
+			reward = -(rmse * self.args.alpha)
 
 		print(title + ' RMSE:{:.6}, Average Reward:{:.8}'.format(
 			rmse, reward))
@@ -138,10 +138,10 @@ class Algorithm(object):
 			# predictor loss 的负数作为 reward
 			reward = 0
 			if self.args.reward == 'loss':
-				reward = torch.tensor([-predictor_loss.item()], dtype=torch.float32)
+				reward = torch.tensor([-(predictor_loss.item() * self.args.alpha)], dtype=torch.float32)
 			elif self.args.reward == 'rmse':
 				# rmse 的负数作为 reward
-				reward = torch.tensor([-self.get_rmse(prediction, one_target)], dtype=torch.float32)
+				reward = torch.tensor([-(self.get_rmse(prediction, one_target) * self.args.alpha)], dtype=torch.float32)
 
 			self.memory.push(state, action, mask, next_state, reward)
 
@@ -181,9 +181,9 @@ class Algorithm(object):
 				reward = 0
 				if self.args.reward == 'loss':
 					# Average Reward e.g. Negative Average predictor loss
-					reward = -predictor_loss_mean
+					reward = -(predictor_loss_mean * self.args.alpha)
 				elif self.args.reward == 'rmse':
-					reward = -rmse
+					reward = -(rmse * self.args.alpha)
 
 				print('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
 					i_batch+1, rmse, reward), end = ', ')
@@ -248,7 +248,7 @@ class HistoryGenerator(object):
 		self.mid_map_mfeature = load_obj('mid_map_mfeature')		
 		self.users_rating = load_obj('users_rating_without_timestamp') # uid:[[mid, rating], ...] 有序
 		# self.users_has_clicked = load_obj('users_has_clicked')	# uid:{mid, mid, ...}
-		self.window = args.history_window
+		self.window = args.hw
 		self.compute_mean_std()
 
 
@@ -346,11 +346,12 @@ def main():
 	parser.add_argument('--pretrain_predictor_epoch', type=int, default=100)
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--history_window', type=int, default=5)
+	parser.add_argument('--hw', type=int, default=5)	# history window
 	parser.add_argument('--predictor', default='net')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
 	parser.add_argument('--shuffle', default='y')
+	parser.add_argument('--alpha', type=float, default=1)	# raw reward 乘以的倍数(试图放大 reward 加大训练幅度)
 	# rating 范围
 	parser.add_argument('--min', type=float, default=0.0)
 	parser.add_argument('--max', type=float, default=5.0)
