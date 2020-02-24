@@ -42,6 +42,7 @@ class ReplayMemory(object):
 
 class OUNoise:
 	def __init__(self, action_dimension, scale=0.1, mu=0, theta=0.15, sigma=0.2):
+		# np.random.seed(0)
 		self.action_dimension = action_dimension
 		self.scale = scale
 		self.mu = mu
@@ -108,6 +109,10 @@ class Actor(nn.Module):
 	def __init__(self, hidden_size, num_input, actor_output, seq_model, args):
 		super(Actor, self).__init__()
 		self.seq_model = seq_model
+		self.args = args
+		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
+		'selu':nn.SELU(), 'prelu':nn.PReLU()}
+		self.activative_func = activative_func_dict.get(args.a_act, nn.ReLU())
 
 		# 也许可以试试把当前要推荐的 item feature 也考虑进去？(那就变成了输出关于user、item的embedding)
 		self.linear1 = nn.Linear(num_input, hidden_size)
@@ -140,7 +145,7 @@ class Actor(nn.Module):
 
 		x = self.linear1(x)
 		x = self.ln1(x)
-		x = F.relu(x)
+		x = self.activative_func(x)
 		x = self.linear2(x)
 		x = self.ln2(x)
 
@@ -153,6 +158,10 @@ class Critic(nn.Module):
 	def __init__(self, hidden_size, num_input, actor_output, seq_model, args):
 		super(Critic, self).__init__()
 		self.seq_model = seq_model
+		self.args = args
+		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
+		'selu':nn.SELU(), 'prelu':nn.PReLU()}
+		self.activative_func = activative_func_dict.get(args.c_act, nn.ReLU())
 
 		self.linear1 = nn.Linear(num_input + actor_output, hidden_size)
 		self.ln1 = nn.LayerNorm(hidden_size, elementwise_affine=True)
@@ -185,11 +194,11 @@ class Critic(nn.Module):
 		x = torch.cat((x, actions), 1)
 		x = self.linear1(x)
 		x = self.ln1(x)
-		x = F.relu(x)
+		x = self.activative_func(x)
 
 		x = self.linear2(x)
 		x = self.ln2(x)
-		x = F.relu(x)
+		x = self.activative_func(x)
 		V = self.V(x)
 		return V
 

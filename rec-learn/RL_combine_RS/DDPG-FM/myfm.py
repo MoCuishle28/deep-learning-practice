@@ -48,6 +48,10 @@ class Net(nn.Module):
 	def __init__(self, input_num, hidden_num0, hidden_num1, output_num, args):
 		super(Net, self).__init__()
 		self.args = args
+		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
+		'selu':nn.SELU(), 'prelu':nn.PReLU()}
+		self.activative_func = activative_func_dict.get(args.n_act, nn.ReLU())
+
 		self.in_layer = nn.Linear(input_num, hidden_num0)
 		self.in_norm = nn.LayerNorm(hidden_num0, elementwise_affine=True)
 
@@ -75,11 +79,11 @@ class Net(nn.Module):
 	def forward(self, x):
 		x = self.in_layer(x)
 		x = self.in_norm(x)
-		x = torch.relu(x)
+		x = self.activative_func(x)
 
 		x = self.hidden_layer(x)
 		x = self.hidden_norm(x)
-		x = torch.relu(x)
+		x = self.activative_func(x)
 
 		x = self.out_layer(x)
 		return x.clamp(min=self.args.min, max=self.args.max)
@@ -250,6 +254,7 @@ def main():
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
 	parser.add_argument('--k', type=int, default=128)
 	# network
+	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--hidden_0', type=int, default=128)
 	parser.add_argument('--hidden_1', type=int, default=256)
 	args = parser.parse_args()
