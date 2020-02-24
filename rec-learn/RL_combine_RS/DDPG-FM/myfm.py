@@ -155,15 +155,8 @@ def evaluate(predictor, data, target, title='[Valid]'):
 	return rmse
 
 
-def train(args, predictor):
+def train(args, predictor, train_data, train_target, valid_data, valid_target, test_data, test_target):
 	rmse_list, valid_rmse_list, loss_list = [], [], []
-
-	train_data = torch.tensor(np.load(args.base_data_dir + 'train_data.npy').astype(np.float32), dtype=torch.float32)
-	train_target = torch.tensor(np.load(args.base_data_dir + 'train_target.npy').astype(np.float32), dtype=torch.float32)
-	valid_data = torch.tensor(np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32), dtype=torch.float32)
-	valid_target = torch.tensor(np.load(args.base_data_dir + 'valid_target.npy').astype(np.float32), dtype=torch.float32)
-	test_data = torch.tensor(np.load(args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32)
-	test_target = torch.tensor(np.load(args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32)
 
 	train_data = Standardization_uid_mid(train_data)
 	valid_data = Standardization_uid_mid(valid_data)
@@ -215,7 +208,8 @@ def plot_result(args, rmse_list, valid_rmse_list, loss_list):
 	plt.plot(loss_list)
 
 	plt.savefig(args.base_pic_dir + args.v + '.png')
-	plt.show()
+	if args.show == 'y':
+		plt.show()
 
 
 def init_log(args):
@@ -231,9 +225,42 @@ def init_log(args):
 	logging.info('\n-------------------------------------------------------------\n')
 
 
+def data_reconstruct(args):
+	train_data = torch.tensor(np.load(args.base_data_dir + 'train_data.npy').astype(np.float32), dtype=torch.float32)
+	train_target = torch.tensor(np.load(args.base_data_dir + 'train_target.npy').astype(np.float32), dtype=torch.float32)
+	valid_data = torch.tensor(np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32), dtype=torch.float32)
+	valid_target = torch.tensor(np.load(args.base_data_dir + 'valid_target.npy').astype(np.float32), dtype=torch.float32)
+	test_data = torch.tensor(np.load(args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32)
+	test_target = torch.tensor(np.load(args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32)
+
+	data = torch.cat([train_data, valid_data, test_data])
+	target = torch.cat([train_target, valid_target, test_target])
+	all_data = Data.TensorDataset(data, target)
+
+	train_size, valid_size = train_data.shape[0], valid_data.shape[0]
+	train_data, valid_data, test_data = torch.utils.data.random_split(all_data, [train_size, valid_size, valid_size])
+
+	train_data = Data.DataLoader(dataset=train_data, batch_size=args.batch_size, shuffle=True)
+	valid_data = Data.DataLoader(dataset=valid_data, batch_size=args.batch_size, shuffle=True)
+	test_data = Data.DataLoader(dataset=test_data, batch_size=args.batch_size, shuffle=True)
+
+	d = {'train':train_data, 'valid':valid_data, 'test':test_data}
+	for k, v in d.items():
+		data_list = []
+		target_list = []
+		for data, target in v:
+			data_list.append(data.numpy())
+			target_list.append(target.numpy())
+		data = np.concatenate(data_list)
+		target = np.concatenate(target_list)
+		np.save(args.base_log_dir + 'data/' + k + '_data.npy', data)
+		np.save(args.base_log_dir + 'data/' + k + '_target.npy', target)
+		print(data.shape, target.shape)
+
+
 def main():
 	parser = argparse.ArgumentParser(description="Hyperparameters for Predictor")
-	parser.add_argument('--v', default="predictor-v-")
+	parser.add_argument('--v', default="v")
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/traditional-model/")
 	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/traditional-model/")
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
@@ -248,11 +275,15 @@ def main():
 	parser.add_argument('--init_std', type=float, default=0.01)
 	parser.add_argument('--min', type=float, default=0.0)
 	parser.add_argument('--max', type=float, default=5.0)
+	parser.add_argument('--save', default='n')
+	parser.add_argument('--load', default='n')
+	parser.add_argument('--show', default='n')	# show pic
+	parser.add_argument('--recon', default='n')
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
-	parser.add_argument('--k', type=int, default=128)
+	parser.add_argument('--k', type=int, default=256)
 	# network
 	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--hidden_0', type=int, default=128)
@@ -271,10 +302,29 @@ def main():
 		logging.info('Predictor is Network.')
 		model = Net(args.fm_feature_size, args.hidden_0, args.hidden_1, 1, args)
 
+	# 加载模型
+	if args.load == 'y':
+		print('Loading version:{} model'.format(args.v))
+		model.load_state_dict(torch.load(args.base_log_dir + args.v + '.pkl'))
+
+	if args.recon == 'y':	# 打乱重构数据, 防止出现先验概率误差太大问题
+		data_reconstruct(args)
+	train_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'train_data.npy'), dtype=torch.float32)
+	train_target = torch.tensor(np.load(args.base_log_dir + 'data/' + 'train_target.npy'), dtype=torch.float32)
+	valid_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'valid_data.npy'), dtype=torch.float32)
+	valid_target = torch.tensor(np.load(args.base_log_dir + 'data/' + 'valid_target.npy'), dtype=torch.float32)
+	test_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_data.npy'), dtype=torch.float32)
+	test_target = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_target.npy'), dtype=torch.float32)
+
 	predictor = Predictor(args, model)
-	rmse_list, valid_rmse_list, loss_list = train(args, predictor)
+	rmse_list, valid_rmse_list, loss_list = train(args, predictor, train_data, train_target, valid_data, valid_target, test_data, test_target)
+
 	plot_result(args, rmse_list, valid_rmse_list, loss_list)
 
+	# 保存模型
+	if args.save == 'y':
+		print('Saving version:{} model'.format(args.v))
+		torch.save(model.state_dict(), args.base_log_dir + args.v + '.pkl')
 
 
 if __name__ == '__main__':

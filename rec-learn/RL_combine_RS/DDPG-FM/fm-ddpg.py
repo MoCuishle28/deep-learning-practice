@@ -373,7 +373,7 @@ def main():
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
-	parser.add_argument('--seq_output_size', type=int, default=128)
+	parser.add_argument('--seq_output_size', type=int, default=64)
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-5)
 	parser.add_argument("--critic_lr", type=float, default=1e-3)
