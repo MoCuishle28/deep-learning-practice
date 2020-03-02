@@ -111,15 +111,15 @@ class Actor(nn.Module):
 		self.seq_model = seq_model
 		self.args = args
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
-		'selu':nn.SELU(), 'prelu':nn.PReLU()}
+		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
 		self.activative_func = activative_func_dict.get(args.a_act, nn.ReLU())
 
 		# 也许可以试试把当前要推荐的 item feature 也考虑进去？(那就变成了输出关于user、item的embedding)
 		self.linear1 = nn.Linear(num_input, hidden_size)
-		self.ln1 = nn.LayerNorm(hidden_size, elementwise_affine=True)
+		self.ln1 = nn.BatchNorm1d(hidden_size, affine=True)
 
 		self.linear2 = nn.Linear(hidden_size, hidden_size*2)
-		self.ln2 = nn.LayerNorm(hidden_size*2, elementwise_affine=True)
+		self.ln2 = nn.BatchNorm1d(hidden_size*2, affine=True)
 
 		self.mu = nn.Linear(hidden_size*2, actor_output)
 
@@ -160,14 +160,14 @@ class Critic(nn.Module):
 		self.seq_model = seq_model
 		self.args = args
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
-		'selu':nn.SELU(), 'prelu':nn.PReLU()}
+		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
 		self.activative_func = activative_func_dict.get(args.c_act, nn.ReLU())
 
 		self.linear1 = nn.Linear(num_input + actor_output, hidden_size)
-		self.ln1 = nn.LayerNorm(hidden_size, elementwise_affine=True)
+		self.ln1 = nn.BatchNorm1d(hidden_size, affine=True)
 
 		self.linear2 = nn.Linear(hidden_size, hidden_size*2)
-		self.ln2 = nn.LayerNorm(hidden_size*2, elementwise_affine=True)
+		self.ln2 = nn.BatchNorm1d(hidden_size*2, affine=True)
 
 		self.V = nn.Linear(hidden_size*2, 1)
 		
@@ -240,6 +240,16 @@ class DDPG(object):
 		hard_update(self.critic_target, self.critic)
 		hard_update(self.target_seq_model, self.seq_model)
 
+	
+	def on_train(self):
+		self.actor.train()	
+		self.critic.train()
+
+
+	def on_eval(self):
+		self.actor.eval()
+		self.critic.eval()
+
 
 	def select_action(self, state, action_noise=None, param_noise=None):
 		self.actor.eval()
@@ -249,7 +259,7 @@ class DDPG(object):
 		else:
 			mu = self.actor((Variable(state)))
 
-		self.actor.train()
+		# self.actor.train()
 		mu = mu.data
 
 		if action_noise is not None:

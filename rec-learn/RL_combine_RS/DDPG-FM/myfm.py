@@ -49,14 +49,14 @@ class Net(nn.Module):
 		super(Net, self).__init__()
 		self.args = args
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
-		'selu':nn.SELU(), 'prelu':nn.PReLU()}
+		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
 		self.activative_func = activative_func_dict.get(args.n_act, nn.ReLU())
 
 		self.in_layer = nn.Linear(input_num, hidden_num0)
-		self.in_norm = nn.LayerNorm(hidden_num0, elementwise_affine=True)
+		self.in_norm = nn.BatchNorm1d(hidden_num0, affine=True)
 
 		self.hidden_layer = nn.Linear(hidden_num0, hidden_num1)
-		self.hidden_norm = nn.LayerNorm(hidden_num1, elementwise_affine=True)
+		self.hidden_norm = nn.BatchNorm1d(hidden_num1, affine=True)
 
 		self.out_layer = nn.Linear(hidden_num1, output_num)
 
@@ -108,6 +108,14 @@ class Predictor(object):
 		prediction = self.predictor(input_data)
 		loss = self.criterion(prediction, target)
 		return prediction, loss
+
+
+	def on_train(self):
+		self.predictor.train()
+
+
+	def on_eval(self):
+		self.predictor.eval()
 
 
 	def train(self, input_data, target):
@@ -166,6 +174,7 @@ def train(args, predictor, train_data, train_target, valid_data, valid_target, t
 	train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=True)
 
 	for epoch in range(args.epoch):
+		predictor.on_train()	# 训练模式
 		for i_batch, (data, target) in enumerate(train_data_loader):
 			prediction, loss = predictor.train(data, target)
 			rmse = get_rmse(prediction, target)
@@ -178,10 +187,12 @@ def train(args, predictor, train_data, train_target, valid_data, valid_target, t
 				loss_list.append(loss.item())
 				logging.info('epoch:{}, i_batch:{}, loss:{:.5}, RMSE:{:.5}'.format(epoch + 1, 
 					i_batch+1, loss.item(), rmse))
-		
+
+		predictor.on_eval()	# 评估模式
 		valid_rmse = evaluate(predictor, valid_data, valid_target)
 		valid_rmse_list.append(valid_rmse)
 
+	predictor.on_eval()	# 评估模式
 	evaluate(predictor, test_data, test_target, title='[Test]')
 	return rmse_list, valid_rmse_list, loss_list
 

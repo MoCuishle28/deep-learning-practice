@@ -88,6 +88,9 @@ class Algorithm(object):
 
 
 	def evaluate(self, data, target, title='[Valid]'):
+		self.agent.on_eval()
+		self.predict.on_eval()
+
 		input_data = []
 		for i_data, raw_feature in enumerate(data):
 			state = self.env.get_history(raw_feature[0].item(), raw_feature[1].item())
@@ -111,11 +114,16 @@ class Algorithm(object):
 			rmse, reward))
 		logging.info(title + ' RMSE:{:.6}, Average Reward:{:.8}'.format(
 			rmse, reward))
+
+		# self.agent.on_train()
+		# self.predictor.on_train()
 		return rmse
 
 
-
 	def interactive(self, data, target):
+		self.agent.on_eval()	# 切换为评估模式
+		self.predictor.on_eval()
+
 		for i_data, raw_feature in enumerate(data):
 			mask = torch.tensor([True], dtype=torch.float32)
 			state = self.env.get_history(raw_feature[0].item(), raw_feature[1].item())
@@ -159,9 +167,12 @@ class Algorithm(object):
 				
 				transitions = self.memory.sample(self.args.batch_size)
 				batch = Transition(*zip(*transitions))
+				self.agent.on_train()	# 切换为训练模式 (因为包含 BN\LN)
 				value_loss, policy_loss = self.agent.update_parameters(batch)
 
 				# 再训练 predictor
+				self.agent.on_eval()	# 采集数据训练 predictor，所以切换为评估模式
+				self.predictor.on_train()	# predictor 切换为训练模式
 				input_data = []
 				for i_data, raw_feature in enumerate(data):
 					state = self.env.get_history(raw_feature[0].item(), raw_feature[1].item())
@@ -346,7 +357,7 @@ def main():
 	parser.add_argument('--pretrain_predictor_epoch', type=int, default=100)
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--hw', type=int, default=5)	# history window
+	parser.add_argument('--hw', type=int, default=10)	# history window
 	parser.add_argument('--predictor', default='net')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
@@ -388,7 +399,7 @@ def main():
 	parser.add_argument("--predictor_lr", type=float, default=1e-4)
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
-	parser.add_argument('--k', type=int, default=128)
+	parser.add_argument('--k', type=int, default=256)
 	# network
 	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--hidden_0', type=int, default=256)
