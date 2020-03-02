@@ -89,7 +89,7 @@ class Algorithm(object):
 
 	def evaluate(self, data, target, title='[Valid]'):
 		self.agent.on_eval()
-		self.predict.on_eval()
+		self.predictor.on_eval()
 
 		input_data = []
 		for i_data, raw_feature in enumerate(data):
