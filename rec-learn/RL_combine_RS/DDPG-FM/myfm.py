@@ -53,10 +53,15 @@ class Net(nn.Module):
 		self.activative_func = activative_func_dict.get(args.n_act, nn.ReLU())
 
 		self.in_layer = nn.Linear(input_num, hidden_num0)
-		self.in_norm = nn.BatchNorm1d(hidden_num0, affine=True)
 
 		self.hidden_layer = nn.Linear(hidden_num0, hidden_num1)
-		self.hidden_norm = nn.BatchNorm1d(hidden_num1, affine=True)
+
+		if self.args.norm_layer == 'bn':
+			self.in_norm = nn.BatchNorm1d(hidden_num0, affine=True)
+			self.hidden_norm = nn.BatchNorm1d(hidden_num1, affine=True)
+		elif self.args.norm_layer == 'ln':
+			self.in_norm = nn.LayerNorm(hidden_num0, elementwise_affine=True)
+			self.hidden_norm = nn.LayerNorm(hidden_num1, elementwise_affine=True)
 
 		self.out_layer = nn.Linear(hidden_num1, output_num)
 
@@ -78,11 +83,11 @@ class Net(nn.Module):
 
 	def forward(self, x):
 		x = self.in_layer(x)
-		x = self.in_norm(x)
+		x = self.in_norm(x) if self.args.norm_layer != 'none' else x
 		x = self.activative_func(x)
 
 		x = self.hidden_layer(x)
-		x = self.hidden_norm(x)
+		x = self.hidden_norm(x) if self.args.norm_layer != 'none' else x
 		x = self.activative_func(x)
 
 		x = self.out_layer(x)
@@ -290,6 +295,7 @@ def main():
 	parser.add_argument('--load', default='n')
 	parser.add_argument('--show', default='n')	# show pic
 	parser.add_argument('--recon', default='n')
+	parser.add_argument('--norm_layer', default='bn')	# bn/ln/none
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM
@@ -297,8 +303,8 @@ def main():
 	parser.add_argument('--k', type=int, default=256)
 	# network
 	parser.add_argument('--n_act', default='relu')
-	parser.add_argument('--hidden_0', type=int, default=128)
-	parser.add_argument('--hidden_1', type=int, default=256)
+	parser.add_argument('--hidden_0', type=int, default=256)
+	parser.add_argument('--hidden_1', type=int, default=512)
 	args = parser.parse_args()
 
 	init_log(args)

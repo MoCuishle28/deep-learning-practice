@@ -371,6 +371,7 @@ def main():
 	parser.add_argument('--actor_optim', default='adam')
 	parser.add_argument('--critic_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)	# sgd 时
+	parser.add_argument('--norm_layer', default='bn')	# bn/ln/none
 	# save/load model 的名字为 --v
 	parser.add_argument('--save', default='n')
 	parser.add_argument('--load', default='n')
@@ -383,7 +384,7 @@ def main():
 	# seq model
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
-	parser.add_argument('--seq_layer_num', type=int, default=2)
+	parser.add_argument('--seq_layer_num', type=int, default=1)
 	parser.add_argument('--seq_output_size', type=int, default=64)
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-5)

@@ -80,7 +80,11 @@ class SeqModel(nn.Module):
 		self.seq_output_size = args.seq_output_size
 		# batch_first = True 则输入输出的数据格式为 (batch, seq, feature)
 		self.gru = nn.GRU(self.seq_input_size, self.hidden_size, self.seq_layer_num, batch_first=True)
-		self.ln1 = nn.LayerNorm(self.hidden_size, elementwise_affine=True)
+		self.args = args
+		if args.norm_layer == 'bn':
+			self.ln1 = nn.BatchNorm1d(self.hidden_size, affine=True)
+		elif args.norm_layer == 'ln':
+			self.ln1 = nn.LayerNorm(self.hidden_size, elementwise_affine=True)
 		self.fc = nn.Linear(self.hidden_size, self.seq_output_size)
 
 		if args.init == 'normal':
@@ -100,7 +104,9 @@ class SeqModel(nn.Module):
 		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size)
 		
 		out, _ = self.gru(x, h0)  # out: tensor of shape (batch_size, seq_length, hidden_size)
-		out = self.ln1(out[:, -1, :])    # 最后时刻的 seq 作为输出
+		out = out[:, -1, :]		# 最后时刻的 seq 作为输出
+		if self.args.norm_layer != 'none':
+			out = self.ln1(out)
 		out = self.fc(out)
 		return out
 		
@@ -116,10 +122,15 @@ class Actor(nn.Module):
 
 		# 也许可以试试把当前要推荐的 item feature 也考虑进去？(那就变成了输出关于user、item的embedding)
 		self.linear1 = nn.Linear(num_input, hidden_size)
-		self.ln1 = nn.BatchNorm1d(hidden_size, affine=True)
 
 		self.linear2 = nn.Linear(hidden_size, hidden_size*2)
-		self.ln2 = nn.BatchNorm1d(hidden_size*2, affine=True)
+
+		if self.args.norm_layer == 'bn':
+			self.ln1 = nn.BatchNorm1d(hidden_size, affine=True)
+			self.ln2 = nn.BatchNorm1d(hidden_size*2, affine=True)
+		elif self.args.norm_layer == 'ln':
+			self.ln1 = nn.LayerNorm(hidden_size, elementwise_affine=True)
+			self.ln2 = nn.LayerNorm(hidden_size*2, elementwise_affine=True)
 
 		self.mu = nn.Linear(hidden_size*2, actor_output)
 
@@ -144,10 +155,10 @@ class Actor(nn.Module):
 		x = self.seq_model(inputs)
 
 		x = self.linear1(x)
-		x = self.ln1(x)
+		x = self.ln1(x) if self.args.norm_layer != 'none' else x
 		x = self.activative_func(x)
 		x = self.linear2(x)
-		x = self.ln2(x)
+		x = self.ln2(x) if self.args.norm_layer != 'none' else x
 
 		x = torch.tanh(x)
 		mu = self.mu(x)
@@ -164,10 +175,15 @@ class Critic(nn.Module):
 		self.activative_func = activative_func_dict.get(args.c_act, nn.ReLU())
 
 		self.linear1 = nn.Linear(num_input + actor_output, hidden_size)
-		self.ln1 = nn.BatchNorm1d(hidden_size, affine=True)
 
 		self.linear2 = nn.Linear(hidden_size, hidden_size*2)
-		self.ln2 = nn.BatchNorm1d(hidden_size*2, affine=True)
+
+		if self.args.norm_layer == 'bn':
+			self.ln1 = nn.BatchNorm1d(hidden_size, affine=True)
+			self.ln2 = nn.BatchNorm1d(hidden_size*2, affine=True)
+		elif self.args.norm_layer == 'ln':
+			self.ln1 = nn.LayerNorm(hidden_size, elementwise_affine=True)
+			self.ln2 = nn.LayerNorm(hidden_size*2, elementwise_affine=True)
 
 		self.V = nn.Linear(hidden_size*2, 1)
 		
@@ -193,11 +209,11 @@ class Critic(nn.Module):
 
 		x = torch.cat((x, actions), 1)
 		x = self.linear1(x)
-		x = self.ln1(x)
+		x = self.ln1(x) if self.args.norm_layer != 'none' else x
 		x = self.activative_func(x)
 
 		x = self.linear2(x)
-		x = self.ln2(x)
+		x = self.ln2(x) if self.args.norm_layer != 'none' else x
 		x = self.activative_func(x)
 		V = self.V(x)
 		return V
@@ -242,13 +258,19 @@ class DDPG(object):
 
 	
 	def on_train(self):
-		self.actor.train()	
+		self.actor.train()
+		self.actor_target.train()
+		# self.actor_perturbed.train()
 		self.critic.train()
+		self.critic_target.train()
 
 
 	def on_eval(self):
 		self.actor.eval()
+		self.actor_target.eval()
+		# self.actor_perturbed.eval()
 		self.critic.eval()
+		self.critic_target.eval()
 
 
 	def select_action(self, state, action_noise=None, param_noise=None):
