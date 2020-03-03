@@ -221,6 +221,7 @@ class Critic(nn.Module):
 
 class DDPG(object):
 	def __init__(self, args):
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		self.seq_model = SeqModel(args)
 		seq_params = [param for param in self.seq_model.parameters()]
 		self.target_seq_model = SeqModel(args)	# 还需要一个 seq_model 给 target network
@@ -285,19 +286,19 @@ class DDPG(object):
 		mu = mu.data
 
 		if action_noise is not None:
-			mu += torch.Tensor(action_noise.noise())
-		return mu 		# 返回的是	torch.tensor
+			mu += torch.Tensor(action_noise.noise()).to(self.device)
+		return mu.to(self.device) 		# 返回的是	torch.tensor
 
 
 	def update_parameters(self, batch):
-		state_batch = Variable(torch.cat(batch.state))
-		action_batch = Variable(torch.cat(batch.action))
-		reward_batch = Variable(torch.cat(batch.reward))
-		mask_batch = Variable(torch.cat(batch.mask))
-		next_state_batch = Variable(torch.cat(batch.next_state))
+		state_batch = Variable(torch.cat(batch.state).to(self.device))
+		action_batch = Variable(torch.cat(batch.action).to(self.device))
+		reward_batch = Variable(torch.cat(batch.reward).to(self.device))
+		mask_batch = Variable(torch.cat(batch.mask).to(self.device))
+		next_state_batch = Variable(torch.cat(batch.next_state).to(self.device))
 		
-		next_action_batch = self.actor_target(next_state_batch)
-		next_state_action_values = self.critic_target(next_state_batch, next_action_batch)
+		next_action_batch = self.actor_target(next_state_batch).to(self.device)
+		next_state_action_values = self.critic_target(next_state_batch, next_action_batch).to(self.device)
 
 		reward_batch = reward_batch.unsqueeze(1)
 		mask_batch = mask_batch.unsqueeze(1)
@@ -305,7 +306,7 @@ class DDPG(object):
 
 		self.critic_optim.zero_grad()
 
-		state_action_batch = self.critic((state_batch), (action_batch))
+		state_action_batch = self.critic((state_batch), (action_batch)).to(self.device)
 
 		value_loss = F.mse_loss(state_action_batch, expected_state_action_batch)
 		value_loss.backward()
@@ -314,7 +315,7 @@ class DDPG(object):
 		self.actor_optim.zero_grad()
 
 		# actor 要最大化 Q-value
-		policy_loss = -self.critic((state_batch),self.actor((state_batch)))
+		policy_loss = -self.critic((state_batch),self.actor((state_batch)).to(self.device))
 
 		policy_loss = policy_loss.mean()
 		policy_loss.backward()

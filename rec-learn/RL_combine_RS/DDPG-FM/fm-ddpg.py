@@ -31,6 +31,7 @@ def load_obj(name):
 
 class Algorithm(object):
 	def __init__(self, args, agent, predictor, env, data_list, target_list):
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		self.args = args
 		self.agent = agent
 		self.ounoise = OUNoise(args.actor_output)
@@ -38,12 +39,12 @@ class Algorithm(object):
 		self.memory = ReplayMemory(args.memory_size)
 		self.env = env
 
-		self.train_data = torch.tensor(data_list.pop(0), dtype=torch.float32)
-		self.train_target = torch.tensor(target_list.pop(0), dtype=torch.float32)
-		self.valid_data = torch.tensor(data_list.pop(0), dtype=torch.float32)
-		self.valid_target = torch.tensor(target_list.pop(0), dtype=torch.float32)
-		self.test_data = torch.tensor(data_list.pop(0), dtype=torch.float32)
-		self.test_target = torch.tensor(target_list.pop(0), dtype=torch.float32)
+		self.train_data = torch.tensor(data_list.pop(0), dtype=torch.float32).to(self.device)
+		self.train_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
+		self.valid_data = torch.tensor(data_list.pop(0), dtype=torch.float32).to(self.device)
+		self.valid_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
+		self.test_data = torch.tensor(data_list.pop(0), dtype=torch.float32).to(self.device)
+		self.test_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
 		self.process_data()
 
 		train_data_set = Data.TensorDataset(self.train_data, self.train_target)
@@ -94,13 +95,13 @@ class Algorithm(object):
 		input_data = []
 		for i_data, raw_feature in enumerate(data):
 			state = self.env.get_history(raw_feature[0].item(), raw_feature[1].item())
-			state = state.reshape((-1, state.shape[0], state.shape[1]))
+			state = state.reshape((-1, state.shape[0], state.shape[1])).to(self.device)
 
 			action = self.agent.select_action(state, action_noise=None)	# 不加噪声
 			# raw_feature 避开前两维没有标准化的 uid、mid
 			input_data.append(torch.cat([action.squeeze(), raw_feature[2:]]))
 
-		input_data = torch.stack(input_data)
+		input_data = torch.stack(input_data).to(self.device)
 		prediction, predictor_loss = self.predictor.predict(input_data, target)
 		rmse = self.get_rmse(prediction, target)
 		reward = 0
@@ -125,31 +126,31 @@ class Algorithm(object):
 		self.predictor.on_eval()
 
 		for i_data, raw_feature in enumerate(data):
-			mask = torch.tensor([True], dtype=torch.float32)
+			mask = torch.tensor([True], dtype=torch.float32).to(self.device)
 			state = self.env.get_history(raw_feature[0].item(), raw_feature[1].item())
 			next_state = self.env.get_next_history(state, raw_feature[1].item(), 
 				raw_feature[0].item(), target[i_data].item())
 
 			# 转成符合 RNN 的输入数据形式
-			state = state.reshape((-1, state.shape[0], state.shape[1]))
-			next_state = next_state.reshape((-1, next_state.shape[0], next_state.shape[1]))
+			state = state.reshape((-1, state.shape[0], state.shape[1])).to(self.device)
+			next_state = next_state.reshape((-1, next_state.shape[0], next_state.shape[1])).to(self.device)
 
 			action = self.agent.select_action(state, action_noise=self.ounoise)
 			# action (1, 32) -> (32), raw_feature 避开前两维没有标准化的 uid、mid
-			input_data = torch.cat([action.squeeze(), raw_feature[2:]])
+			input_data = torch.cat([action.squeeze(), raw_feature[2:]]).to(self.device)
 			# input_data (32+22) -> (1, 32+22)
-			input_data = input_data.reshape((1, input_data.shape[0]))
+			input_data = input_data.reshape((1, input_data.shape[0])).to(self.device)
 			# one_target (1, 1) 即:(batch=1, 1)
-			one_target = torch.tensor([target[i_data]], dtype=torch.float32).reshape((1, 1))
+			one_target = torch.tensor([target[i_data]], dtype=torch.float32).reshape((1, 1)).to(self.device)
 			# 先不训练
 			prediction, predictor_loss = self.predictor.predict(input_data, one_target)
 			# predictor loss 的负数作为 reward
 			reward = 0
 			if self.args.reward == 'loss':
-				reward = torch.tensor([-(predictor_loss.item() * self.args.alpha)], dtype=torch.float32)
+				reward = torch.tensor([-(predictor_loss.item() * self.args.alpha)], dtype=torch.float32).to(self.device)
 			elif self.args.reward == 'rmse':
 				# rmse 的负数作为 reward
-				reward = torch.tensor([-(self.get_rmse(prediction, one_target) * self.args.alpha)], dtype=torch.float32)
+				reward = torch.tensor([-(self.get_rmse(prediction, one_target) * self.args.alpha)], dtype=torch.float32).to(self.device)
 
 			self.memory.push(state, action, mask, next_state, reward)
 
@@ -161,9 +162,11 @@ class Algorithm(object):
 		mean_predictor_loss_list = []
 		for epoch in range(self.args.epoch):
 			for i_batch, (data, target) in enumerate(self.train_data_loader):
+				data = data.to(self.device)
+				target = target.to(self.device)
 				batch_state = []
 				# 与 predictor 交互获得 agent 训练数据
-				self.interactive(data, target)
+				self.interactive(data.to(self.device), target.to(self.device))
 				
 				transitions = self.memory.sample(self.args.batch_size)
 				batch = Transition(*zip(*transitions))
@@ -176,13 +179,13 @@ class Algorithm(object):
 				input_data = []
 				for i_data, raw_feature in enumerate(data):
 					state = self.env.get_history(raw_feature[0].item(), raw_feature[1].item())
-					state = state.reshape((-1, state.shape[0], state.shape[1]))
+					state = state.reshape((-1, state.shape[0], state.shape[1])).to(self.device)
 
 					action = self.agent.select_action(state, action_noise=None)	# 不加噪声
 					# raw_feature 避开前两维没有标准化的 uid、mid
-					input_data.append(torch.cat([action.squeeze(), raw_feature[2:]]))
+					input_data.append(torch.cat([action.squeeze(), raw_feature[2:]]).to(self.device))
 
-				input_data = torch.stack(input_data)
+				input_data = torch.stack(input_data).to(self.device)
 				prediction, predictor_loss = self.predictor.train(input_data, target)
 				rmse = self.get_rmse(prediction, target)
 
@@ -212,13 +215,15 @@ class Algorithm(object):
 			shuffle=True)
 		for epoch in range(self.args.pretrain_predictor_epoch):
 			for i_batch, (data, target) in enumerate(data_loader):
+				data = data.to(self.device)
+				target = target.to(self.device)
 				data_list = []
 				# 补上 agent 输出的那部分为 0 向量
 				for feature_vec in data:
-					zero_vec = torch.zeros(self.args.actor_output)
+					zero_vec = torch.zeros(self.args.actor_output).to(self.device)
 					data_list.append(torch.cat([zero_vec, feature_vec[2:]]))
 
-				data = torch.stack(data_list)
+				data = torch.stack(data_list).to(self.device)
 				prediction, loss = self.predictor.train(data, target)
 				rmse = self.get_rmse(prediction, target)
 				
@@ -254,6 +259,7 @@ class Algorithm(object):
 
 class HistoryGenerator(object):
 	def __init__(self, args):
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		self.args = args
 		# mid: one-hot feature (21维 -> mid, genre, genre, ...)
 		self.mid_map_mfeature = load_obj('mid_map_mfeature')		
@@ -311,7 +317,7 @@ class HistoryGenerator(object):
 			history_feature[1] = (history_feature[1] - self.mid_mean) / self.mid_std
 			history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std
 			ret_data.append(history_feature)
-		return torch.stack(ret_data)
+		return torch.stack(ret_data).to(self.device)
 
 
 	def get_next_history(self, curr_history, new_mid, curr_uid, rating):
@@ -331,7 +337,7 @@ class HistoryGenerator(object):
 		history_feature[1] = (history_feature[1] - self.mid_mean) / self.mid_std
 		history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std
 		curr_history.append(history_feature)
-		return torch.tensor(curr_history)
+		return torch.tensor(curr_history).to(self.device)
 
 
 def init_log(args):
@@ -384,7 +390,7 @@ def main():
 	# seq model
 	parser.add_argument('--seq_input_size', type=int, default=23)
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
-	parser.add_argument('--seq_layer_num', type=int, default=1)
+	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=64)
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-5)
@@ -407,6 +413,7 @@ def main():
 	parser.add_argument('--hidden_1', type=int, default=512)
 	args = parser.parse_args()
 	init_log(args)
+	print(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
 
 	train_data = np.load(args.base_data_dir + 'train_data.npy').astype(np.float32)
 	train_target = np.load(args.base_data_dir + 'train_target.npy').astype(np.float32)
