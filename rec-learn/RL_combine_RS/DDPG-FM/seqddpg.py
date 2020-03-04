@@ -223,13 +223,13 @@ class Critic(nn.Module):
 class DDPG(object):
 	def __init__(self, args):
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-		self.seq_model = SeqModel(args)
+		self.seq_model = SeqModel(args).to(self.device)
 		seq_params = [param for param in self.seq_model.parameters()]
-		self.target_seq_model = SeqModel(args)	# 还需要一个 seq_model 给 target network
+		self.target_seq_model = SeqModel(args).to(self.device)	# 还需要一个 seq_model 给 target network
 
-		self.actor = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
-		self.actor_target = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args)
-		self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args)
+		self.actor = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args).to(self.device)
+		self.actor_target = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args).to(self.device)
+		self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args).to(self.device)
 		actor_params = seq_params + [param for param in self.actor.parameters()]
 
 		if args.actor_optim == 'adam':
@@ -239,8 +239,8 @@ class DDPG(object):
 		elif args.actor_optim == 'rmsprop':
 			self.actor_optim = torch.optim.RMSprop(actor_params, lr=args.actor_lr)
 
-		self.critic = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args)
-		self.critic_target = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args)
+		self.critic = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args).to(self.device)
+		self.critic_target = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args).to(self.device)
 		critic_params = seq_params + [param for param in self.critic.parameters()]
 
 		if args.critic_optim == 'adam':
