@@ -332,7 +332,7 @@ class HistoryGenerator(object):
 		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32).to(self.device)
 		rating = torch.tensor([rating], dtype=torch.float32).to(self.device)
 		
-		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32), mfeature, rating]).to(self.device)
+		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32).to(self.device), mfeature, rating]).to(self.device)
 		history_feature[0] = (history_feature[0] - self.uid_mean) / self.uid_std
 		history_feature[1] = (history_feature[1] - self.mid_mean) / self.mid_std
 		history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std

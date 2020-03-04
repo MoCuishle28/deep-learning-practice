@@ -14,14 +14,15 @@ import time
 class FM(nn.Module):
 	def __init__(self, feature_size, k, args):
 		super(FM, self).__init__()
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		self.args = args
-		self.w0 = nn.Parameter(torch.empty(1, dtype=torch.float32))
+		self.w0 = nn.Parameter(torch.empty(1, dtype=torch.float32).to(self.device))
 
 		# 不加初始化会全 0
-		self.w1 = nn.Parameter(torch.empty(feature_size, 1, dtype=torch.float32))
+		self.w1 = nn.Parameter(torch.empty(feature_size, 1, dtype=torch.float32).to(self.device))
 
 		# 不加初始化会全 0
-		self.v = nn.Parameter(torch.empty(feature_size, k, dtype=torch.float32))
+		self.v = nn.Parameter(torch.empty(feature_size, k, dtype=torch.float32).to(self.device))
 
 		if args.init == 'normal':
 			nn.init.normal_(self.w0, std=args.init_std)
@@ -47,6 +48,7 @@ class FM(nn.Module):
 class Net(nn.Module):
 	def __init__(self, input_num, hidden_num0, hidden_num1, output_num, args):
 		super(Net, self).__init__()
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		self.args = args
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
 		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
@@ -82,7 +84,7 @@ class Net(nn.Module):
 
 
 	def forward(self, x):
-		x = self.in_layer(x)
+		x = self.in_layer(x.to(self.device))
 		x = self.in_norm(x) if self.args.norm_layer != 'none' else x
 		x = self.activative_func(x)
 
@@ -249,8 +251,8 @@ def data_reconstruct(args, device):
 	test_data = torch.tensor(np.load(args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32).to(device)
 	test_target = torch.tensor(np.load(args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32).to(device)
 
-	data = torch.cat([train_data, valid_data, test_data])
-	target = torch.cat([train_target, valid_target, test_target])
+	data = torch.cat([train_data, valid_data, test_data]).to(device)
+	target = torch.cat([train_target, valid_target, test_target]).to(device)
 	all_data = Data.TensorDataset(data, target)
 
 	train_size, valid_size = train_data.shape[0], valid_data.shape[0]
