@@ -57,10 +57,10 @@ class Algorithm(object):
 		# 将 uid, mid 加到前两维 然后标准化 (后续记得避开前两维再输入到 predictor)
 		train_data, valid_data, test_data = [], [], []
 		for x0 in self.train_data:
-			train_data.append(torch.cat([torch.tensor([x0[0]]), torch.tensor([x0[1]]), x0]))
+			train_data.append(torch.cat([torch.tensor([x0[0]]).to(self.device), torch.tensor([x0[1]]).to(self.device), x0]))
 		for x1, x2 in zip(self.valid_data, self.test_data):
-			valid_data.append(torch.cat([torch.tensor([x1[0]]), torch.tensor([x1[1]]), x1]))
-			test_data.append(torch.cat([torch.tensor([x2[0]]), torch.tensor([x2[1]]), x2]))
+			valid_data.append(torch.cat([torch.tensor([x1[0]]).to(self.device), torch.tensor([x1[1]]).to(self.device), x1]))
+			test_data.append(torch.cat([torch.tensor([x2[0]]).to(self.device), torch.tensor([x2[1]]).to(self.device), x2]))
 
 		self.train_data = self.Standardization_uid_mid(torch.stack(train_data))
 		self.valid_data = self.Standardization_uid_mid(torch.stack(valid_data))
@@ -279,13 +279,13 @@ class HistoryGenerator(object):
 				rating_list.append(pair[-1])
 				mid_set.add(pair[0])
 
-		uid_tensor = torch.tensor(uid_list, dtype=torch.float32)
+		uid_tensor = torch.tensor(uid_list, dtype=torch.float32).to(self.device)
 		self.uid_mean, self.uid_std = uid_tensor.mean(), uid_tensor.std()
 
-		rating_tensor = torch.tensor(rating_list, dtype=torch.float32)
+		rating_tensor = torch.tensor(rating_list, dtype=torch.float32).to(self.device)
 		self.rating_mean, self.rating_std = rating_tensor.mean(), rating_tensor.std()
 
-		mid_tensor = torch.tensor(list(mid_set), dtype=torch.float32)
+		mid_tensor = torch.tensor(list(mid_set), dtype=torch.float32).to(self.device)
 		self.mid_mean, self.mid_std = mid_tensor.mean(), mid_tensor.std()
 
 
@@ -307,11 +307,11 @@ class HistoryGenerator(object):
 			else:
 				mid = rating_list[i][0]
 				rating  = rating_list[i][1]
-				mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32)
+				mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(self.device)
 				# [uid, mfeature..., rating]
-				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32), 
+				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32).to(self.device), 
 					mfeature, 
-					torch.tensor([rating], dtype=torch.float32)])
+					torch.tensor([rating], dtype=torch.float32).to(self.device)]).to(self.device)
 
 			history_feature[0] = (history_feature[0] - self.uid_mean) / self.uid_std
 			history_feature[1] = (history_feature[1] - self.mid_mean) / self.mid_std
@@ -329,10 +329,10 @@ class HistoryGenerator(object):
 		curr_history = curr_history.tolist()
 		curr_history.pop(0)
 		uid = curr_uid
-		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32)
-		rating = torch.tensor([rating], dtype=torch.float32)
+		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32).to(self.device)
+		rating = torch.tensor([rating], dtype=torch.float32).to(self.device)
 		
-		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32), mfeature, rating])
+		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32), mfeature, rating]).to(self.device)
 		history_feature[0] = (history_feature[0] - self.uid_mean) / self.uid_std
 		history_feature[1] = (history_feature[1] - self.mid_mean) / self.mid_std
 		history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std

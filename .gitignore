@@ -42,7 +42,7 @@ rec-learn/ml-latest-small
 
 rec-learn/RL_combine_RS/FM_lib
 rec-learn/models
-# rec-learn/data
-# rec-learn/RL_combine_RS/data
+rec-learn/data
+rec-learn/RL_combine_RS/data
 
 /hands-on-ml/datasets
