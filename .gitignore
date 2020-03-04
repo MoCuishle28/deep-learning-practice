@@ -1,14 +1,14 @@
 *.whl
 *.log
-*.pkl
 *.png
 *.csv
 *.hdf5
 *.jpg
-*.npy
 *.h5
 *.ckpt
 *.pyc
+*.npy
+*.pkl
 
 /Pipfile
 
@@ -40,8 +40,9 @@ rec-learn/ml-latest-small
 
 /nn-learn/keras/deep-learning-best-practices/callback-tensorboad/my_log_dir
 
-rec-learn/data
 rec-learn/RL_combine_RS/FM_lib
-rec-learn/RL_combine_RS/data
+rec-learn/models
+# rec-learn/data
+# rec-learn/RL_combine_RS/data
 
 /hands-on-ml/datasets
