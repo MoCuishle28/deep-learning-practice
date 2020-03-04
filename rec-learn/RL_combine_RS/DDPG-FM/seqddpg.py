@@ -74,6 +74,7 @@ def hard_update(target, source):
 class SeqModel(nn.Module):
 	def __init__(self, args):
 		super(SeqModel, self).__init__()
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		self.seq_input_size = args.seq_input_size
 		self.hidden_size = args.seq_hidden_size
 		self.seq_layer_num = args.seq_layer_num
@@ -101,7 +102,7 @@ class SeqModel(nn.Module):
 		x: (batch, seq_len, feature_size)
 		return: (batch, self.seq_output_size)
 		'''
-		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size)
+		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size).to(self.device)
 		
 		out, _ = self.gru(x, h0)  # out: tensor of shape (batch_size, seq_length, hidden_size)
 		out = out[:, -1, :]		# 最后时刻的 seq 作为输出

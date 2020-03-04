@@ -48,7 +48,6 @@ class FM(nn.Module):
 class Net(nn.Module):
 	def __init__(self, input_num, hidden_num0, hidden_num1, output_num, args):
 		super(Net, self).__init__()
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		self.args = args
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
 		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
@@ -84,7 +83,7 @@ class Net(nn.Module):
 
 
 	def forward(self, x):
-		x = self.in_layer(x.to(self.device))
+		x = self.in_layer(x)
 		x = self.in_norm(x) if self.args.norm_layer != 'none' else x
 		x = self.activative_func(x)
 
@@ -99,7 +98,8 @@ class Net(nn.Module):
 class Predictor(object):
 	def __init__(self, args, predictor):
 		super(Predictor, self).__init__()
-		self.predictor = predictor
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+		self.predictor = predictor.to(self.device)
 		if args.predictor_optim == 'adam':
 			self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.predictor_lr)
 		elif args.predictor_optim == 'sgd':
