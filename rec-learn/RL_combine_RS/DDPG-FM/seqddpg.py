@@ -72,9 +72,9 @@ def hard_update(target, source):
 
 
 class SeqModel(nn.Module):
-	def __init__(self, args):
+	def __init__(self, args, device):
 		super(SeqModel, self).__init__()
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+		self.device = device
 		self.seq_input_size = args.seq_input_size
 		self.hidden_size = args.seq_hidden_size
 		self.seq_layer_num = args.seq_layer_num
@@ -221,11 +221,11 @@ class Critic(nn.Module):
 
 
 class DDPG(object):
-	def __init__(self, args):
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-		self.seq_model = SeqModel(args).to(self.device)
+	def __init__(self, args, device):
+		self.device = device
+		self.seq_model = SeqModel(args, self.device).to(self.device)
 		seq_params = [param for param in self.seq_model.parameters()]
-		self.target_seq_model = SeqModel(args).to(self.device)	# 还需要一个 seq_model 给 target network
+		self.target_seq_model = SeqModel(args, self.device).to(self.device)	# 还需要一个 seq_model 给 target network
 
 		self.actor = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args).to(self.device)
 		self.actor_target = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args).to(self.device)

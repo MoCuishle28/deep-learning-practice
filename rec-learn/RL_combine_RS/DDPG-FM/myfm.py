@@ -12,9 +12,9 @@ import time
 
 
 class FM(nn.Module):
-	def __init__(self, feature_size, k, args):
+	def __init__(self, feature_size, k, args, device):
 		super(FM, self).__init__()
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+		self.device = device
 		self.args = args
 		self.w0 = nn.Parameter(torch.empty(1, dtype=torch.float32).to(self.device))
 
@@ -96,9 +96,9 @@ class Net(nn.Module):
 
 
 class Predictor(object):
-	def __init__(self, args, predictor):
+	def __init__(self, args, predictor, device):
 		super(Predictor, self).__init__()
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+		self.device = device
 		self.predictor = predictor.to(self.device)
 		if args.predictor_optim == 'adam':
 			self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.predictor_lr)
@@ -317,7 +317,7 @@ def main():
 	if args.predictor == 'fm':
 		print('Predictor is FM.')
 		logging.info('Predictor is FM.')
-		model = FM(args.fm_feature_size, args.k, args)
+		model = FM(args.fm_feature_size, args.k, args, device)
 	elif args.predictor == 'net':
 		print('Predictor is Network.')
 		logging.info('Predictor is Network.')
@@ -337,7 +337,7 @@ def main():
 	test_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_data.npy'), dtype=torch.float32).to(device)
 	test_target = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_target.npy'), dtype=torch.float32).to(device)
 
-	predictor = Predictor(args, model)
+	predictor = Predictor(args, model, device)
 	rmse_list, valid_rmse_list, loss_list = train(args, predictor, train_data, train_target, valid_data, valid_target, test_data, test_target)
 
 	plot_result(args, rmse_list, valid_rmse_list, loss_list)

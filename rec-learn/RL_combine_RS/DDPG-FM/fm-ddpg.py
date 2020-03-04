@@ -258,8 +258,8 @@ class Algorithm(object):
 
 
 class HistoryGenerator(object):
-	def __init__(self, args):
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	def __init__(self, args, device):
+		self.device = device
 		self.args = args
 		# mid: one-hot feature (21维 -> mid, genre, genre, ...)
 		self.mid_map_mfeature = load_obj('mid_map_mfeature')		
@@ -413,7 +413,8 @@ def main():
 	parser.add_argument('--hidden_1', type=int, default=512)
 	args = parser.parse_args()
 	init_log(args)
-	print(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	print('device:{}'.format(device))
 
 	train_data = np.load(args.base_data_dir + 'train_data.npy').astype(np.float32)
 	train_target = np.load(args.base_data_dir + 'train_target.npy').astype(np.float32)
@@ -424,8 +425,8 @@ def main():
 	data_list = [train_data] + [valid_data] + [test_data]
 	target_list = [train_target] + [valid_target] + [test_target]
 
-	env = HistoryGenerator(args)
-	agent = DDPG(args)	
+	env = HistoryGenerator(args, device)
+	agent = DDPG(args, device)	
 
 	# 后面还可以改成他的预测 rating 算法
 	predictor_model = None
@@ -434,11 +435,11 @@ def main():
 		print('predictor_model is Network.')
 		logging.info('predictor_model is Network.')
 	elif args.predictor == 'fm':
-		predictor_model = FM(args.fm_feature_size + args.actor_output, args.k, args)
+		predictor_model = FM(args.fm_feature_size + args.actor_output, args.k, args, device)
 		print('predictor_model is FM.')
 		logging.info('predictor_model is FM.')
 
-	predictor = Predictor(args, predictor_model)
+	predictor = Predictor(args, predictor_model, device)
 
 	# 加载模型
 	if args.load == 'y':
