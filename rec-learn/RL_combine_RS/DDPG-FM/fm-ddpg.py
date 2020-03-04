@@ -302,7 +302,7 @@ class HistoryGenerator(object):
 				break
 		for i in range(stop_index - self.window, stop_index):
 			if i < 0:
-				history_feature = torch.zeros(23, dtype=torch.float32)
+				history_feature = torch.zeros(23, dtype=torch.float32).to(self.device)
 				history_feature[0] = uid
 			else:
 				mid = rating_list[i][0]
