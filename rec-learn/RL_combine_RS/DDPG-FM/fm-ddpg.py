@@ -16,7 +16,7 @@ from seqddpg import DDPG
 from seqddpg import Transition
 from seqddpg import ReplayMemory
 from seqddpg import OUNoise
-from myfm import FM, Net
+from myfm import FM, Net, NCF
 from myfm import Predictor
 
 
@@ -364,7 +364,7 @@ def main():
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--hw', type=int, default=10)	# history window
-	parser.add_argument('--predictor', default='net')
+	parser.add_argument('--predictor', default='ncf')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
 	parser.add_argument('--shuffle', default='y')
@@ -377,7 +377,8 @@ def main():
 	parser.add_argument('--actor_optim', default='adam')
 	parser.add_argument('--critic_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)	# sgd 时
-	parser.add_argument('--norm_layer', default='bn')	# bn/ln/none
+	parser.add_argument('--norm_layer', default='bn')			# bn/ln/none
+	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	# save/load model 的名字为 --v
 	parser.add_argument('--save', default='n')
 	parser.add_argument('--load', default='n')
@@ -411,6 +412,10 @@ def main():
 	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--hidden_0', type=int, default=256)
 	parser.add_argument('--hidden_1', type=int, default=512)
+	# NCF
+	# Note: 0:embedding, 1:user_embedding + item_embedding
+	parser.add_argument('--layers', default='32,64,512,1024,512,256')
+
 	args = parser.parse_args()
 	init_log(args)
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -438,6 +443,10 @@ def main():
 		predictor_model = FM(args.fm_feature_size + args.actor_output, args.k, args, device)
 		print('predictor_model is FM.')
 		logging.info('predictor_model is FM.')
+	elif args.predictor ==  'ncf':
+		predictor_model = NCF(args)
+		print('predictor_model is NCF.')
+		logging.info('predictor_model is NCF.')
 
 	predictor = Predictor(args, predictor_model, device)
 

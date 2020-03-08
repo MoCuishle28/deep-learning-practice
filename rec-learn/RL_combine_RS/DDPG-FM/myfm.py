@@ -95,6 +95,43 @@ class Net(nn.Module):
 		return x.clamp(min=self.args.min, max=self.args.max)
 
 
+class NCF(nn.Module):
+	def __init__(self, args):
+		super(NCF, self).__init__()
+		self.args = args
+		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
+		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
+		self.activative_func = activative_func_dict.get(args.n_act, nn.ReLU())
+
+		layer_trick = None
+		if self.args.norm_layer == 'bn':
+			layer_trick = nn.BatchNorm1d
+		elif self.args.norm_layer == 'ln':
+			layer_trick = nn.LayerNorm
+
+		params = []
+		layers = [int(x) for x in args.layers.split(',')]
+		self.embedding_layer = nn.Linear(args.fm_feature_size, layers[0])	# 给 item 做 embedding
+		for i, num in enumerate(layers[1:-1]):
+			params.append(nn.Linear(num, layers[i + 2]))
+			params.append(layer_trick(layers[i + 2]))
+			params.append(self.activative_func)
+			params.append(nn.Dropout(p=args.dropout))
+
+		params.append(nn.Linear(layers[-1], 1))
+		self.ncf = nn.Sequential(*params)
+
+
+	def forward(self, x):
+		user_embedding = x[:, :self.args.actor_output]
+		item_feature = x[:, self.args.actor_output:]
+		item_embedding = self.embedding_layer(item_feature)
+		x = torch.cat([user_embedding, item_embedding], 1)	# (batch, embedding size)
+
+		x = self.ncf(x)
+		return x.clamp(min=self.args.min, max=self.args.max)
+
+
 class Predictor(object):
 	def __init__(self, args, predictor, device):
 		super(Predictor, self).__init__()
