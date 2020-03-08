@@ -396,7 +396,7 @@ def main():
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-5)
 	parser.add_argument("--critic_lr", type=float, default=1e-3)
-	parser.add_argument('--hidden_size', type=int, default=256)
+	parser.add_argument('--hidden_size', type=int, default=512)
 	parser.add_argument('--actor_output', type=int, default=32)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--actor_tau', type=float, default=0.01)

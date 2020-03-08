@@ -124,16 +124,16 @@ class Actor(nn.Module):
 		# 也许可以试试把当前要推荐的 item feature 也考虑进去？(那就变成了输出关于user、item的embedding)
 		self.linear1 = nn.Linear(num_input, hidden_size)
 
-		self.linear2 = nn.Linear(hidden_size, hidden_size*2)
+		self.linear2 = nn.Linear(hidden_size, hidden_size//2)
 
 		if self.args.norm_layer == 'bn':
 			self.ln1 = nn.BatchNorm1d(hidden_size, affine=True)
-			self.ln2 = nn.BatchNorm1d(hidden_size*2, affine=True)
+			self.ln2 = nn.BatchNorm1d(hidden_size//2, affine=True)
 		elif self.args.norm_layer == 'ln':
 			self.ln1 = nn.LayerNorm(hidden_size, elementwise_affine=True)
-			self.ln2 = nn.LayerNorm(hidden_size*2, elementwise_affine=True)
+			self.ln2 = nn.LayerNorm(hidden_size//2, elementwise_affine=True)
 
-		self.mu = nn.Linear(hidden_size*2, actor_output)
+		self.mu = nn.Linear(hidden_size//2, actor_output)
 
 		if args.init == 'normal':
 			nn.init.normal_(self.linear1.weight.data, std=args.init_std)
@@ -161,7 +161,7 @@ class Actor(nn.Module):
 		x = self.linear2(x)
 		x = self.ln2(x) if self.args.norm_layer != 'none' else x
 
-		x = torch.tanh(x)
+		x = self.activative_func(x)
 		mu = self.mu(x)
 		return mu
 
@@ -177,16 +177,16 @@ class Critic(nn.Module):
 
 		self.linear1 = nn.Linear(num_input + actor_output, hidden_size)
 
-		self.linear2 = nn.Linear(hidden_size, hidden_size*2)
+		self.linear2 = nn.Linear(hidden_size, hidden_size//2)
 
 		if self.args.norm_layer == 'bn':
 			self.ln1 = nn.BatchNorm1d(hidden_size, affine=True)
-			self.ln2 = nn.BatchNorm1d(hidden_size*2, affine=True)
+			self.ln2 = nn.BatchNorm1d(hidden_size//2, affine=True)
 		elif self.args.norm_layer == 'ln':
 			self.ln1 = nn.LayerNorm(hidden_size, elementwise_affine=True)
-			self.ln2 = nn.LayerNorm(hidden_size*2, elementwise_affine=True)
+			self.ln2 = nn.LayerNorm(hidden_size//2, elementwise_affine=True)
 
-		self.V = nn.Linear(hidden_size*2, 1)
+		self.V = nn.Linear(hidden_size//2, 1)
 		
 		if args.init == 'normal':
 			nn.init.normal_(self.linear1.weight.data, std=args.init_std)
