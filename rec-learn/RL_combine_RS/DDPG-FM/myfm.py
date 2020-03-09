@@ -252,6 +252,8 @@ def evaluate(predictor, data, target, title='[Valid]'):
 
 def train(args, predictor, train_data, train_target, valid_data, valid_target, device):
 	rmse_list, valid_rmse_list, loss_list = [], [], []
+	pre_rmse = 99999
+	increase_time = 0	# 连续 x 次不下降
 
 	train_data_set = Data.TensorDataset(train_data, train_target)
 	train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=True)
@@ -273,7 +275,14 @@ def train(args, predictor, train_data, train_target, valid_data, valid_target, d
 
 		predictor.on_eval()	# 评估模式
 		valid_rmse = evaluate(predictor, valid_data, valid_target)
+		if valid_rmse >= pre_rmse:	# early stop
+			increase_time += 1
+		else:
+			increase_time = 0
+		pre_rmse = valid_rmse
 		valid_rmse_list.append(valid_rmse)
+		if increase_time == 3:
+			break
 
 	predictor.on_eval()	# 评估模式
 	test_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_data.npy'), dtype=torch.float32).to(device)
@@ -360,10 +369,10 @@ def main():
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/traditional-model/")
 	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/traditional-model/")
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
-	parser.add_argument('--epoch', type=int, default=100)
+	parser.add_argument('--epoch', type=int, default=20)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--predictor', default='ncf')
-	parser.add_argument('--predictor_optim', default='sgd')
+	parser.add_argument('--predictor_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--init', default='normal')
 	parser.add_argument('--kaiming_mode', default='fan_in')
