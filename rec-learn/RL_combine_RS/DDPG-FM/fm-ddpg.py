@@ -390,7 +390,7 @@ def main():
 	parser.add_argument('--init_std', type=float, default=0.1)
 	# seq model
 	parser.add_argument('--seq_input_size', type=int, default=23)
-	parser.add_argument('--seq_hidden_size', type=int, default=64)
+	parser.add_argument('--seq_hidden_size', type=int, default=128)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=64)
 	# ddpg
@@ -405,11 +405,11 @@ def main():
 	parser.add_argument('--c_act', default='relu')
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-4)
+	parser.add_argument('--n_act', default='relu')
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
 	parser.add_argument('--k', type=int, default=256)
 	# network
-	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--hidden_0', type=int, default=256)
 	parser.add_argument('--hidden_1', type=int, default=512)
 	# NCF

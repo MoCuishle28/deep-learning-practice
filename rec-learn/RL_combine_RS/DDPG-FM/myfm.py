@@ -34,28 +34,48 @@ class FM(nn.Module):
 			nn.init.xavier_normal_(self.v)
 
 
-	def forward(self, X):
+	def forward(self, x):
 		'''
-		X: (batch, feature_size)
+		x: (batch, feature_size)
 		'''
-		inter_1 = torch.mm(X, self.v)
-		inter_2 = torch.mm((X**2), (self.v**2))
-		interaction = (0.5*torch.sum((inter_1**2) - inter_2, dim=1)).reshape(X.shape[0], 1)
-		predict = self.w0 + torch.mm(X, self.w1) + interaction
+		u_one_hot = torch.zeros(x.shape[0], self.args.max_uid + 1).to(self.device)
+		m_one_hot = torch.zeros(x.shape[0], self.args.max_mid + 1).to(self.device)
+
+		uids = x[:, -self.args.fm_feature_size]
+		mids = x[:, -(self.args.fm_feature_size - 1)]
+		genres = x[:, -(self.args.fm_feature_size - 2):]
+		genres = genres.to(self.device)
+
+		uids = uids.long().view(x.shape[0], -1).to(self.device)
+		mids = mids.long().view(x.shape[0], -1).to(self.device)
+		u_one_hot.scatter_(dim=1, index=uids, value=1)
+		m_one_hot.scatter_(dim=1, index=mids, value=1)
+
+		x = torch.cat([u_one_hot, m_one_hot, genres], 1)
+
+		inter_1 = torch.mm(x, self.v)
+		inter_2 = torch.mm((x**2), (self.v**2))
+		interaction = (0.5*torch.sum((inter_1**2) - inter_2, dim=1)).reshape(x.shape[0], 1)
+		predict = self.w0 + torch.mm(x, self.w1) + interaction
 		return predict.clamp(min=self.args.min, max=self.args.max)
 
 
 class Net(nn.Module):
-	def __init__(self, input_num, hidden_num0, hidden_num1, output_num, args):
+	def __init__(self, input_num, hidden_num0, hidden_num1, output_num, args, device):
 		super(Net, self).__init__()
 		self.args = args
+		self.device = device
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
 		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
 		self.activative_func = activative_func_dict.get(args.n_act, nn.ReLU())
+		# embedding
+		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
+		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
+		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
 		self.in_layer = nn.Linear(input_num, hidden_num0)
-
 		self.hidden_layer = nn.Linear(hidden_num0, hidden_num1)
+		self.out_layer = nn.Linear(hidden_num1, output_num)
 
 		if self.args.norm_layer == 'bn':
 			self.in_norm = nn.BatchNorm1d(hidden_num0, affine=True)
@@ -64,7 +84,6 @@ class Net(nn.Module):
 			self.in_norm = nn.LayerNorm(hidden_num0, elementwise_affine=True)
 			self.hidden_norm = nn.LayerNorm(hidden_num1, elementwise_affine=True)
 
-		self.out_layer = nn.Linear(hidden_num1, output_num)
 
 		if args.init == 'normal':
 			nn.init.normal_(self.in_layer.weight.data, std=args.init_std)
@@ -83,6 +102,16 @@ class Net(nn.Module):
 
 
 	def forward(self, x):
+		uids = x[:, -self.args.fm_feature_size]
+		mids = x[:, -(self.args.fm_feature_size - 1)]
+		genres = x[:, -(self.args.fm_feature_size - 2):]
+		x = x[:, :-self.args.fm_feature_size]
+
+		uemb = self.u_embedding(uids.long().to(self.device))
+		memb = self.m_embedding(mids.long().to(self.device))
+		gemb = self.g_embedding(genres.to(self.device))
+
+		x = torch.cat([x, uemb, memb, gemb], 1).to(self.device)
 		x = self.in_layer(x)
 		x = self.in_norm(x) if self.args.norm_layer != 'none' else x
 		x = self.activative_func(x)
@@ -96,9 +125,10 @@ class Net(nn.Module):
 
 
 class NCF(nn.Module):
-	def __init__(self, args):
+	def __init__(self, args, device):
 		super(NCF, self).__init__()
 		self.args = args
+		self.device = device
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
 		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
 		self.activative_func = activative_func_dict.get(args.n_act, nn.ReLU())
@@ -111,10 +141,18 @@ class NCF(nn.Module):
 
 		params = []
 		layers = [int(x) for x in args.layers.split(',')]
-		self.embedding_layer = nn.Linear(args.fm_feature_size, layers[0])	# 给 item 做 embedding
-		for i, num in enumerate(layers[1:-1]):
-			params.append(nn.Linear(num, layers[i + 2]))
-			params.append(layer_trick(layers[i + 2]))
+		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
+		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
+		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
+
+		params.append(nn.Linear(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, layers[0]))
+		params.append(layer_trick(layers[0]))
+		params.append(self.activative_func)
+		params.append(nn.Dropout(p=args.dropout))
+
+		for i, num in enumerate(layers[:-1]):
+			params.append(nn.Linear(num, layers[i + 1]))
+			params.append(layer_trick(layers[i + 1]))
 			params.append(self.activative_func)
 			params.append(nn.Dropout(p=args.dropout))
 
@@ -123,11 +161,16 @@ class NCF(nn.Module):
 
 
 	def forward(self, x):
-		user_embedding = x[:, :self.args.actor_output]
-		item_feature = x[:, self.args.actor_output:]
-		item_embedding = self.embedding_layer(item_feature)
-		x = torch.cat([user_embedding, item_embedding], 1)	# (batch, embedding size)
+		uids = x[:, -self.args.fm_feature_size]
+		mids = x[:, -(self.args.fm_feature_size - 1)]
+		genres = x[:, -(self.args.fm_feature_size - 2):]
+		rl_user_embedding = x[:, :-self.args.fm_feature_size]
 
+		uemb = self.u_embedding(uids.long().to(self.device))
+		memb = self.m_embedding(mids.long().to(self.device))
+		gemb = self.g_embedding(genres.to(self.device))
+
+		x = torch.cat([rl_user_embedding, uemb, memb, gemb], 1)	# (batch, embedding size)
 		x = self.ncf(x)
 		return x.clamp(min=self.args.min, max=self.args.max)
 
@@ -207,12 +250,8 @@ def evaluate(predictor, data, target, title='[Valid]'):
 	return rmse
 
 
-def train(args, predictor, train_data, train_target, valid_data, valid_target, test_data, test_target):
+def train(args, predictor, train_data, train_target, valid_data, valid_target):
 	rmse_list, valid_rmse_list, loss_list = [], [], []
-
-	train_data = Standardization_uid_mid(train_data)
-	valid_data = Standardization_uid_mid(valid_data)
-	test_data = Standardization_uid_mid(test_data)
 
 	train_data_set = Data.TensorDataset(train_data, train_target)
 	train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=True)
@@ -237,6 +276,8 @@ def train(args, predictor, train_data, train_target, valid_data, valid_target, t
 		valid_rmse_list.append(valid_rmse)
 
 	predictor.on_eval()	# 评估模式
+	test_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_data.npy'), dtype=torch.float32).to(device)
+	test_target = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_target.npy'), dtype=torch.float32).to(device)
 	evaluate(predictor, test_data, test_target, title='[Test]')
 	return rmse_list, valid_rmse_list, loss_list
 
@@ -321,7 +362,7 @@ def main():
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--predictor', default='fm')
+	parser.add_argument('--predictor', default='ncf')
 	parser.add_argument('--predictor_optim', default='sgd')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--init', default='normal')
@@ -339,11 +380,21 @@ def main():
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
-	parser.add_argument('--k', type=int, default=256)
+	parser.add_argument('--k', type=int, default=8)
 	# network
+	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
+	parser.add_argument('--u_emb_dim', type=int, default=128)
+	parser.add_argument('--max_mid', type=int, default=193609)	# 1~193609
+	parser.add_argument('--m_emb_dim', type=int, default=128)
+	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
+
 	parser.add_argument('--n_act', default='relu')
-	parser.add_argument('--hidden_0', type=int, default=256)
+	parser.add_argument('--hidden_0', type=int, default=1024)
 	parser.add_argument('--hidden_1', type=int, default=512)
+	# NCF Note: 0:embedding, 1:user_embedding + item_embedding
+	parser.add_argument('--layers', default='1024,512,256,128')
+	parser.add_argument('--actor_output', type=int, default=0)
+	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	args = parser.parse_args()
 
 	init_log(args)
@@ -354,11 +405,15 @@ def main():
 	if args.predictor == 'fm':
 		print('Predictor is FM.')
 		logging.info('Predictor is FM.')
-		model = FM(args.fm_feature_size, args.k, args, device)
+		model = FM(args.max_uid + 1 + args.max_mid + 1 + args.fm_feature_size - 2, args.k, args, device)
 	elif args.predictor == 'net':
 		print('Predictor is Network.')
 		logging.info('Predictor is Network.')
-		model = Net(args.fm_feature_size, args.hidden_0, args.hidden_1, 1, args)
+		model = Net(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, args.hidden_0, args.hidden_1, 1, args, device)
+	elif args.predictor == 'ncf':
+		print('Predictor is NCF.')
+		logging.info('Predictor is NCF.')
+		model = NCF(args, device)		
 
 	# 加载模型
 	if args.load == 'y':
@@ -367,15 +422,14 @@ def main():
 
 	if args.recon == 'y':	# 打乱重构数据, 防止出现先验概率误差太大问题
 		data_reconstruct(args)
+	# [uid, mid, genres]
 	train_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'train_data.npy'), dtype=torch.float32).to(device)
 	train_target = torch.tensor(np.load(args.base_log_dir + 'data/' + 'train_target.npy'), dtype=torch.float32).to(device)
 	valid_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'valid_data.npy'), dtype=torch.float32).to(device)
 	valid_target = torch.tensor(np.load(args.base_log_dir + 'data/' + 'valid_target.npy'), dtype=torch.float32).to(device)
-	test_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_data.npy'), dtype=torch.float32).to(device)
-	test_target = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_target.npy'), dtype=torch.float32).to(device)
 
 	predictor = Predictor(args, model, device)
-	rmse_list, valid_rmse_list, loss_list = train(args, predictor, train_data, train_target, valid_data, valid_target, test_data, test_target)
+	rmse_list, valid_rmse_list, loss_list = train(args, predictor, train_data, train_target, valid_data, valid_target)
 
 	plot_result(args, rmse_list, valid_rmse_list, loss_list)
 
