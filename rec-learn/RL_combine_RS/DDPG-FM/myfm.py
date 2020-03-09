@@ -250,7 +250,7 @@ def evaluate(predictor, data, target, title='[Valid]'):
 	return rmse
 
 
-def train(args, predictor, train_data, train_target, valid_data, valid_target):
+def train(args, predictor, train_data, train_target, valid_data, valid_target, device):
 	rmse_list, valid_rmse_list, loss_list = [], [], []
 
 	train_data_set = Data.TensorDataset(train_data, train_target)
@@ -429,7 +429,7 @@ def main():
 	valid_target = torch.tensor(np.load(args.base_log_dir + 'data/' + 'valid_target.npy'), dtype=torch.float32).to(device)
 
 	predictor = Predictor(args, model, device)
-	rmse_list, valid_rmse_list, loss_list = train(args, predictor, train_data, train_target, valid_data, valid_target)
+	rmse_list, valid_rmse_list, loss_list = train(args, predictor, train_data, train_target, valid_data, valid_target, device)
 
 	plot_result(args, rmse_list, valid_rmse_list, loss_list)
 

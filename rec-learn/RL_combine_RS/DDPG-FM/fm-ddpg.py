@@ -406,15 +406,21 @@ def main():
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-4)
 	parser.add_argument('--n_act', default='relu')
+	# embedding
+	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
+	parser.add_argument('--u_emb_dim', type=int, default=128)
+	parser.add_argument('--max_mid', type=int, default=193609)	# 1~193609
+	parser.add_argument('--m_emb_dim', type=int, default=128)
+	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
-	parser.add_argument('--k', type=int, default=256)
+	parser.add_argument('--k', type=int, default=8)
 	# network
-	parser.add_argument('--hidden_0', type=int, default=256)
+	parser.add_argument('--hidden_0', type=int, default=1024)
 	parser.add_argument('--hidden_1', type=int, default=512)
 	# NCF
 	# Note: 0:embedding, 1:user_embedding + item_embedding
-	parser.add_argument('--layers', default='32,64,512,1024,512,256')
+	parser.add_argument('--layers', default='1024,512,256,128')
 
 	args = parser.parse_args()
 	init_log(args)
@@ -436,15 +442,15 @@ def main():
 	# 后面还可以改成他的预测 rating 算法
 	predictor_model = None
 	if args.predictor == 'net':
-		predictor_model = Net(args.fm_feature_size + args.actor_output, args.hidden_0, args.hidden_1, 1, args)
+		predictor_model = Net(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.hidden_0, args.hidden_1, 1, args, device)
 		print('predictor_model is Network.')
 		logging.info('predictor_model is Network.')
 	elif args.predictor == 'fm':
-		predictor_model = FM(args.fm_feature_size + args.actor_output, args.k, args, device)
+		predictor_model = FM(args.max_uid + 1 + args.max_mid + 1 + args.fm_feature_size - 2 + args.actor_output, args.k, args, device)
 		print('predictor_model is FM.')
 		logging.info('predictor_model is FM.')
 	elif args.predictor ==  'ncf':
-		predictor_model = NCF(args)
+		predictor_model = NCF(args, device)
 		print('predictor_model is NCF.')
 		logging.info('predictor_model is NCF.')
 
@@ -465,7 +471,7 @@ def main():
 		print('----------------------------------pretrain end----------------------------------')
 		logging.info('pre-train.')
 	else:
-		print('no pretrain')
+		print('no pre-train')
 		logging.info('no pre-train.')
 	algorithm.train()
 
