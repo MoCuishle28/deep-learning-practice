@@ -45,40 +45,11 @@ class Algorithm(object):
 		self.valid_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
 		self.test_data = torch.tensor(data_list.pop(0), dtype=torch.float32).to(self.device)
 		self.test_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
-		self.process_data()
 
 		train_data_set = Data.TensorDataset(self.train_data, self.train_target)
 		shuffle = True if args.shuffle == 'y' else False
 		print('shuffle train data...{}'.format(shuffle))
 		self.train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=shuffle)
-
-
-	def process_data(self):
-		# 将 uid, mid 加到前两维 然后标准化 (后续记得避开前两维再输入到 predictor)
-		train_data, valid_data, test_data = [], [], []
-		for x0 in self.train_data:
-			train_data.append(torch.cat([torch.tensor([x0[0]]).to(self.device), torch.tensor([x0[1]]).to(self.device), x0]))
-		for x1, x2 in zip(self.valid_data, self.test_data):
-			valid_data.append(torch.cat([torch.tensor([x1[0]]).to(self.device), torch.tensor([x1[1]]).to(self.device), x1]))
-			test_data.append(torch.cat([torch.tensor([x2[0]]).to(self.device), torch.tensor([x2[1]]).to(self.device), x2]))
-
-		self.train_data = self.Standardization_uid_mid(torch.stack(train_data))
-		self.valid_data = self.Standardization_uid_mid(torch.stack(valid_data))
-		self.test_data = self.Standardization_uid_mid(torch.stack(test_data))
-
-
-	def Standardization_uid_mid(self, data):
-		uid_mean = data[:, 0].mean()
-		uid_std = data[:, 0].std()
-		mid_mean = data[:, 1].mean()
-		mid_std = data[:, 1].std()
-		data[:, 2] = (data[:, 2] - uid_mean) / uid_std
-		data[:, 3] = (data[:, 3] - mid_mean) / mid_std
-		return data
-
-
-	def Normalize_uid_mid(self, data):
-		pass
 
 
 	def get_rmse(self, prediction, target):
@@ -98,8 +69,7 @@ class Algorithm(object):
 			state = state.reshape((-1, state.shape[0], state.shape[1])).to(self.device)
 
 			action = self.agent.select_action(state, action_noise=None)	# 不加噪声
-			# raw_feature 避开前两维没有标准化的 uid、mid
-			input_data.append(torch.cat([action.squeeze(), raw_feature[2:]]))
+			input_data.append(torch.cat([action.squeeze(), raw_feature]))
 
 		input_data = torch.stack(input_data).to(self.device)
 		prediction, predictor_loss = self.predictor.predict(input_data, target)
@@ -136,8 +106,8 @@ class Algorithm(object):
 			next_state = next_state.reshape((-1, next_state.shape[0], next_state.shape[1])).to(self.device)
 
 			action = self.agent.select_action(state, action_noise=self.ounoise)
-			# action (1, 32) -> (32), raw_feature 避开前两维没有标准化的 uid、mid
-			input_data = torch.cat([action.squeeze(), raw_feature[2:]]).to(self.device)
+			# action (1, 32) -> (32)
+			input_data = torch.cat([action.squeeze(), raw_feature]).to(self.device)
 			# input_data (32+22) -> (1, 32+22)
 			input_data = input_data.reshape((1, input_data.shape[0])).to(self.device)
 			# one_target (1, 1) 即:(batch=1, 1)
@@ -153,7 +123,6 @@ class Algorithm(object):
 				reward = torch.tensor([-(self.get_rmse(prediction, one_target) * self.args.alpha)], dtype=torch.float32).to(self.device)
 
 			self.memory.push(state, action, mask, next_state, reward)
-
 
 
 	def train(self):
@@ -182,8 +151,7 @@ class Algorithm(object):
 					state = state.reshape((-1, state.shape[0], state.shape[1])).to(self.device)
 
 					action = self.agent.select_action(state, action_noise=None)	# 不加噪声
-					# raw_feature 避开前两维没有标准化的 uid、mid
-					input_data.append(torch.cat([action.squeeze(), raw_feature[2:]]).to(self.device))
+					input_data.append(torch.cat([action.squeeze(), raw_feature]).to(self.device))
 
 				input_data = torch.stack(input_data).to(self.device)
 				prediction, predictor_loss = self.predictor.train(input_data, target)
@@ -271,27 +239,17 @@ class HistoryGenerator(object):
 
 	def compute_mean_std(self):
 		rating_list = []
-		uid_list = []
-		mid_set = set()
 		for uid, behavior_list in self.users_rating.items():
-			uid_list.append(uid)
 			for pair in behavior_list:
 				rating_list.append(pair[-1])
-				mid_set.add(pair[0])
-
-		uid_tensor = torch.tensor(uid_list, dtype=torch.float32).to(self.device)
-		self.uid_mean, self.uid_std = uid_tensor.mean(), uid_tensor.std()
 
 		rating_tensor = torch.tensor(rating_list, dtype=torch.float32).to(self.device)
 		self.rating_mean, self.rating_std = rating_tensor.mean(), rating_tensor.std()
 
-		mid_tensor = torch.tensor(list(mid_set), dtype=torch.float32).to(self.device)
-		self.mid_mean, self.mid_std = mid_tensor.mean(), mid_tensor.std()
-
 
 	def get_history(self, uid, curr_mid):
 		'''
-		return: tensor (window, feature size:23 dim)
+		return: tensor (window, feature size:23 dim -> [uid, mid, genre, rating])
 		'''
 		ret_data = []
 		rating_list = self.users_rating[uid]
@@ -313,8 +271,6 @@ class HistoryGenerator(object):
 					mfeature, 
 					torch.tensor([rating], dtype=torch.float32).to(self.device)]).to(self.device)
 
-			history_feature[0] = (history_feature[0] - self.uid_mean) / self.uid_std
-			history_feature[1] = (history_feature[1] - self.mid_mean) / self.mid_std
 			history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std
 			ret_data.append(history_feature)
 		return torch.stack(ret_data).to(self.device)
@@ -322,7 +278,7 @@ class HistoryGenerator(object):
 
 	def get_next_history(self, curr_history, new_mid, curr_uid, rating):
 		'''
-		这个 state 的转移方式没有考虑 action(即: trasition probability = 1) TODO
+		这个 state 的转移方式没有考虑 action(即: trasition probability = 1)
 		curr_history: tensor (window, feature size)
 		return: tensor (window, feature size)
 		'''
@@ -333,8 +289,6 @@ class HistoryGenerator(object):
 		rating = torch.tensor([rating], dtype=torch.float32).to(self.device)
 		
 		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32).to(self.device), mfeature, rating]).to(self.device)
-		history_feature[0] = (history_feature[0] - self.uid_mean) / self.uid_std
-		history_feature[1] = (history_feature[1] - self.mid_mean) / self.mid_std
 		history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std
 		curr_history.append(history_feature)
 		return torch.tensor(curr_history).to(self.device)
@@ -364,7 +318,7 @@ def main():
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--hw', type=int, default=10)	# history window
-	parser.add_argument('--predictor', default='ncf')
+	parser.add_argument('--predictor', default='net')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
 	parser.add_argument('--shuffle', default='y')
@@ -389,15 +343,14 @@ def main():
 	parser.add_argument('--kaiming_func', default='relu')
 	parser.add_argument('--init_std', type=float, default=0.1)
 	# seq model
-	parser.add_argument('--seq_input_size', type=int, default=23)
-	parser.add_argument('--seq_hidden_size', type=int, default=128)
+	parser.add_argument('--seq_hidden_size', type=int, default=512)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
-	parser.add_argument('--seq_output_size', type=int, default=64)
+	parser.add_argument('--seq_output_size', type=int, default=128)
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-5)
 	parser.add_argument("--critic_lr", type=float, default=1e-3)
-	parser.add_argument('--hidden_size', type=int, default=512)
-	parser.add_argument('--actor_output', type=int, default=32)
+	parser.add_argument('--hidden_size', type=int, default=1024)
+	parser.add_argument('--actor_output', type=int, default=128)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--actor_tau', type=float, default=0.01)
 	parser.add_argument('--critic_tau', type=float, default=0.01)
@@ -420,7 +373,7 @@ def main():
 	parser.add_argument('--hidden_1', type=int, default=512)
 	# NCF
 	# Note: 0:embedding, 1:user_embedding + item_embedding
-	parser.add_argument('--layers', default='1024,512,256,128')
+	parser.add_argument('--layers', default='1024,512,256')
 
 	args = parser.parse_args()
 	init_log(args)
@@ -442,7 +395,7 @@ def main():
 	# 后面还可以改成他的预测 rating 算法
 	predictor_model = None
 	if args.predictor == 'net':
-		predictor_model = Net(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.hidden_0, args.hidden_1, 1, args, device)
+		predictor_model = Net(args.m_emb_dim + args.g_emb_dim + args.actor_output, args.hidden_0, args.hidden_1, 1, args, device)
 		print('predictor_model is Network.')
 		logging.info('predictor_model is Network.')
 	elif args.predictor == 'fm':

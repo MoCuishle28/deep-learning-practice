@@ -75,10 +75,15 @@ class SeqModel(nn.Module):
 	def __init__(self, args, device):
 		super(SeqModel, self).__init__()
 		self.device = device
-		self.seq_input_size = args.seq_input_size
+		self.seq_input_size = args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + 1	# 1是 rating
 		self.hidden_size = args.seq_hidden_size
 		self.seq_layer_num = args.seq_layer_num
 		self.seq_output_size = args.seq_output_size
+
+		# embedding layer
+		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
+		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
+		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 		# batch_first = True 则输入输出的数据格式为 (batch, seq, feature)
 		self.gru = nn.GRU(self.seq_input_size, self.hidden_size, self.seq_layer_num, batch_first=True)
 		self.args = args
@@ -88,20 +93,22 @@ class SeqModel(nn.Module):
 			self.ln1 = nn.LayerNorm(self.hidden_size, elementwise_affine=True)
 		self.fc = nn.Linear(self.hidden_size, self.seq_output_size)
 
-		if args.init == 'normal':
-			nn.init.normal_(self.fc.weight.data, std=args.init_std)
-			nn.init.normal_(self.fc.bias.data, std=args.init_std)
-		elif args.init == 'kaiming':
-			nn.init.kaiming_normal_(self.fc.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
-		else:
-			print('seq_model default init')
-
 
 	def forward(self, x):
 		'''
 		x: (batch, seq_len, feature_size)
-		return: (batch, self.seq_output_size)
+		return: (batch, args.seq_output_size)
 		'''
+		uids = x[:, :, -(self.args.fm_feature_size + 1)]
+		mids = x[:, :, -((self.args.fm_feature_size + 1) - 1)]
+		genres = x[:, :, -((self.args.fm_feature_size + 1) - 2):-1]
+		rating = x[:, :, -1].view(x.shape[0], x.shape[1], -1)
+
+		uemb = self.u_embedding(uids.long().to(self.device))
+		memb = self.m_embedding(mids.long().to(self.device))
+		gemb = self.g_embedding(genres.to(self.device))
+		x = torch.cat([uemb, memb, gemb, rating], -1).to(self.device)
+
 		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size).to(self.device)
 		
 		out, _ = self.gru(x, h0)  # out: tensor of shape (batch_size, seq_length, hidden_size)

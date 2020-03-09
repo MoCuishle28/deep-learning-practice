@@ -101,17 +101,21 @@ class Net(nn.Module):
 			print('Net default init')
 
 
-	def forward(self, x):
-		uids = x[:, -self.args.fm_feature_size]
+	def forward(self, x, without_rl=False):
 		mids = x[:, -(self.args.fm_feature_size - 1)]
 		genres = x[:, -(self.args.fm_feature_size - 2):]
-		x = x[:, :-self.args.fm_feature_size]
 
-		uemb = self.u_embedding(uids.long().to(self.device))
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
-		x = torch.cat([x, uemb, memb, gemb], 1).to(self.device)
+		if without_rl:
+			uids = x[:, -self.args.fm_feature_size]
+			uemb = self.u_embedding(uids.long().to(self.device))
+			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
+		else:
+			x = x[:, :-self.args.fm_feature_size]	# 有 RL 部分的输出作为 user embedding
+			x = torch.cat([x, memb, gemb], 1).to(self.device)
+
 		x = self.in_layer(x)
 		x = self.in_norm(x) if self.args.norm_layer != 'none' else x
 		x = self.activative_func(x)
@@ -160,17 +164,20 @@ class NCF(nn.Module):
 		self.ncf = nn.Sequential(*params)
 
 
-	def forward(self, x):
-		uids = x[:, -self.args.fm_feature_size]
+	def forward(self, x, without_rl=False):
 		mids = x[:, -(self.args.fm_feature_size - 1)]
 		genres = x[:, -(self.args.fm_feature_size - 2):]
-		rl_user_embedding = x[:, :-self.args.fm_feature_size]
 
-		uemb = self.u_embedding(uids.long().to(self.device))
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
-		x = torch.cat([rl_user_embedding, uemb, memb, gemb], 1)	# (batch, embedding size)
+		if without_rl:
+			uids = x[:, -self.args.fm_feature_size]
+			uemb = self.u_embedding(uids.long().to(self.device))
+			x = torch.cat([uemb, memb, gemb], 1)	# (batch, embedding size)
+		else:
+			rl_user_embedding = x[:, :-self.args.fm_feature_size]
+			x = torch.cat([rl_user_embedding, memb, gemb], 1)
 		x = self.ncf(x)
 		return x.clamp(min=self.args.min, max=self.args.max)
 
@@ -190,9 +197,9 @@ class Predictor(object):
 		self.criterion = nn.MSELoss()
 
 
-	def predict(self, input_data, target):
-		target = target.reshape((target.shape[0], 1))
-		prediction = self.predictor(input_data)
+	def predict(self, input_data, target, without_rl=False):
+		target = target.reshape((target.shape[0], 1)).to(self.device)
+		prediction = self.predictor(input_data, without_rl)
 		loss = self.criterion(prediction, target)
 		return prediction, loss
 
@@ -205,8 +212,8 @@ class Predictor(object):
 		self.predictor.eval()
 
 
-	def train(self, input_data, target):
-		prediction = self.predictor(input_data)
+	def train(self, input_data, target, without_rl=False):
+		prediction = self.predictor(input_data, without_rl)
 		loss = self.criterion(prediction, target.unsqueeze(dim=1))
 		self.optim.zero_grad()
 		loss.backward()
@@ -243,7 +250,7 @@ def Standardization_uid_mid(data):
 
 
 def evaluate(predictor, data, target, title='[Valid]'):
-	prediction, loss = predictor.predict(data, target)
+	prediction, loss = predictor.predict(data, target, without_rl=True)
 	rmse = get_rmse(prediction, target)
 	print(title + ' loss:{:.5}, RMSE:{:.5}'.format(loss.item(), rmse))
 	logging.info(title + ' loss:{:.5}, RMSE:{:.5}'.format(loss.item(), rmse))
@@ -261,7 +268,7 @@ def train(args, predictor, train_data, train_target, valid_data, valid_target, d
 	for epoch in range(args.epoch):
 		predictor.on_train()	# 训练模式
 		for i_batch, (data, target) in enumerate(train_data_loader):
-			prediction, loss = predictor.train(data, target)
+			prediction, loss = predictor.train(data, target, without_rl=True)
 			rmse = get_rmse(prediction, target)
 			
 			if (i_batch + 1) % 50 == 0:
@@ -281,7 +288,7 @@ def train(args, predictor, train_data, train_target, valid_data, valid_target, d
 			increase_time = 0
 		pre_rmse = valid_rmse
 		valid_rmse_list.append(valid_rmse)
-		if increase_time == 3:
+		if increase_time >= args.early_stop:
 			break
 
 	predictor.on_eval()	# 评估模式
@@ -371,7 +378,7 @@ def main():
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
 	parser.add_argument('--epoch', type=int, default=20)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--predictor', default='ncf')
+	parser.add_argument('--predictor', default='net')
 	parser.add_argument('--predictor_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--init', default='normal')
@@ -385,6 +392,7 @@ def main():
 	parser.add_argument('--show', default='n')	# show pic
 	parser.add_argument('--recon', default='n')
 	parser.add_argument('--norm_layer', default='bn')	# bn/ln/none
+	parser.add_argument('--early_stop', type=int, default=5)
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM
@@ -401,7 +409,7 @@ def main():
 	parser.add_argument('--hidden_0', type=int, default=1024)
 	parser.add_argument('--hidden_1', type=int, default=512)
 	# NCF Note: 0:embedding, 1:user_embedding + item_embedding
-	parser.add_argument('--layers', default='1024,512,256,128')
+	parser.add_argument('--layers', default='1024,512,256')
 	parser.add_argument('--actor_output', type=int, default=0)
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	args = parser.parse_args()
