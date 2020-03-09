@@ -129,7 +129,7 @@ class Net(nn.Module):
 
 
 class NCF(nn.Module):
-	def __init__(self, args, device):
+	def __init__(self, args, input_hidden_size, device):
 		super(NCF, self).__init__()
 		self.args = args
 		self.device = device
@@ -149,7 +149,7 @@ class NCF(nn.Module):
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
 		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
-		params.append(nn.Linear(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, layers[0]))
+		params.append(nn.Linear(input_hidden_size, layers[0]))
 		params.append(layer_trick(layers[0]))
 		params.append(self.activative_func)
 		params.append(nn.Dropout(p=args.dropout))
@@ -408,7 +408,7 @@ def main():
 	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--hidden_0', type=int, default=1024)
 	parser.add_argument('--hidden_1', type=int, default=512)
-	# NCF Note: 0:embedding, 1:user_embedding + item_embedding
+	# NCF
 	parser.add_argument('--layers', default='1024,512,256')
 	parser.add_argument('--actor_output', type=int, default=0)
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
@@ -430,7 +430,7 @@ def main():
 	elif args.predictor == 'ncf':
 		print('Predictor is NCF.')
 		logging.info('Predictor is NCF.')
-		model = NCF(args, device)		
+		model = NCF(args, args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, device)		
 
 	# 加载模型
 	if args.load == 'y':

@@ -403,7 +403,7 @@ def main():
 		print('predictor_model is FM.')
 		logging.info('predictor_model is FM.')
 	elif args.predictor ==  'ncf':
-		predictor_model = NCF(args, device)
+		predictor_model = NCF(args, args.actor_output + args.m_emb_dim + args.g_emb_dim, device)
 		print('predictor_model is NCF.')
 		logging.info('predictor_model is NCF.')
 
