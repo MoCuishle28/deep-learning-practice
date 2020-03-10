@@ -338,12 +338,9 @@ def main():
 	parser.add_argument('--load', default='n')
 	parser.add_argument('--show_pic', default='n')
 	# init weight
-	parser.add_argument('--init', default='def')
-	parser.add_argument('--kaiming_mode', default='fan_in')
-	parser.add_argument('--kaiming_func', default='relu')
 	parser.add_argument('--init_std', type=float, default=0.1)
 	# seq model
-	parser.add_argument('--seq_hidden_size', type=int, default=512)
+	parser.add_argument('--seq_hidden_size', type=int, default=1024)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=128)
 	# ddpg
@@ -352,8 +349,8 @@ def main():
 	parser.add_argument('--hidden_size', type=int, default=1024)
 	parser.add_argument('--actor_output', type=int, default=128)
 	parser.add_argument('--gamma', type=float, default=0.99)
-	parser.add_argument('--actor_tau', type=float, default=0.01)
-	parser.add_argument('--critic_tau', type=float, default=0.01)
+	parser.add_argument('--actor_tau', type=float, default=0.1)
+	parser.add_argument('--critic_tau', type=float, default=0.1)
 	parser.add_argument('--a_act', default='relu')
 	parser.add_argument('--c_act', default='relu')
 	# predictor

@@ -29,14 +29,9 @@ class FM(nn.Module):
 		# 不加初始化会全 0
 		self.v = nn.Parameter(torch.empty(feature_size, k, dtype=torch.float32).to(self.device))
 
-		if args.init == 'normal':
-			nn.init.normal_(self.w0, std=args.init_std)
-			nn.init.normal_(self.w1, std=args.init_std)
-			nn.init.normal_(self.v, std=args.init_std)
-		else:
-			nn.init.normal_(self.w0, std=args.init_std)
-			nn.init.xavier_normal_(self.w1)
-			nn.init.xavier_normal_(self.v)
+		nn.init.normal_(self.w0, std=args.init_std)
+		nn.init.xavier_normal_(self.w1)
+		nn.init.xavier_normal_(self.v)
 
 
 	def forward(self, x, without_rl=False):
@@ -87,22 +82,6 @@ class Net(nn.Module):
 		elif self.args.norm_layer == 'ln':
 			self.in_norm = nn.LayerNorm(hidden_num0, elementwise_affine=True)
 			self.hidden_norm = nn.LayerNorm(hidden_num1, elementwise_affine=True)
-
-
-		if args.init == 'normal':
-			nn.init.normal_(self.in_layer.weight.data, std=args.init_std)
-			nn.init.normal_(self.hidden_layer.weight.data, std=args.init_std)
-			nn.init.normal_(self.out_layer.weight.data, std=args.init_std)
-
-			nn.init.normal_(self.in_layer.bias.data, std=args.init_std)
-			nn.init.normal_(self.hidden_layer.bias.data, std=args.init_std)
-			nn.init.normal_(self.out_layer.bias.data, std=args.init_std)
-		elif args.init == 'kaiming':
-			nn.init.kaiming_normal_(self.in_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
-			nn.init.kaiming_normal_(self.hidden_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
-			nn.init.kaiming_normal_(self.out_layer.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
-		else:
-			print('Net default init')
 
 
 	def forward(self, x, without_rl=False):

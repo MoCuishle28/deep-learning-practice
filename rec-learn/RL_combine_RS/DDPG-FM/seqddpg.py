@@ -142,21 +142,6 @@ class Actor(nn.Module):
 
 		self.mu = nn.Linear(hidden_size//2, actor_output)
 
-		if args.init == 'normal':
-			nn.init.normal_(self.linear1.weight.data, std=args.init_std)
-			nn.init.normal_(self.linear2.weight.data, std=args.init_std)
-			nn.init.normal_(self.mu.weight.data, std=args.init_std)
-
-			nn.init.normal_(self.linear1.bias.data, std=args.init_std)
-			nn.init.normal_(self.linear2.bias.data, std=args.init_std)
-			nn.init.normal_(self.mu.bias.data, std=args.init_std)
-		elif args.init == 'kaiming':
-			nn.init.kaiming_normal_(self.linear1.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
-			nn.init.kaiming_normal_(self.linear2.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
-			nn.init.kaiming_normal_(self.mu.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
-		else:
-			print('actor default init')
-
 
 	def forward(self, inputs):
 		x = inputs
@@ -194,21 +179,6 @@ class Critic(nn.Module):
 			self.ln2 = nn.LayerNorm(hidden_size//2, elementwise_affine=True)
 
 		self.V = nn.Linear(hidden_size//2, 1)
-		
-		if args.init == 'normal':
-			nn.init.normal_(self.linear1.weight.data, std=args.init_std)
-			nn.init.normal_(self.linear2.weight.data, std=args.init_std)
-			nn.init.normal_(self.V.weight.data, std=args.init_std)
-
-			nn.init.normal_(self.linear1.bias.data, std=args.init_std)
-			nn.init.normal_(self.linear2.bias.data, std=args.init_std)
-			nn.init.normal_(self.V.bias.data, std=args.init_std)
-		elif args.init == 'kaiming':
-			nn.init.kaiming_normal_(self.linear1.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
-			nn.init.kaiming_normal_(self.linear2.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
-			nn.init.kaiming_normal_(self.V.weight.data, mode=args.kaiming_mode, nonlinearity=args.kaiming_func)
-		else:
-			print('critic default init')
 
 
 	def forward(self, inputs, actions):
