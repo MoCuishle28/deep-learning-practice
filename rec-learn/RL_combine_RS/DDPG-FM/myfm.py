@@ -16,6 +16,11 @@ class FM(nn.Module):
 		super(FM, self).__init__()
 		self.device = device
 		self.args = args
+
+		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
+		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
+		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
+
 		self.w0 = nn.Parameter(torch.empty(1, dtype=torch.float32).to(self.device))
 
 		# 不加初始化会全 0
@@ -34,24 +39,23 @@ class FM(nn.Module):
 			nn.init.xavier_normal_(self.v)
 
 
-	def forward(self, x):
+	def forward(self, x, without_rl=False):
 		'''
 		x: (batch, feature_size)
 		'''
-		u_one_hot = torch.zeros(x.shape[0], self.args.max_uid + 1).to(self.device)
-		m_one_hot = torch.zeros(x.shape[0], self.args.max_mid + 1).to(self.device)
-
-		uids = x[:, -self.args.fm_feature_size]
 		mids = x[:, -(self.args.fm_feature_size - 1)]
 		genres = x[:, -(self.args.fm_feature_size - 2):]
-		genres = genres.to(self.device)
 
-		uids = uids.long().view(x.shape[0], -1).to(self.device)
-		mids = mids.long().view(x.shape[0], -1).to(self.device)
-		u_one_hot.scatter_(dim=1, index=uids, value=1)
-		m_one_hot.scatter_(dim=1, index=mids, value=1)
+		memb = self.m_embedding(mids.long().to(self.device))
+		gemb = self.g_embedding(genres.to(self.device))
 
-		x = torch.cat([u_one_hot, m_one_hot, genres], 1)
+		if without_rl:
+			uids = x[:, -self.args.fm_feature_size]
+			uemb = self.u_embedding(uids.long().to(self.device))
+			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
+		else:
+			x = x[:, :-self.args.fm_feature_size]	# 有 RL 部分的输出作为 user embedding
+			x = torch.cat([x, memb, gemb], 1).to(self.device)
 
 		inter_1 = torch.mm(x, self.v)
 		inter_2 = torch.mm((x**2), (self.v**2))
@@ -422,7 +426,7 @@ def main():
 	if args.predictor == 'fm':
 		print('Predictor is FM.')
 		logging.info('Predictor is FM.')
-		model = FM(args.max_uid + 1 + args.max_mid + 1 + args.fm_feature_size - 2, args.k, args, device)
+		model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, args.k, args, device)
 	elif args.predictor == 'net':
 		print('Predictor is Network.')
 		logging.info('Predictor is Network.')

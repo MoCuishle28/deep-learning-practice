@@ -399,7 +399,7 @@ def main():
 		print('predictor_model is Network.')
 		logging.info('predictor_model is Network.')
 	elif args.predictor == 'fm':
-		predictor_model = FM(args.max_uid + 1 + args.max_mid + 1 + args.fm_feature_size - 2 + args.actor_output, args.k, args, device)
+		predictor_model = FM(args.m_emb_dim + args.g_emb_dim + args.actor_output, args.k, args, device)
 		print('predictor_model is FM.')
 		logging.info('predictor_model is FM.')
 	elif args.predictor ==  'ncf':
