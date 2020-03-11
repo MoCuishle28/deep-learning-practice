@@ -85,18 +85,19 @@ class Net(nn.Module):
 
 
 	def forward(self, x, without_rl=False):
+		uids = x[:, -self.args.fm_feature_size]
 		mids = x[:, -(self.args.fm_feature_size - 1)]
 		genres = x[:, -(self.args.fm_feature_size - 2):]
 
+		uemb = self.u_embedding(uids.long().to(self.device))
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
 		if without_rl:
-			uids = x[:, -self.args.fm_feature_size]
-			uemb = self.u_embedding(uids.long().to(self.device))
 			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
 		else:
-			x = x[:, :-self.args.fm_feature_size]	# 有 RL 部分的输出作为 user embedding
+			x = x[:, :-self.args.fm_feature_size]
+			x = x * uemb 	# RL 的输出作为 user embedding 的增强(如何增强？先尝试乘 TODO)
 			x = torch.cat([x, memb, gemb], 1).to(self.device)
 
 		x = self.in_layer(x)
@@ -133,13 +134,15 @@ class NCF(nn.Module):
 		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
 		params.append(nn.Linear(input_hidden_size, layers[0]))
-		params.append(layer_trick(layers[0]))
+		if layer_trick != None:
+			params.append(layer_trick(layers[0]))
 		params.append(self.activative_func)
 		params.append(nn.Dropout(p=args.dropout))
 
 		for i, num in enumerate(layers[:-1]):
 			params.append(nn.Linear(num, layers[i + 1]))
-			params.append(layer_trick(layers[i + 1]))
+			if layer_trick != None:
+				params.append(layer_trick(layers[i + 1]))
 			params.append(self.activative_func)
 			params.append(nn.Dropout(p=args.dropout))
 
