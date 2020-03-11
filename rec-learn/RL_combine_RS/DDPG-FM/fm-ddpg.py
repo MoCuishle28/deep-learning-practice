@@ -241,6 +241,7 @@ class HistoryGenerator(object):
 		# self.users_has_clicked = load_obj('users_has_clicked')	# uid:{mid, mid, ...}
 		self.window = args.hw
 		self.compute_mean_std()
+		self.build_index()
 
 
 	def compute_mean_std(self):
@@ -253,17 +254,27 @@ class HistoryGenerator(object):
 		self.rating_mean, self.rating_std = rating_tensor.mean(), rating_tensor.std()
 
 
+	def build_index(self):
+		'''建立 uid, mid 的索引'''
+		self.index = {}		# uid: {mid: idx, ...}, ...
+		for uid, items_list in self.users_rating.items():
+			self.index[uid] = {}
+			for i, item in enumerate(items_list):
+				self.index[uid][item[0]] = i
+
+
 	def get_history(self, uid, curr_mid):
 		'''
 		return: tensor (window, feature size:23 dim -> [uid, mid, genre, rating])
 		'''
 		ret_data = []
 		rating_list = self.users_rating[uid]
-		stop_index = len(rating_list) - 1
-		for i, mid_rating_pair in enumerate(rating_list):
-			if curr_mid == mid_rating_pair[0]:
-				stop_index = i
-				break
+		# stop_index = len(rating_list) - 1
+		# for i, mid_rating_pair in enumerate(rating_list):
+		# 	if curr_mid == mid_rating_pair[0]:
+		# 		stop_index = i
+		# 		break
+		stop_index = self.index[uid][curr_mid]
 		for i in range(stop_index - self.window, stop_index):
 			if i < 0:
 				history_feature = torch.zeros(23, dtype=torch.float32).to(self.device)
@@ -346,7 +357,7 @@ def main():
 	# init weight
 	parser.add_argument('--init_std', type=float, default=0.1)
 	# seq model
-	parser.add_argument('--seq_hidden_size', type=int, default=1024)
+	parser.add_argument('--seq_hidden_size', type=int, default=512)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=128)
 	# ddpg
