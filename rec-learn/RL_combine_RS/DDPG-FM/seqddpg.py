@@ -206,7 +206,7 @@ class DDPG(object):
 
 		self.actor = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args).to(self.device)
 		self.actor_target = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args).to(self.device)
-		self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args).to(self.device)
+		# self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args).to(self.device)
 		actor_params = seq_params + [param for param in self.actor.parameters()]
 
 		if args.actor_optim == 'adam':

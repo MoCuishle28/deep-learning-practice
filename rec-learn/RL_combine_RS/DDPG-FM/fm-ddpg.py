@@ -43,8 +43,6 @@ class Algorithm(object):
 		self.train_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
 		self.valid_data = torch.tensor(data_list.pop(0), dtype=torch.float32).to(self.device)
 		self.valid_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
-		self.test_data = torch.tensor(data_list.pop(0), dtype=torch.float32).to(self.device)
-		self.test_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
 
 		train_data_set = Data.TensorDataset(self.train_data, self.train_target)
 		shuffle = True if args.shuffle == 'y' else False
@@ -173,7 +171,15 @@ class Algorithm(object):
 				logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
 					i_batch+1, rmse, reward))
 			valid_rmse_list.append(self.evaluate(self.valid_data, self.valid_target))
-		self.evaluate(self.test_data, self.test_target, title='[Test]')
+
+		del self.train_data
+		del self.train_target
+		del self.valid_data
+		del self.valid_target
+
+		test_data = torch.tensor(np.load(self.args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32).to(self.device)
+		test_target = torch.tensor(np.load(self.args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32).to(self.device)
+		self.evaluate(test_data, test_target, title='[Test]')
 		self.plot_result(rmse_list, valid_rmse_list, mean_predictor_loss_list)
 
 
@@ -381,13 +387,11 @@ def main():
 	train_target = np.load(args.base_data_dir + 'train_target.npy').astype(np.float32)
 	valid_data = np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32)
 	valid_target = np.load(args.base_data_dir + 'valid_target.npy').astype(np.float32)
-	test_data = np.load(args.base_data_dir + 'test_data.npy').astype(np.float32)
-	test_target = np.load(args.base_data_dir + 'test_target.npy').astype(np.float32)
-	data_list = [train_data] + [valid_data] + [test_data]
-	target_list = [train_target] + [valid_target] + [test_target]
+	data_list = [train_data] + [valid_data]
+	target_list = [train_target] + [valid_target]
 
 	env = HistoryGenerator(args, device)
-	agent = DDPG(args, device)	
+	agent = DDPG(args, device)
 
 	# 后面还可以改成他的预测 rating 算法
 	predictor_model = None
