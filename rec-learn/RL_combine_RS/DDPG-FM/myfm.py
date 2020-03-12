@@ -12,12 +12,14 @@ import time
 
 
 class FM(nn.Module):
-	def __init__(self, feature_size, k, args, device):
+	def __init__(self, feature_size, k, args, device, without_rl=False):
 		super(FM, self).__init__()
 		self.device = device
 		self.args = args
+		self.without_rl = without_rl
 
-		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
+		if without_rl:
+			self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
 		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
@@ -34,7 +36,7 @@ class FM(nn.Module):
 		nn.init.xavier_normal_(self.v)
 
 
-	def forward(self, x, without_rl=False):
+	def forward(self, x):
 		'''
 		x: (batch, feature_size)
 		'''
@@ -44,7 +46,7 @@ class FM(nn.Module):
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
-		if without_rl:
+		if self.without_rl:
 			uids = x[:, -self.args.fm_feature_size]
 			uemb = self.u_embedding(uids.long().to(self.device))
 			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
@@ -60,10 +62,12 @@ class FM(nn.Module):
 
 
 class Net(nn.Module):
-	def __init__(self, input_num, hidden_num0, hidden_num1, output_num, args, device):
+	def __init__(self, input_num, hidden_num0, hidden_num1, output_num, args, device, without_rl=False):
 		super(Net, self).__init__()
 		self.args = args
 		self.device = device
+		self.without_rl = without_rl
+
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
 		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
 		self.activative_func = activative_func_dict.get(args.n_act, nn.ReLU())
@@ -84,7 +88,7 @@ class Net(nn.Module):
 			self.hidden_norm = nn.LayerNorm(hidden_num1, elementwise_affine=True)
 
 
-	def forward(self, x, without_rl=False):
+	def forward(self, x):
 		uids = x[:, -self.args.fm_feature_size]
 		mids = x[:, -(self.args.fm_feature_size - 1)]
 		genres = x[:, -(self.args.fm_feature_size - 2):]
@@ -93,7 +97,7 @@ class Net(nn.Module):
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
-		if without_rl:
+		if self.without_rl:
 			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
 		else:
 			x = x[:, :-self.args.fm_feature_size]
@@ -113,10 +117,12 @@ class Net(nn.Module):
 
 
 class NCF(nn.Module):
-	def __init__(self, args, input_hidden_size, device):
+	def __init__(self, args, input_hidden_size, device, without_rl=False):
 		super(NCF, self).__init__()
 		self.args = args
 		self.device = device
+		self.without_rl = without_rl
+
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
 		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
 		self.activative_func = activative_func_dict.get(args.n_act, nn.ReLU())
@@ -129,7 +135,8 @@ class NCF(nn.Module):
 
 		params = []
 		layers = [int(x) for x in args.layers.split(',')]
-		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
+		if without_rl:
+			self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
 		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
@@ -150,14 +157,14 @@ class NCF(nn.Module):
 		self.ncf = nn.Sequential(*params)
 
 
-	def forward(self, x, without_rl=False):
+	def forward(self, x):
 		mids = x[:, -(self.args.fm_feature_size - 1)]
 		genres = x[:, -(self.args.fm_feature_size - 2):]
 
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
-		if without_rl:
+		if self.without_rl:
 			uids = x[:, -self.args.fm_feature_size]
 			uemb = self.u_embedding(uids.long().to(self.device))
 			x = torch.cat([uemb, memb, gemb], 1)	# (batch, embedding size)
@@ -183,9 +190,9 @@ class Predictor(object):
 		self.criterion = nn.MSELoss()
 
 
-	def predict(self, input_data, target, without_rl=False):
+	def predict(self, input_data, target):
 		target = target.reshape((target.shape[0], 1)).to(self.device)
-		prediction = self.predictor(input_data, without_rl)
+		prediction = self.predictor(input_data)
 		loss = self.criterion(prediction, target)
 		return prediction, loss
 
@@ -198,8 +205,8 @@ class Predictor(object):
 		self.predictor.eval()
 
 
-	def train(self, input_data, target, without_rl=False):
-		prediction = self.predictor(input_data, without_rl)
+	def train(self, input_data, target):
+		prediction = self.predictor(input_data)
 		loss = self.criterion(prediction, target.unsqueeze(dim=1))
 		self.optim.zero_grad()
 		loss.backward()
@@ -236,7 +243,7 @@ def Standardization_uid_mid(data):
 
 
 def evaluate(predictor, data, target, title='[Valid]'):
-	prediction, loss = predictor.predict(data, target, without_rl=True)
+	prediction, loss = predictor.predict(data, target)
 	rmse = get_rmse(prediction, target)
 	print(title + ' loss:{:.5}, RMSE:{:.5}'.format(loss.item(), rmse))
 	logging.info(title + ' loss:{:.5}, RMSE:{:.5}'.format(loss.item(), rmse))
@@ -254,7 +261,7 @@ def train(args, predictor, train_data, train_target, valid_data, valid_target, d
 	for epoch in range(args.epoch):
 		predictor.on_train()	# 训练模式
 		for i_batch, (data, target) in enumerate(train_data_loader):
-			prediction, loss = predictor.train(data, target, without_rl=True)
+			prediction, loss = predictor.train(data, target)
 			rmse = get_rmse(prediction, target)
 			
 			if (i_batch + 1) % 50 == 0:
@@ -408,15 +415,15 @@ def main():
 	if args.predictor == 'fm':
 		print('Predictor is FM.')
 		logging.info('Predictor is FM.')
-		model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, args.k, args, device)
+		model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, args.k, args, device, without_rl=True)
 	elif args.predictor == 'net':
 		print('Predictor is Network.')
 		logging.info('Predictor is Network.')
-		model = Net(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, args.hidden_0, args.hidden_1, 1, args, device)
+		model = Net(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, args.hidden_0, args.hidden_1, 1, args, device, without_rl=True)
 	elif args.predictor == 'ncf':
 		print('Predictor is NCF.')
 		logging.info('Predictor is NCF.')
-		model = NCF(args, args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, device)		
+		model = NCF(args, args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, device, without_rl=True)
 
 	# 加载模型
 	if args.load == 'y':
