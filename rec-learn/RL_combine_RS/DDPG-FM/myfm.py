@@ -72,7 +72,8 @@ class Net(nn.Module):
 		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
 		self.activative_func = activative_func_dict.get(args.n_act, nn.ReLU())
 		# embedding
-		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
+		if without_rl:
+			self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
 		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
@@ -89,19 +90,18 @@ class Net(nn.Module):
 
 
 	def forward(self, x):
-		uids = x[:, -self.args.fm_feature_size]
 		mids = x[:, -(self.args.fm_feature_size - 1)]
 		genres = x[:, -(self.args.fm_feature_size - 2):]
 
-		uemb = self.u_embedding(uids.long().to(self.device))
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
 		if self.without_rl:
+			uids = x[:, -self.args.fm_feature_size]
+			uemb = self.u_embedding(uids.long().to(self.device))
 			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
 		else:
 			x = x[:, :-self.args.fm_feature_size]
-			x = x * uemb 	# RL 的输出作为 user embedding 的增强(如何增强？先尝试乘 TODO)
 			x = torch.cat([x, memb, gemb], 1).to(self.device)
 
 		x = self.in_layer(x)
@@ -167,10 +167,10 @@ class NCF(nn.Module):
 		if self.without_rl:
 			uids = x[:, -self.args.fm_feature_size]
 			uemb = self.u_embedding(uids.long().to(self.device))
-			x = torch.cat([uemb, memb, gemb], 1)	# (batch, embedding size)
+			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
 		else:
-			rl_user_embedding = x[:, :-self.args.fm_feature_size]
-			x = torch.cat([rl_user_embedding, memb, gemb], 1)
+			x = x[:, :-self.args.fm_feature_size]
+			x = torch.cat([x, memb, gemb], 1)
 		x = self.ncf(x)
 		return x.clamp(min=self.args.min, max=self.args.max)
 

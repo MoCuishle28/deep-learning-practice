@@ -195,7 +195,7 @@ class Algorithm(object):
 				# 补上 agent 输出的那部分为 0 向量
 				for feature_vec in data:
 					zero_vec = torch.zeros(self.args.actor_output).to(self.device)
-					data_list.append(torch.cat([zero_vec, feature_vec[2:]]))
+					data_list.append(torch.cat([zero_vec, feature_vec]))
 
 				data = torch.stack(data_list).to(self.device)
 				prediction, loss = self.predictor.train(data, target)
@@ -363,7 +363,7 @@ def main():
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-5)
 	parser.add_argument("--critic_lr", type=float, default=1e-3)
-	parser.add_argument('--hidden_size', type=int, default=1024)
+	parser.add_argument('--hidden_size', type=int, default=512)
 	parser.add_argument('--actor_output', type=int, default=128)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--actor_tau', type=float, default=0.1)
@@ -386,7 +386,6 @@ def main():
 	parser.add_argument('--hidden_0', type=int, default=1024)
 	parser.add_argument('--hidden_1', type=int, default=512)
 	# NCF
-	# Note: 0:embedding, 1:user_embedding + item_embedding
 	parser.add_argument('--layers', default='1024,512,256')
 
 	args = parser.parse_args()
