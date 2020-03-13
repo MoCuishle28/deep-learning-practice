@@ -194,7 +194,7 @@ class MPO(object):
 		output = self.policy(state)		# 输出 (batch, 2) 2 -> mu, log_std
 		mu = output[:, 0]
 		log_std = output[:, 1]
-		z = torch.normal(mean=0, std=torch.ones(log_std.shape[-1]))
+		z = torch.normal(mean=0, std=torch.ones(log_std.shape[-1])).to(self.device)
 		a = mu + torch.exp(log_std) * z
 		return a.clamp(min=self.args.min, max=self.args.max), mu, log_std
 
