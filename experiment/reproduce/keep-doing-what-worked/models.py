@@ -174,7 +174,7 @@ class MPO(object):
 
 
 	def select_action_from_target(self, state):
-		output = self.target_policy(state)		# 输出 (batch, 2) 2 -> mu, log_std
+		output = self.target_policy(state).to(self.device)		# 输出 (batch, 2) 2 -> mu, log_std
 		mu = output[:, 0]
 		log_std = output[:, 1]
 		z = torch.normal(mean=0, std=torch.ones(log_std.shape[-1])).to(self.device)
@@ -183,7 +183,7 @@ class MPO(object):
 
 
 	def select_action_without_noise(self, state):
-		output = self.policy(state)		# 输出 (batch, 2) 2 -> mu, log_std
+		output = self.policy(state).to(self.device)		# 输出 (batch, 2) 2 -> mu, log_std
 		mu = output[:, 0]
 		log_std = output[:, 1]
 		a = mu + torch.exp(log_std)
@@ -191,7 +191,7 @@ class MPO(object):
 
 
 	def select_action(self, state):
-		output = self.policy(state)		# 输出 (batch, 2) 2 -> mu, log_std
+		output = self.policy(state).to(self.device)		# 输出 (batch, 2) 2 -> mu, log_std
 		mu = output[:, 0]
 		log_std = output[:, 1]
 		z = torch.normal(mean=0, std=torch.ones(log_std.shape[-1])).to(self.device)
@@ -200,7 +200,7 @@ class MPO(object):
 
 
 	def select_action_from_prior(self, state):
-		output = self.prior(state)		# 输出 (batch, 2) 2 -> mu, log_std
+		output = self.prior(state).to(self.device)		# 输出 (batch, 2) 2 -> mu, log_std
 		mu = output[:, 0]
 		log_std = output[:, 1]
 		z = torch.normal(mean=0, std=torch.ones(log_std.shape[-1]))
@@ -236,7 +236,7 @@ class MPO(object):
 		next_state_batch = torch.stack(self.next_state_list).to(self.device)
 		# Q
 		expected_next_values = self.args.gamma * self._values(next_state_batch).squeeze()
-		curr_q_values = self.Q(state_batch, action_batch).squeeze()
+		curr_q_values = self.Q(state_batch, action_batch).to(self.device).squeeze()
 		trajectory_len = len(self.state_list)
 		q_loss = (1 / trajectory_len) * torch.sum((reward_batch.squeeze() + expected_next_values - curr_q_values)**2)
 		self.critic_optim.zero_grad()
@@ -248,7 +248,7 @@ class MPO(object):
 		for i in range(self.args.m):
 			actions, mu, log_std = self.select_action_from_prior(state_batch)
 			actions, mu, log_std = actions.unsqueeze(dim=1), mu.unsqueeze(dim=1), log_std.unsqueeze(dim=1)
-			q_values = self.Q(state_batch, actions)
+			q_values = self.Q(state_batch, actions).to(self.device)
 			log_prior = self.gaussian_likelihood(actions, mu, log_std).unsqueeze(1)
 
 			_, mu, log_std = self.select_action(state_batch)
@@ -297,7 +297,7 @@ class MPO(object):
 		return values (batch, 1)
 		'''
 		actions = [self.select_action(state)[0].unsqueeze(dim=1) for _ in range(self.args.m)]
-		values = torch.stack([self.target_Q(state, a).squeeze() for a in actions])
+		values = torch.stack([self.target_Q(state, a).to(self.device).squeeze() for a in actions]).to(self.device)
 		return (1 / self.args.m) * torch.sum(values, dim=0)
 
 
@@ -307,7 +307,7 @@ class MPO(object):
 		gamma = self.args.gamma
 		sn = self.state_list[-1]
 		sn = sn.view(1, sn.shape[0], sn.shape[1])
-		sn_value = self._values(sn).squeeze()
+		sn_value = self._values(sn).to(self.device).squeeze()
 		N = len(self.state_list)
 
 		discounted_rewards = torch.zeros(len(self.reward_list)).to(self.device)
