@@ -214,7 +214,7 @@ class MPO(object):
 		return: log pi(a|s)
 		'''
 		# 运算变量必须都是 tensor (np.pi)
-		pre_sum = -0.5 * ( ((x - mu) / (torch.exp(log_std) + EPS))**2 + 2 * log_std + torch.log(torch.tensor([2*np.pi])) )
+		pre_sum = -0.5 * ( ((x - mu) / (torch.exp(log_std) + EPS))**2 + 2 * log_std + torch.log(torch.tensor([2*np.pi]).to(self.device)) )
 		return torch.sum(pre_sum, dim=-1)
 
 
