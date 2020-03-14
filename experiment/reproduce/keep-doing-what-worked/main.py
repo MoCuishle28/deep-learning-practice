@@ -188,15 +188,15 @@ if __name__ == '__main__':
 	parser.add_argument('--tau', type=float, default=0.1)
 	# Q
 	parser.add_argument('--q_layers', default='129,256,256')	# state size + action size = 129
-	parser.add_argument('--q_lr', type=float, default=1e-4)
+	parser.add_argument('--q_lr', type=float, default=1e-3)
 	parser.add_argument('--m', type=int, default=20)
 	# policy
 	parser.add_argument('--a_layers', default='128,256')
-	parser.add_argument('--a_lr', type=float, default=1e-5)
+	parser.add_argument('--a_lr', type=float, default=1e-4)
 	parser.add_argument('--policy_output_size', type=int, default=2)
 	# prior
 	parser.add_argument('--p_layers', default='128,256')
-	parser.add_argument('--p_lr', type=float, default=1e-4)
+	parser.add_argument('--p_lr', type=float, default=1e-3)
 
 	args = parser.parse_args()
 	main(args)
