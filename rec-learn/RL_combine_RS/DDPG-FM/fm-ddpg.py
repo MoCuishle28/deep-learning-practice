@@ -364,7 +364,7 @@ def main():
 	parser.add_argument("--actor_lr", type=float, default=1e-5)
 	parser.add_argument("--critic_lr", type=float, default=1e-3)
 	parser.add_argument('--hidden_size', type=int, default=512)
-	parser.add_argument('--actor_output', type=int, default=128)
+	parser.add_argument('--actor_output', type=int, default=64)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--actor_tau', type=float, default=0.1)
 	parser.add_argument('--critic_tau', type=float, default=0.1)
@@ -375,7 +375,7 @@ def main():
 	parser.add_argument('--n_act', default='relu')
 	# embedding
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
-	parser.add_argument('--u_emb_dim', type=int, default=128)
+	parser.add_argument('--u_emb_dim', type=int, default=64)
 	parser.add_argument('--max_mid', type=int, default=193609)	# 1~193609
 	parser.add_argument('--m_emb_dim', type=int, default=128)
 	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
@@ -406,15 +406,15 @@ def main():
 	# 后面还可以改成他的预测 rating 算法
 	predictor_model = None
 	if args.predictor == 'net':
-		predictor_model = Net(args.m_emb_dim + args.g_emb_dim + args.actor_output, args.hidden_0, args.hidden_1, 1, args, device)
+		predictor_model = Net(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.hidden_0, args.hidden_1, 1, args, device)
 		print('predictor_model is Network.')
 		logging.info('predictor_model is Network.')
 	elif args.predictor == 'fm':
-		predictor_model = FM(args.m_emb_dim + args.g_emb_dim + args.actor_output, args.k, args, device)
+		predictor_model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.k, args, device)
 		print('predictor_model is FM.')
 		logging.info('predictor_model is FM.')
 	elif args.predictor ==  'ncf':
-		predictor_model = NCF(args, args.actor_output + args.m_emb_dim + args.g_emb_dim, device)
+		predictor_model = NCF(args, args.u_emb_dim + args.actor_output + args.m_emb_dim + args.g_emb_dim, device)
 		print('predictor_model is NCF.')
 		logging.info('predictor_model is NCF.')
 

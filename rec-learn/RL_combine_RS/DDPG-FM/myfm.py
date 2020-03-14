@@ -18,8 +18,8 @@ class FM(nn.Module):
 		self.args = args
 		self.without_rl = without_rl
 
-		if without_rl:
-			self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
+		
+		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
 		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
@@ -46,13 +46,14 @@ class FM(nn.Module):
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
+		uids = x[:, -self.args.fm_feature_size]
+		uemb = self.u_embedding(uids.long().to(self.device))
+
 		if self.without_rl:
-			uids = x[:, -self.args.fm_feature_size]
-			uemb = self.u_embedding(uids.long().to(self.device))
 			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
 		else:
 			x = x[:, :-self.args.fm_feature_size]	# 有 RL 部分的输出作为 user embedding
-			x = torch.cat([x, memb, gemb], 1).to(self.device)
+			x = torch.cat([x, uemb, memb, gemb], 1).to(self.device)
 
 		inter_1 = torch.mm(x, self.v)
 		inter_2 = torch.mm((x**2), (self.v**2))
@@ -72,8 +73,7 @@ class Net(nn.Module):
 		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
 		self.activative_func = activative_func_dict.get(args.n_act, nn.ReLU())
 		# embedding
-		if without_rl:
-			self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
+		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
 		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
@@ -96,13 +96,14 @@ class Net(nn.Module):
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
+		uids = x[:, -self.args.fm_feature_size]
+		uemb = self.u_embedding(uids.long().to(self.device))
+
 		if self.without_rl:
-			uids = x[:, -self.args.fm_feature_size]
-			uemb = self.u_embedding(uids.long().to(self.device))
 			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
 		else:
 			x = x[:, :-self.args.fm_feature_size]
-			x = torch.cat([x, memb, gemb], 1).to(self.device)
+			x = torch.cat([x, uemb, memb, gemb], 1).to(self.device)
 
 		x = self.in_layer(x)
 		x = self.in_norm(x) if self.args.norm_layer != 'none' else x
@@ -135,8 +136,7 @@ class NCF(nn.Module):
 
 		params = []
 		layers = [int(x) for x in args.layers.split(',')]
-		if without_rl:
-			self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
+		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
 		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
@@ -164,13 +164,14 @@ class NCF(nn.Module):
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
+		uids = x[:, -self.args.fm_feature_size]
+		uemb = self.u_embedding(uids.long().to(self.device))
+
 		if self.without_rl:
-			uids = x[:, -self.args.fm_feature_size]
-			uemb = self.u_embedding(uids.long().to(self.device))
 			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
 		else:
 			x = x[:, :-self.args.fm_feature_size]
-			x = torch.cat([x, memb, gemb], 1)
+			x = torch.cat([x, uemb, memb, gemb], 1)
 		x = self.ncf(x)
 		return x.clamp(min=self.args.min, max=self.args.max)
 
