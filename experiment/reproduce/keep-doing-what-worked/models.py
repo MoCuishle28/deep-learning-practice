@@ -146,7 +146,7 @@ class MPO(object):
 		self.target_Q = Q(args, self.target_seq, device).to(device)
 		self.Q = Q(args, self.seq, device).to(device)
 
-		self.target_policy = Policy(args, args.a_layers, self.target_seq, device).to(device)
+		# self.target_policy = Policy(args, args.a_layers, self.target_seq, device).to(device)
 		self.policy = Policy(args, args.a_layers, self.seq, device).to(device)
 
 		# 其他参数
@@ -168,7 +168,7 @@ class MPO(object):
 		self.eta_optim = self.eta_optim([self.eta], lr=args.q_lr)
 
 		hard_update(self.target_Q, self.Q)
-		hard_update(self.target_policy, self.policy)
+		# hard_update(self.target_policy, self.policy)
 		self.Ntu = 0	# update target
 		self.state_list, self.action_list, self.reward_list, self.next_state_list = [], [], [], []
 
@@ -277,7 +277,7 @@ class MPO(object):
 		if self.Ntu == self.args.update_period:
 			self.Ntu = 0
 			hard_update(self.target_Q, self.Q)
-			hard_update(self.target_policy, self.policy)
+			# hard_update(self.target_policy, self.policy)
 
 		self.clear_buffer()
 		return a.squeeze(), abm_loss.item(), q_loss.item(), pi_loss.item(), alpha_loss.item(), eta_loss.item()
@@ -344,7 +344,7 @@ class MPO(object):
 
 	def train(self):
 		self.prior.train()
-		self.target_policy.train()
+		# self.target_policy.train()
 		self.policy.train()
 		self.target_Q.train()
 		self.Q.train()
@@ -352,7 +352,7 @@ class MPO(object):
 
 	def eval(self):
 		self.prior.eval()
-		self.target_policy.eval()
+		# self.target_policy.eval()
 		self.policy.eval()
 		self.target_Q.eval()
 		self.Q.eval()

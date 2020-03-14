@@ -131,8 +131,8 @@ class Algorithm(object):
 					actions, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
 					rmse = self.rmse(target, actions)
 
-					print_str = 'epoch:{}/{}, trajectory:{}-size:{} RMSE:{:.6}, abm_loss:{:.6}, q_loss:{:.6}, pi_loss:{:.6}, alpha_loss:{:.6}, eta_loss:{:.6}'
-					print_str = print_str.format(i_epoch + 1, self.args.epoch, trajectory_num, size, rmse, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
+					print_str = 'epoch:{}/{}, trajectory:{} RMSE:{:.6}, abm_loss:{:.6}, q_loss:{:.6}, pi_loss:{:.6}, alpha_loss:{:.6}, eta_loss:{:.6}'
+					print_str = print_str.format(i_epoch + 1, self.args.epoch, trajectory_num, rmse, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
 					print(print_str)
 					logging.info(print_str)
 				else:
@@ -157,7 +157,7 @@ def init_log(args):
 
 
 def main(args):
-	# init_log(args)
+	init_log(args)
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 	agent = MPO(args, device)
@@ -174,7 +174,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_pic_dir', default="pic/")
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M/')
 
-	parser.add_argument('--epoch', type=int, default=10)
+	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--max_len', type=int, default=256)
 	parser.add_argument('--shuffle', default='y')
@@ -185,9 +185,9 @@ if __name__ == '__main__':
 	parser.add_argument('--max', type=float, default=5.0)
 	parser.add_argument('--min', type=float, default=0.0)
 	# seq model
-	parser.add_argument('--hw', type=int, default=10)
+	parser.add_argument('--hw', type=int, default=5)
 	parser.add_argument('--seq_hidden_size', type=int, default=512)
-	parser.add_argument('--seq_layer_num', type=int, default=1)
+	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=128)
 	# embedding
 	parser.add_argument('--feature_size', type=int, default=22)	# item feature size(22 dim)
@@ -195,7 +195,7 @@ if __name__ == '__main__':
 	parser.add_argument('--u_emb_dim', type=int, default=128)
 	parser.add_argument('--max_mid', type=int, default=193609)	# 1~193609
 	parser.add_argument('--m_emb_dim', type=int, default=128)
-	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
+	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
 	# RL
 	parser.add_argument('--replay_buffer', type=int, default=2*(10**6)) # 2e6
 	parser.add_argument('--update_period', type=int, default=200)		# target network update period
