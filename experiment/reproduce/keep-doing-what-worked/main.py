@@ -61,7 +61,7 @@ class Algorithm(object):
 
 
 	def rmse(self, target, prediction):
-		rmse = torch.sqrt(torch.sum((prediction - target)**2) / prediction.shape[0])
+		rmse = torch.sqrt(torch.sum((prediction - target)**2) / target.shape[0])
 		return rmse
 
 
@@ -131,7 +131,7 @@ class Algorithm(object):
 					actions, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
 					rmse = self.rmse(target, actions)
 
-					print_str = 'epoch:{}/{}, trajectory:{} RMSE:{:.6}, abm_loss:{:.6}, q_loss:{:.6}, pi_loss:{:.6}, alpha_loss:{:.6}, eta_loss:{:.6}'
+					print_str = 'epoch:{}/{}, trajectory:{}, RMSE:{:.6}, abm_loss:{:.4}, q_loss:{:.4}, pi_loss:{:.4}, alpha_loss:{:.4}, eta_loss:{:.4}'
 					print_str = print_str.format(i_epoch + 1, self.args.epoch, trajectory_num, rmse, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
 					print(print_str)
 					logging.info(print_str)

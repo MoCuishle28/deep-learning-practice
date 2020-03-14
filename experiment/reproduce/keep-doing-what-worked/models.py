@@ -280,7 +280,7 @@ class MPO(object):
 			# hard_update(self.target_policy, self.policy)
 
 		self.clear_buffer()
-		return a.squeeze(), abm_loss.item(), q_loss.item(), pi_loss.item(), alpha_loss.item(), eta_loss.item()
+		return a, abm_loss.item(), q_loss.item(), pi_loss.item(), alpha_loss.item(), eta_loss.item()
 
 
 	def _f(self, x):
