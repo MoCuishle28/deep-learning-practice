@@ -98,30 +98,45 @@ class Algorithm(object):
 		for i_epoch in range(self.args.epoch):
 			remain = 777
 			self.agent.train()
+			trajectory_num = 0
+			end_idx = 0
 			while remain > 0:
-				uid, remain = self.sample_uid()
-				behaviors = self.env.get_user_all_behaviors(uid)
+				trajectory_num += 1
+				if end_idx == 0 or end_idx >= size:
+					uid, remain = self.sample_uid()
+					behaviors = self.env.get_user_all_behaviors(uid)
+					size = len(behaviors)
+					end_idx = 0
 
-				curr_mid, curr_rating = behaviors.pop(0)	# rating(action) -> scalar
+				curr_mid, curr_rating = behaviors[end_idx]	# rating(action) -> scalar
+				end_idx += 1
 				curr_s = self.env.get_history(uid, curr_mid)
 				self.agent.store_transition(curr_s, curr_rating, 1.0)	# state, action, reward
 
-				for mid, rating in behaviors[:-1]:
+				for i in range(end_idx, size - 1):
+					mid, rating = behaviors[i]
 					curr_s = self.env.get_next_history(curr_s, mid, uid, self.agent.action_list[-1])
 					self.agent.store_transition(curr_s, rating, 1.0)
 					self.agent.store_next_state(curr_s)
+					end_idx = i + 1
+					if i % self.args.max_len == 0:
+						break
 
-				curr_mid = behaviors[-1][0]
-				curr_s = self.env.get_next_history(curr_s, curr_mid, uid, self.agent.action_list[-1])
-				self.agent.store_next_state(curr_s)
-				target = torch.tensor(self.agent.action_list, dtype=torch.float32).to(self.device)
-				actions, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
-				rmse = self.rmse(target, actions)
+				if end_idx < size:
+					curr_mid = behaviors[end_idx][0]
+					end_idx += 1
+					curr_s = self.env.get_next_history(curr_s, curr_mid, uid, self.agent.action_list[-1])
+					self.agent.store_next_state(curr_s)
+					target = torch.tensor(self.agent.action_list, dtype=torch.float32).to(self.device)
+					actions, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
+					rmse = self.rmse(target, actions)
 
-				print_str = 'epoch:{}/{} RMSE:{:.6}, abm_loss:{:.6}, q_loss:{:.6}, pi_loss:{:.6}, alpha_loss:{:.6}, eta_loss:{:.6}'
-				print_str = print_str.format(i_epoch + 1, self.args.epoch, rmse, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
-				print(print_str)
-				logging.info(print_str)
+					print_str = 'epoch:{}/{}, trajectory:{}-size:{} RMSE:{:.6}, abm_loss:{:.6}, q_loss:{:.6}, pi_loss:{:.6}, alpha_loss:{:.6}, eta_loss:{:.6}'
+					print_str = print_str.format(i_epoch + 1, self.args.epoch, trajectory_num, size, rmse, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
+					print(print_str)
+					logging.info(print_str)
+				else:
+					self.agent.clear_buffer()
 
 			self.evaluate()
 			self.construct_uids_list()
@@ -142,7 +157,7 @@ def init_log(args):
 
 
 def main(args):
-	init_log(args)
+	# init_log(args)
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 	agent = MPO(args, device)
@@ -161,6 +176,7 @@ if __name__ == '__main__':
 
 	parser.add_argument('--epoch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=512)
+	parser.add_argument('--max_len', type=int, default=256)
 	parser.add_argument('--shuffle', default='y')
 	parser.add_argument('--act', default='elu')
 	parser.add_argument('--optim', default='adam')
