@@ -21,11 +21,11 @@ from myfm import Predictor
 
 
 def save_obj(obj, name):
-	with open('../../data/new_ml_1M/'+ name + '.pkl', 'wb') as f:
+	with open('../../data/ml_1M_row/'+ name + '.pkl', 'wb') as f:
 		pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
 
 def load_obj(name):
-	with open('../../data/new_ml_1M/' + name + '.pkl', 'rb') as f:
+	with open('../../data/ml_1M_row/' + name + '.pkl', 'rb') as f:
 		return pickle.load(f)
 
 
@@ -329,7 +329,7 @@ def main():
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
 	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/pic/")
-	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
+	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
 	parser.add_argument('--memory_size', type=int, default=4096)
 	parser.add_argument('--pretrain_predictor_epoch', type=int, default=100)
 	parser.add_argument('--epoch', type=int, default=5)
@@ -368,15 +368,15 @@ def main():
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--actor_tau', type=float, default=0.1)
 	parser.add_argument('--critic_tau', type=float, default=0.1)
-	parser.add_argument('--a_act', default='relu')
-	parser.add_argument('--c_act', default='relu')
+	parser.add_argument('--a_act', default='elu')
+	parser.add_argument('--c_act', default='elu')
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-4)
-	parser.add_argument('--n_act', default='relu')
+	parser.add_argument('--n_act', default='elu')
 	# embedding
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
 	parser.add_argument('--u_emb_dim', type=int, default=64)
-	parser.add_argument('--max_mid', type=int, default=193609)	# 1~193609
+	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
 	parser.add_argument('--m_emb_dim', type=int, default=128)
 	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
 	# FM

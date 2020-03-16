@@ -47,4 +47,5 @@ rec-learn/RL_combine_RS/data
 
 /hands-on-ml/datasets
 
-/experiment/data/
+/experiment/data/ml_1M
+/experiment/data/ml-latest-small

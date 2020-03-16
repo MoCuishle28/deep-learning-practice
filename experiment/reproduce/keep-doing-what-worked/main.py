@@ -100,7 +100,9 @@ class Algorithm(object):
 			self.agent.train()
 			trajectory_num = 0
 			end_idx = 0
+			idx = 0
 			while remain > 0:
+				idx += 1
 				trajectory_num += 1
 				if end_idx == 0 or end_idx >= size:
 					uid, remain = self.sample_uid()
@@ -131,10 +133,11 @@ class Algorithm(object):
 					actions, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
 					rmse = self.rmse(target, actions)
 
-					print_str = 'epoch:{}/{}, trajectory:{}, RMSE:{:.6}, abm_loss:{:.4}, q_loss:{:.4}, pi_loss:{:.4}, alpha_loss:{:.4}, eta_loss:{:.4}'
-					print_str = print_str.format(i_epoch + 1, self.args.epoch, trajectory_num, rmse, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
-					print(print_str)
-					logging.info(print_str)
+					if idx % 30 == 0:
+						print_str = 'epoch:{}/{}, trajectory:{}, RMSE:{:.6}, abm_loss:{:.4}, q_loss:{:.4}, pi_loss:{:.4}, alpha_loss:{:.4}, eta_loss:{:.4}'
+						print_str = print_str.format(i_epoch + 1, self.args.epoch, trajectory_num, rmse, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
+						print(print_str)
+						logging.info(print_str)
 				else:
 					self.agent.clear_buffer()
 

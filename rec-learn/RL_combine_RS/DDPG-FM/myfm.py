@@ -395,7 +395,7 @@ def main():
 	# network
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
 	parser.add_argument('--u_emb_dim', type=int, default=128)
-	parser.add_argument('--max_mid', type=int, default=193609)	# 1~193609
+	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
 	parser.add_argument('--m_emb_dim', type=int, default=128)
 	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
 
