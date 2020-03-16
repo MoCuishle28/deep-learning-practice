@@ -16,16 +16,16 @@ from seqddpg import DDPG
 from seqddpg import Transition
 from seqddpg import ReplayMemory
 from seqddpg import OUNoise
-from myfm import FM, Net, NCF
-from myfm import Predictor
+from myModel import FM, NCF
+from myModel import Predictor
 
 
 def save_obj(obj, name):
-	with open('../../data/ml_1M_row/'+ name + '.pkl', 'wb') as f:
+	with open('../data/ml_1M_row/'+ name + '.pkl', 'wb') as f:
 		pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
 
 def load_obj(name):
-	with open('../../data/ml_1M_row/' + name + '.pkl', 'rb') as f:
+	with open('../data/ml_1M_row/' + name + '.pkl', 'rb') as f:
 		return pickle.load(f)
 
 
@@ -327,15 +327,15 @@ def init_log(args):
 def main():
 	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and Predictor")
 	parser.add_argument('--v', default="v")
-	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
-	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/pic/")
-	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
+	parser.add_argument('--base_log_dir', default="log/")
+	parser.add_argument('--base_pic_dir', default="pic/")
+	parser.add_argument('--base_data_dir', default='../data/ml_1M_row/')
 	parser.add_argument('--memory_size', type=int, default=4096)
 	parser.add_argument('--pretrain_predictor_epoch', type=int, default=100)
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--hw', type=int, default=10)	# history window
-	parser.add_argument('--predictor', default='net')
+	parser.add_argument('--predictor', default='ncf')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
 	parser.add_argument('--shuffle', default='y')
@@ -362,7 +362,7 @@ def main():
 	parser.add_argument('--seq_output_size', type=int, default=128)
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-5)
-	parser.add_argument("--critic_lr", type=float, default=1e-3)
+	parser.add_argument("--critic_lr", type=float, default=1e-4)
 	parser.add_argument('--hidden_size', type=int, default=512)
 	parser.add_argument('--actor_output', type=int, default=64)
 	parser.add_argument('--gamma', type=float, default=0.99)
@@ -382,11 +382,8 @@ def main():
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
 	parser.add_argument('--k', type=int, default=8)
-	# network
-	parser.add_argument('--hidden_0', type=int, default=1024)
-	parser.add_argument('--hidden_1', type=int, default=512)
 	# NCF
-	parser.add_argument('--layers', default='1024,512,256')
+	parser.add_argument('--layers', default='1024,512')
 
 	args = parser.parse_args()
 	init_log(args)
@@ -405,11 +402,7 @@ def main():
 
 	# 后面还可以改成他的预测 rating 算法
 	predictor_model = None
-	if args.predictor == 'net':
-		predictor_model = Net(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.hidden_0, args.hidden_1, 1, args, device)
-		print('predictor_model is Network.')
-		logging.info('predictor_model is Network.')
-	elif args.predictor == 'fm':
+	if args.predictor == 'fm':
 		predictor_model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.k, args, device)
 		print('predictor_model is FM.')
 		logging.info('predictor_model is FM.')

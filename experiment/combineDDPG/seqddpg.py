@@ -230,7 +230,6 @@ class DDPG(object):
 
 		hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
 		hard_update(self.critic_target, self.critic)
-		# hard_update(self.target_seq_model, self.seq_model)
 
 	
 	def on_train(self):
@@ -298,8 +297,6 @@ class DDPG(object):
 
 		soft_update(self.actor_target, self.actor, self.actor_tau)
 		soft_update(self.critic_target, self.critic, self.critic_tau)
-		# soft_update(self.target_seq_model, self.seq_model, self.actor_tau)
-
 		return value_loss.item(), policy_loss.item()
 
 
