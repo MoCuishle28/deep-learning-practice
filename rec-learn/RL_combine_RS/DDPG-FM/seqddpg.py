@@ -208,11 +208,11 @@ class DDPG(object):
 		# self.actor_perturbed = Actor(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args).to(self.device)
 
 		if args.actor_optim == 'adam':
-			self.actor_optim = Adam(self.actor.parameters(), lr=args.actor_lr)
+			self.actor_optim = Adam(self.actor.parameters(), lr=args.actor_lr, weight_decay=args.weight_decay)
 		elif args.actor_optim == 'sgd':
-			self.actor_optim = torch.optim.SGD(self.actor.parameters(), lr=args.actor_lr, momentum=args.momentum)
+			self.actor_optim = torch.optim.SGD(self.actor.parameters(), lr=args.actor_lr, momentum=args.momentum, weight_decay=args.weight_decay)
 		elif args.actor_optim == 'rmsprop':
-			self.actor_optim = torch.optim.RMSprop(self.actor.parameters(), lr=args.actor_lr)
+			self.actor_optim = torch.optim.RMSprop(self.actor.parameters(), lr=args.actor_lr, weight_decay=args.weight_decay)
 
 		self.critic = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args).to(self.device)
 		self.critic_target = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args).to(self.device)

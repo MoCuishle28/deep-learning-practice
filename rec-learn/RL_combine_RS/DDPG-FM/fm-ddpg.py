@@ -335,7 +335,7 @@ def main():
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--hw', type=int, default=10)	# history window
-	parser.add_argument('--predictor', default='net')
+	parser.add_argument('--predictor', default='ncf')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
 	parser.add_argument('--shuffle', default='y')
@@ -349,6 +349,7 @@ def main():
 	parser.add_argument('--critic_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)	# sgd 时
 	parser.add_argument('--norm_layer', default='ln')			# bn/ln/none
+	parser.add_argument('--weight_decay', type=float, default=0.0)		# regularization
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	# save/load model 的名字为 --v
 	parser.add_argument('--save', default='n')
@@ -362,7 +363,7 @@ def main():
 	parser.add_argument('--seq_output_size', type=int, default=128)
 	# ddpg
 	parser.add_argument("--actor_lr", type=float, default=1e-5)
-	parser.add_argument("--critic_lr", type=float, default=1e-3)
+	parser.add_argument("--critic_lr", type=float, default=1e-4)
 	parser.add_argument('--hidden_size', type=int, default=512)
 	parser.add_argument('--actor_output', type=int, default=64)
 	parser.add_argument('--gamma', type=float, default=0.99)

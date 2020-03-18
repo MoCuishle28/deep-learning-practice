@@ -236,7 +236,7 @@ class HistoryGenerator(object):
 		self.device = device
 		self.args = args
 		# mid: one-hot feature (21维 -> mid, genre, genre, ...)
-		self.mid_map_mfeature = load_obj('mid_map_mfeature')		
+		self.mid_map_mfeature = load_obj('mid_map_mfeature')	
 		self.users_rating = load_obj('users_rating_without_timestamp') # uid:[[mid, rating], ...] 有序
 		# self.users_has_clicked = load_obj('users_has_clicked')	# uid:{mid, mid, ...}
 		self.window = args.hw
@@ -269,11 +269,6 @@ class HistoryGenerator(object):
 		'''
 		ret_data = []
 		rating_list = self.users_rating[uid]
-		# stop_index = len(rating_list) - 1
-		# for i, mid_rating_pair in enumerate(rating_list):
-		# 	if curr_mid == mid_rating_pair[0]:
-		# 		stop_index = i
-		# 		break
 		stop_index = self.index[uid][curr_mid]
 		for i in range(stop_index - self.window, stop_index):
 			if i < 0:
@@ -348,6 +343,7 @@ def main():
 	parser.add_argument('--actor_optim', default='adam')
 	parser.add_argument('--critic_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)	# sgd 时
+	parser.add_argument('--weight_decay', type=float, default=1e-4)		# regularization
 	parser.add_argument('--norm_layer', default='ln')			# bn/ln/none
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	# save/load model 的名字为 --v
@@ -411,7 +407,7 @@ def main():
 		print('predictor_model is NCF.')
 		logging.info('predictor_model is NCF.')
 
-	predictor = Predictor(args, predictor_model, device)
+	predictor = Predictor(args, predictor_model, device, env.mid_map_mfeature)
 
 	# 加载模型
 	if args.load == 'y':

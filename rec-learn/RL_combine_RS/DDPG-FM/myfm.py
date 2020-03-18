@@ -182,11 +182,11 @@ class Predictor(object):
 		self.device = device
 		self.predictor = predictor.to(self.device)
 		if args.predictor_optim == 'adam':
-			self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.predictor_lr)
+			self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.predictor_lr, weight_decay=args.weight_decay)
 		elif args.predictor_optim == 'sgd':
-			self.optim = torch.optim.SGD(self.predictor.parameters(), lr=args.predictor_lr, momentum=args.momentum)
+			self.optim = torch.optim.SGD(self.predictor.parameters(), lr=args.predictor_lr, momentum=args.momentum, weight_decay=args.weight_decay)
 		elif args.predictor_optim == 'rmsprop':
-			self.optim = torch.optim.RMSprop(self.predictor.parameters(), lr=args.predictor_lr)
+			self.optim = torch.optim.RMSprop(self.predictor.parameters(), lr=args.predictor_lr, weight_decay=args.weight_decay)
 
 		self.criterion = nn.MSELoss()
 
@@ -372,9 +372,10 @@ def main():
 	parser.add_argument('--base_data_dir', default='../../data/new_ml_1M/')
 	parser.add_argument('--epoch', type=int, default=20)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--predictor', default='net')
+	parser.add_argument('--predictor', default='ncf')
 	parser.add_argument('--predictor_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
+	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	parser.add_argument('--init', default='normal')
 	parser.add_argument('--kaiming_mode', default='fan_in')
 	parser.add_argument('--kaiming_func', default='relu')

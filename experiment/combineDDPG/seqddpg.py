@@ -256,11 +256,11 @@ class DDPG(object):
 		else:
 			mu = self.actor((Variable(state)))
 
-		# self.actor.train()
 		mu = mu.data
 
 		if action_noise is not None:
 			mu += torch.Tensor(action_noise.noise()).to(self.device)
+		self.actor.train()
 		return mu.to(self.device) 		# 返回的是	torch.tensor
 
 

@@ -1,6 +1,9 @@
+import os
+import pickle
+
 import torch
 import torch.nn as nn
-import os
+
 # 测试用
 import argparse
 import torch.utils.data as Data
@@ -9,6 +12,7 @@ import matplotlib.pyplot as plt
 import logging
 import datetime
 import time
+import random
 
 
 class FM(nn.Module):
@@ -121,11 +125,21 @@ class NCF(nn.Module):
 		return x.clamp(min=self.args.min, max=self.args.max)
 
 
+def load_obj(name):
+	with open('../data/ml_1M_row/' + name + '.pkl', 'rb') as f:
+		return pickle.load(f)
+
+
 class Predictor(object):
-	def __init__(self, args, predictor, device):
+	def __init__(self, args, predictor, device, mid_map_mfeature):
 		super(Predictor, self).__init__()
+		self.args = args
 		self.device = device
+		# mid: one-hot feature (21维 -> mid, genre, genre, ...)
+		self.mid_map_mfeature = mid_map_mfeature
 		self.predictor = predictor.to(self.device)
+
+		self.users_has_clicked = load_obj('users_has_clicked')
 		if args.predictor_optim == 'adam':
 			self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.predictor_lr)
 		elif args.predictor_optim == 'sgd':
@@ -136,123 +150,118 @@ class Predictor(object):
 		self.criterion = nn.MSELoss()
 
 
-	def predict(self, input_data, target):
-		target = target.reshape((target.shape[0], 1)).to(self.device)
-		prediction = self.predictor(input_data)
-		loss = self.criterion(prediction, target)
-		return prediction, loss
+	def bpr_loss(self, y_ij):
+		t = torch.log(torch.sigmoid(y_ij))
+		return -torch.mean(torch.sum(t))
+
+
+	def predict(self, pos_data):
+		# TODO 返回什么 reward ?
+		return self.predictor(pos_data)
+
+
+	def negative_sample(self, uid):
+		mid = random.randint(0, self.args.max_mid)
+		while mid in self.users_has_clicked[uid]:
+			mid = random.randint(0, self.args.max_mid)
+		return mid
+
+
+	def train(self, pos_data):
+		uids = pos_data[:, -self.args.fm_feature_size].tolist()
+		x = pos_data[:, :-self.args.fm_feature_size + 1]	# 除了 mid, genre, genre,..的剩余部分
+
+		neg_mfeature = []
+		for uid in uids:
+			mid = self.negative_sample(uid)
+			mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(self.device)
+			neg_mfeature.append(mfeature)
+
+		neg_mfeature = torch.stack(neg_mfeature)
+		neg_data = torch.cat([x, neg_mfeature], dim=1)
+
+		y_pos = self.predictor(pos_data)
+		y_neg = self.predictor(neg_data)
+		y_ij = y_pos - y_neg
+		loss = self.bpr_loss(y_ij)
+		self.optim.zero_grad()
+		loss.backward()
+		self.optim.step()
+
+		return loss
 
 
 	def on_train(self):
 		self.predictor.train()
 
-
 	def on_eval(self):
 		self.predictor.eval()
-
-
-	def train(self, input_data, target):
-		prediction = self.predictor(input_data)
-		loss = self.criterion(prediction, target.unsqueeze(dim=1))
-		self.optim.zero_grad()
-		loss.backward()
-		self.optim.step()
-
-		return prediction, loss
 
 
 	def save(self, name):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
-			 
 		torch.save(self.predictor.state_dict(), 'models/p_' + name + '.pkl')
-
 
 	def load(self, name):
 		self.predictor.load_state_dict(torch.load('models/p_' + name + '.pkl'))
 
 
-def get_rmse(prediction, target):
-	prediction = prediction.squeeze()
-	rmse = torch.sqrt(torch.sum((prediction - target)**2) / prediction.shape[0])
-	return rmse.item()
+def build_user_training_set(train_data_list):
+	user_train_items = {}	# uid: {mid, mid, ...}	用于训练的 items
+	for mfeature in train_data_list:
+		uid = mfeature[0]
+		mid = mfeature[1]
+		if uid in user_train_items:
+			user_train_items[uid].add(mid)
+		else:
+			user_train_items[uid] = set([mid])
+	return user_train_items
 
 
-def Standardization_uid_mid(data):
-	uid_mean = data[:, 0].mean()
-	uid_std = data[:, 0].std()
-	mid_mean = data[:, 1].mean()
-	mid_std = data[:, 1].std()
-	data[:, 0] = (data[:, 0] - uid_mean) / uid_std
-	data[:, 1] = (data[:, 1] - mid_mean) / mid_std
-	return data
+def evaluate(predictor, data, user_train_items, title='[Valid]'):
+	for mfeature in data:
+		# TODO
+		assert 0>1
 
 
-def evaluate(predictor, data, target, title='[Valid]'):
-	prediction, loss = predictor.predict(data, target)
-	rmse = get_rmse(prediction, target)
-	print(title + ' loss:{:.5}, RMSE:{:.5}'.format(loss.item(), rmse))
-	logging.info(title + ' loss:{:.5}, RMSE:{:.5}'.format(loss.item(), rmse))
-	return rmse
+def train(args, predictor, train_data, valid_data, device):
+	loss_list = []
 
-
-def train(args, predictor, train_data, train_target, valid_data, valid_target, device):
-	rmse_list, valid_rmse_list, loss_list = [], [], []
-	pre_rmse = 99999
-	increase_time = 0	# 连续 x 次不下降
-
-	train_data_set = Data.TensorDataset(train_data, train_target)
+	train_data_set = Data.TensorDataset(train_data)
 	train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=True)
+	user_train_items = build_user_training_set(train_data.tolist())
 
 	for epoch in range(args.epoch):
 		predictor.on_train()	# 训练模式
-		for i_batch, (data, target) in enumerate(train_data_loader):
-			prediction, loss = predictor.train(data, target)
-			rmse = get_rmse(prediction, target)
+		for i_batch, data in enumerate(train_data_loader):
+			data = data[0]
+			loss = predictor.train(data)
 			
 			if (i_batch + 1) % 50 == 0:
-				print('epoch:{}, i_batch:{}, loss:{:.5}, RMSE:{:.5}'.format(epoch + 1, 
-					i_batch+1, loss.item(), rmse))
+				print('epoch:{}, i_batch:{}, loss:{:.5}'.format(epoch + 1, 
+					i_batch+1, loss.item()))
 
-				rmse_list.append(rmse)
 				loss_list.append(loss.item())
-				logging.info('epoch:{}, i_batch:{}, loss:{:.5}, RMSE:{:.5}'.format(epoch + 1, 
-					i_batch+1, loss.item(), rmse))
+				logging.info('epoch:{}, i_batch:{}, loss:{:.5}'.format(epoch + 1, 
+					i_batch+1, loss.item()))
+				break	# Debug TODO
 
 		predictor.on_eval()	# 评估模式
-		valid_rmse = evaluate(predictor, valid_data, valid_target)
-		if valid_rmse >= pre_rmse:	# early stop
-			increase_time += 1
-		else:
-			increase_time = 0
-		pre_rmse = valid_rmse
-		valid_rmse_list.append(valid_rmse)
-		if increase_time >= args.early_stop:
-			break
+		evaluate(predictor, valid_data, user_train_items)
 
 	predictor.on_eval()	# 评估模式
-	test_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_data.npy'), dtype=torch.float32).to(device)
-	test_target = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_target.npy'), dtype=torch.float32).to(device)
-	evaluate(predictor, test_data, test_target, title='[Test]')
-	return rmse_list, valid_rmse_list, loss_list
+	del train_data
+	del valid_data
+	test_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_data.npy'), dtype=torch.float32).to(device)	
+	evaluate(predictor, test_data, user_train_items)
+	return loss_list
 
 
 
-def plot_result(args, rmse_list, valid_rmse_list, loss_list):
+def plot_result(args, loss_list):
 	plt.figure(figsize=(8, 8))
-	plt.subplot(1, 5, 1)
-	plt.title('Train RMSE')
-	plt.xlabel('Step')
-	plt.ylabel('RMSE')
-	plt.plot(rmse_list)
 
-	plt.subplot(1, 5, 3)
-	plt.title('Valid RMSE')
-	plt.xlabel('Step')
-	plt.ylabel('RMSE')
-	plt.plot(valid_rmse_list)
-
-	plt.subplot(1, 5, 5)
 	plt.title('Predictor LOSS')
 	plt.xlabel('Step')
 	plt.ylabel('LOSS')
@@ -309,15 +318,53 @@ def data_reconstruct(args, device):
 		print(data.shape, target.shape)
 
 
-def main():
+def main(args, device):
+	# init_log(args)
+	print(device)
+
+	model = None
+	if args.predictor == 'fm':
+		print('Predictor is FM.')
+		logging.info('Predictor is FM.')
+		model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, args.k, args, device, without_rl=True)
+	elif args.predictor == 'ncf':
+		print('Predictor is NCF.')
+		logging.info('Predictor is NCF.')
+		model = NCF(args, args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, device, without_rl=True)
+
+	# 加载模型
+	if args.load == 'y':
+		print('Loading version:{} model'.format(args.v))
+		model.load_state_dict(torch.load(args.base_log_dir + args.v + '.pkl'))
+
+	if args.recon == 'y':	# 打乱重构数据, 防止出现先验概率误差太大问题
+		data_reconstruct(args)
+	# [uid, mid, genres]
+	train_data = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'train_data.npy'), dtype=torch.float32).to(device)
+	valid_data = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'valid_data.npy'), dtype=torch.float32).to(device)
+	
+	mid_map_mfeature = load_obj('mid_map_mfeature')
+	predictor = Predictor(args, model, device, mid_map_mfeature)
+	rmse_list, valid_rmse_list, loss_list = train(args, predictor, train_data, valid_data, device)
+
+	plot_result(args, rmse_list, valid_rmse_list, loss_list)
+
+	# 保存模型
+	if args.save == 'y':
+		print('Saving version:{} model'.format(args.v))
+		torch.save(model.state_dict(), args.base_log_dir + args.v + '.pkl')
+
+
+if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters for Predictor")
 	parser.add_argument('--v', default="v")
+	parser.add_argument('--topk', type=int, default=10)
 	parser.add_argument('--base_log_dir', default="log/myModel/")
 	parser.add_argument('--base_pic_dir', default="pic/myModel/")
 	parser.add_argument('--base_data_dir', default='../data/ml_1M_row/')
 	parser.add_argument('--epoch', type=int, default=20)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--predictor', default='net')
+	parser.add_argument('--predictor', default='fm')
 	parser.add_argument('--predictor_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--init', default='normal')
@@ -330,7 +377,8 @@ def main():
 	parser.add_argument('--load', default='n')
 	parser.add_argument('--show', default='n')	# show pic
 	parser.add_argument('--recon', default='n')
-	parser.add_argument('--norm_layer', default='bn')	# bn/ln/none
+	parser.add_argument('--weight_decay', type=float, default=1e-4)		# 正则项
+	parser.add_argument('--norm_layer', default='ln')					# bn/ln/none
 	parser.add_argument('--early_stop', type=int, default=5)
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
@@ -353,43 +401,5 @@ def main():
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	args = parser.parse_args()
 
-	init_log(args)
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-	print(device)
-
-	model = None
-	if args.predictor == 'fm':
-		print('Predictor is FM.')
-		logging.info('Predictor is FM.')
-		model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, args.k, args, device, without_rl=True)
-	elif args.predictor == 'ncf':
-		print('Predictor is NCF.')
-		logging.info('Predictor is NCF.')
-		model = NCF(args, args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, device, without_rl=True)
-
-	# 加载模型
-	if args.load == 'y':
-		print('Loading version:{} model'.format(args.v))
-		model.load_state_dict(torch.load(args.base_log_dir + args.v + '.pkl'))
-
-	if args.recon == 'y':	# 打乱重构数据, 防止出现先验概率误差太大问题
-		data_reconstruct(args)
-	# [uid, mid, genres]
-	train_data = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'train_data.npy'), dtype=torch.float32).to(device)
-	train_target = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'train_target.npy'), dtype=torch.float32).to(device)
-	valid_data = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'valid_data.npy'), dtype=torch.float32).to(device)
-	valid_target = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'valid_target.npy'), dtype=torch.float32).to(device)
-
-	predictor = Predictor(args, model, device)
-	rmse_list, valid_rmse_list, loss_list = train(args, predictor, train_data, train_target, valid_data, valid_target, device)
-
-	plot_result(args, rmse_list, valid_rmse_list, loss_list)
-
-	# 保存模型
-	if args.save == 'y':
-		print('Saving version:{} model'.format(args.v))
-		torch.save(model.state_dict(), args.base_log_dir + args.v + '.pkl')
-
-
-if __name__ == '__main__':
-	main()
+	main(args, device)
