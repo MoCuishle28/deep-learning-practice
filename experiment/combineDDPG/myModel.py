@@ -142,11 +142,11 @@ class Predictor(object):
 
 		self.users_has_clicked = load_obj('users_has_clicked')
 		if args.predictor_optim == 'adam':
-			self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.predictor_lr)
+			self.optim = torch.optim.Adam(self.predictor.parameters(), lr=args.predictor_lr, weight_decay=args.weight_decay)
 		elif args.predictor_optim == 'sgd':
-			self.optim = torch.optim.SGD(self.predictor.parameters(), lr=args.predictor_lr, momentum=args.momentum)
+			self.optim = torch.optim.SGD(self.predictor.parameters(), lr=args.predictor_lr, momentum=args.momentum, weight_decay=args.weight_decay)
 		elif args.predictor_optim == 'rmsprop':
-			self.optim = torch.optim.RMSprop(self.predictor.parameters(), lr=args.predictor_lr)
+			self.optim = torch.optim.RMSprop(self.predictor.parameters(), lr=args.predictor_lr, weight_decay=args.weight_decay)
 
 		self.criterion = nn.MSELoss()
 
@@ -220,17 +220,15 @@ def build_ignore_set(ignore_list):
 			ignore_set[uid] = set([mid])
 	return ignore_set
 
-
 def count_evaluate_mid(data_list):
 	# 获取 验证集/测试集 的 item id
 	return list(set([mfeature[1] for mfeature in data_list]))
 
-def get_rec_list(ranking_list, mids):
-	rec_list = []
-	for mid, score in zip(mids, ranking_list):
-		rec_list.append([mid, score[0]])
-	return sorted(rec_list, key=lambda x: x[1], reverse=True)   # 根据 score 从大到小排序
-
+def get_rec_list(args, ranking_tensor, mids):
+	ranking_tensor = ranking_tensor.squeeze()
+	score_tensor, idx_tensor = ranking_tensor.topk(args.topk)
+	rec_list = [[mids[idx], score] for idx, score in zip(idx_tensor.tolist(), score_tensor.tolist())]
+	return rec_list
 
 def get_index(users_has_clicked, uid, rec_list):
 	# 计算一些指标: hit, DCG, ...
@@ -242,7 +240,6 @@ def get_index(users_has_clicked, uid, rec_list):
 			hit += 1
 			dcg += (1 / math.log(i + 2, 2))
 	return hit, dcg
-
 
 def get_ndcg(args, dcg_list, like_count_list):
 	dcg_tensor = torch.tensor(dcg_list, dtype=torch.float32).to(device)
@@ -288,8 +285,7 @@ def evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_cl
 			batch_scores = predictor.predict(batch_data)
 			ranking_list.extend(batch_scores.tolist())
 
-		rec_list = get_rec_list(ranking_list, mids)
-		rec_list = rec_list[:args.topk]		# top K
+		rec_list = get_rec_list(args, torch.tensor(ranking_list, dtype=torch.float32).to(device), mids)
 		hit, dcg = get_index(users_has_clicked, uid, rec_list)
 		hit_list.append(hit)
 		dcg_list.append(dcg)
