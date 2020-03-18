@@ -13,6 +13,7 @@ import logging
 import datetime
 import time
 import random
+import math
 
 
 class FM(nn.Module):
@@ -63,7 +64,7 @@ class FM(nn.Module):
 		inter_2 = torch.mm((x**2), (self.v**2))
 		interaction = (0.5*torch.sum((inter_1**2) - inter_2, dim=1)).reshape(x.shape[0], 1)
 		predict = self.w0 + torch.mm(x, self.w1) + interaction
-		return predict.clamp(min=self.args.min, max=self.args.max)
+		return predict
 
 
 class NCF(nn.Module):
@@ -122,7 +123,7 @@ class NCF(nn.Module):
 			x = x[:, :-self.args.fm_feature_size]
 			x = torch.cat([x, uemb, memb, gemb], 1)
 		x = self.ncf(x)
-		return x.clamp(min=self.args.min, max=self.args.max)
+		return x
 
 
 def load_obj(name):
@@ -152,12 +153,12 @@ class Predictor(object):
 
 	def bpr_loss(self, y_ij):
 		t = torch.log(torch.sigmoid(y_ij))
-		return -torch.mean(torch.sum(t))
+		return -torch.mean(t)
 
 
-	def predict(self, pos_data):
+	def predict(self, data):
 		# TODO 返回什么 reward ?
-		return self.predictor(pos_data)
+		return self.predictor(data)
 
 
 	def negative_sample(self, uid):
@@ -207,30 +208,118 @@ class Predictor(object):
 		self.predictor.load_state_dict(torch.load('models/p_' + name + '.pkl'))
 
 
-def build_user_training_set(train_data_list):
-	user_train_items = {}	# uid: {mid, mid, ...}	用于训练的 items
-	for mfeature in train_data_list:
+def build_ignore_set(ignore_list):
+	# TODO 可是负采样的数据也是经历过训练的啊?
+	ignore_set = {}	# uid: {mid, mid, ...}	用于 训练/测试 的 items, 在 验证集 评估时忽略 (测试集同理)
+	for mfeature in ignore_list:
 		uid = mfeature[0]
 		mid = mfeature[1]
-		if uid in user_train_items:
-			user_train_items[uid].add(mid)
+		if uid in ignore_set:
+			ignore_set[uid].add(mid)
 		else:
-			user_train_items[uid] = set([mid])
-	return user_train_items
+			ignore_set[uid] = set([mid])
+	return ignore_set
 
 
-def evaluate(predictor, data, user_train_items, title='[Valid]'):
-	for mfeature in data:
-		# TODO
-		assert 0>1
+def count_evaluate_mid(data_list):
+	# 获取 验证集/测试集 的 item id
+	return list(set([mfeature[1] for mfeature in data_list]))
+
+def get_rec_list(ranking_list, mids):
+	rec_list = []
+	for mid, score in zip(mids, ranking_list):
+		rec_list.append([mid, score[0]])
+	return sorted(rec_list, key=lambda x: x[1], reverse=True)   # 根据 score 从大到小排序
 
 
-def train(args, predictor, train_data, valid_data, device):
+def get_index(users_has_clicked, uid, rec_list):
+	# 计算一些指标: hit, DCG, ...
+	has_clicked = users_has_clicked[uid]
+	hit = 0
+	dcg = 0
+	for i, pair in enumerate(rec_list):
+		if pair[0] in has_clicked:
+			hit += 1
+			dcg += (1 / math.log(i + 2, 2))
+	return hit, dcg
+
+
+def get_ndcg(args, dcg_list, like_count_list):
+	dcg_tensor = torch.tensor(dcg_list, dtype=torch.float32).to(device)
+	idcg_list = []
+	for user_like_cnt in like_count_list:
+		idcg_list.append(sum([1 / math.log(i + 2, 2) for i in range(min(args.topk, user_like_cnt))]))
+
+	idcg_tensor = torch.tensor(idcg_list, dtype=torch.float32).to(device)
+	ndcg = torch.mean(dcg_tensor / idcg_tensor)
+	return ndcg
+
+
+def evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_clicked, evaluate_mids, title='[Valid]'):
+	hit_list = []			# 每个 user 的 hit
+	like_count_list = []	# 每个用户在 验证集/测试集 中点击的 item 的数量
+	dcg_list = []			# 每个用户的 dcg
+
+	for uid in range(1, args.max_uid + 1):
+		if uid not in ignore_set:
+			continue
+		ignore_mids = ignore_set[uid]
+		uid_tensor = torch.tensor([uid], dtype=torch.float32).to(device)
+
+		mids = []
+		ranking_list = []
+		batch_data = []
+		like_cnt = 0
+		for mid in evaluate_mids:
+			if mid in ignore_mids:	# 训练过的数据/测试集的数据 不纳入评价范围
+				like_cnt += 1
+				continue
+			mfeature = torch.tensor(mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(device)
+			batch_data.append(torch.cat([uid_tensor, mfeature]).to(device))
+			mids.append(mid)
+			if len(batch_data) == args.batch_size:	# 每个 batch 计算一次
+				batch_data = torch.stack(batch_data).to(device)
+				batch_scores = predictor.predict(batch_data)
+				ranking_list.extend(batch_scores.tolist())
+				batch_data = []
+
+		if batch_data != []:
+			batch_data = torch.stack(batch_data).to(device)
+			batch_scores = predictor.predict(batch_data)
+			ranking_list.extend(batch_scores.tolist())
+
+		rec_list = get_rec_list(ranking_list, mids)
+		rec_list = rec_list[:args.topk]		# top K
+		hit, dcg = get_index(users_has_clicked, uid, rec_list)
+		hit_list.append(hit)
+		dcg_list.append(dcg)
+		like_count_list.append(like_cnt)
+
+	hit_tensor = torch.tensor(hit_list, dtype=torch.float32).to(device)
+	sum_hit = torch.sum(hit_tensor)
+	# 计算 Precision
+	precision = sum_hit / torch.tensor([args.topk * len(hit_list)], dtype=torch.float32).to(device)
+	# 计算 HR
+	like_count_tensor = torch.tensor(like_count_list, dtype=torch.float32).to(device)
+	hr = sum_hit / torch.sum(like_count_tensor)
+	# 计算 NDCG
+	ndcg = get_ndcg(args, dcg_list, like_count_list)
+
+	print('{} @{} Precision:{:.4}, HR:{:.4}, NDCG:{:.4}'.format(title, args.topk, precision.item(), hr.item(), ndcg.item()))
+	return precision.item(), hr.item(), ndcg.item()
+
+
+def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, device, users_has_clicked):
 	loss_list = []
+	precision_list = []
+	hr_list = []
+	ndcg_list = []
 
 	train_data_set = Data.TensorDataset(train_data)
 	train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=True)
-	user_train_items = build_user_training_set(train_data.tolist())
+	tmp_list = train_data.tolist() + test_data.tolist()
+	ignore_set = build_ignore_set(tmp_list)
+	evaluate_mids = count_evaluate_mid(valid_data.tolist())
 
 	for epoch in range(args.epoch):
 		predictor.on_train()	# 训练模式
@@ -245,24 +334,44 @@ def train(args, predictor, train_data, valid_data, device):
 				loss_list.append(loss.item())
 				logging.info('epoch:{}, i_batch:{}, loss:{:.5}'.format(epoch + 1, 
 					i_batch+1, loss.item()))
-				break	# Debug TODO
 
 		predictor.on_eval()	# 评估模式
-		evaluate(predictor, valid_data, user_train_items)
+		precision, hr, ndcg = evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_clicked, evaluate_mids)
+		precision_list.append(precision)
+		hr_list.append(hr)
+		ndcg_list.append(ndcg)
 
 	predictor.on_eval()	# 评估模式
-	del train_data
-	del valid_data
-	test_data = torch.tensor(np.load(args.base_log_dir + 'data/' + 'test_data.npy'), dtype=torch.float32).to(device)	
-	evaluate(predictor, test_data, user_train_items)
-	return loss_list
+	tmp_list = train_data.tolist() + valid_data.tolist()
+	ignore_set = build_ignore_set(tmp_list)
+	evaluate_mids = count_evaluate_mid(test_data.tolist())
+	precision, hr, ndcg = evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_clicked, evaluate_mids, title='[TEST]')
+	return loss_list, precision_list, hr_list, ndcg_list
 
 
 
-def plot_result(args, loss_list):
+def plot_result(args, loss_list, precision_list, hr_list, ndcg_list):
 	plt.figure(figsize=(8, 8))
+	plt.subplot(1, 7, 1)
+	plt.title('Valid Precision')
+	plt.xlabel('Step')
+	plt.ylabel('Precision')
+	plt.plot(precision_list)
 
-	plt.title('Predictor LOSS')
+	plt.subplot(1, 7, 3)
+	plt.title('Valid HR')
+	plt.xlabel('Step')
+	plt.ylabel('HR')
+	plt.plot(hr_list)
+
+	plt.subplot(1, 7, 5)
+	plt.title('Valid NDCG')
+	plt.xlabel('Step')
+	plt.ylabel('LOSS')
+	plt.plot(ndcg_list)
+
+	plt.subplot(1, 7, 7)
+	plt.title('Training LOSS')
 	plt.xlabel('Step')
 	plt.ylabel('LOSS')
 	plt.plot(loss_list)
@@ -283,39 +392,6 @@ def init_log(args):
 	logging.info('Parameter:')
 	logging.info(str(args))
 	logging.info('\n-------------------------------------------------------------\n')
-
-
-def data_reconstruct(args, device):
-	train_data = torch.tensor(np.load(args.base_data_dir + 'train_data.npy').astype(np.float32), dtype=torch.float32).to(device)
-	train_target = torch.tensor(np.load(args.base_data_dir + 'train_target.npy').astype(np.float32), dtype=torch.float32).to(device)
-	valid_data = torch.tensor(np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32), dtype=torch.float32).to(device)
-	valid_target = torch.tensor(np.load(args.base_data_dir + 'valid_target.npy').astype(np.float32), dtype=torch.float32).to(device)
-	test_data = torch.tensor(np.load(args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32).to(device)
-	test_target = torch.tensor(np.load(args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32).to(device)
-
-	data = torch.cat([train_data, valid_data, test_data]).to(device)
-	target = torch.cat([train_target, valid_target, test_target]).to(device)
-	all_data = Data.TensorDataset(data, target)
-
-	train_size, valid_size = train_data.shape[0], valid_data.shape[0]
-	train_data, valid_data, test_data = torch.utils.data.random_split(all_data, [train_size, valid_size, valid_size])
-
-	train_data = Data.DataLoader(dataset=train_data, batch_size=args.batch_size, shuffle=True)
-	valid_data = Data.DataLoader(dataset=valid_data, batch_size=args.batch_size, shuffle=True)
-	test_data = Data.DataLoader(dataset=test_data, batch_size=args.batch_size, shuffle=True)
-
-	d = {'train':train_data, 'valid':valid_data, 'test':test_data}
-	for k, v in d.items():
-		data_list = []
-		target_list = []
-		for data, target in v:
-			data_list.append(data.numpy())
-			target_list.append(target.numpy())
-		data = np.concatenate(data_list)
-		target = np.concatenate(target_list)
-		np.save(args.base_log_dir + 'data/' + k + '_data.npy', data)
-		np.save(args.base_log_dir + 'data/' + k + '_target.npy', target)
-		print(data.shape, target.shape)
 
 
 def main(args, device):
@@ -342,12 +418,13 @@ def main(args, device):
 	# [uid, mid, genres]
 	train_data = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'train_data.npy'), dtype=torch.float32).to(device)
 	valid_data = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'valid_data.npy'), dtype=torch.float32).to(device)
+	test_data = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'test_data.npy'), dtype=torch.float32).to(device)
 	
 	mid_map_mfeature = load_obj('mid_map_mfeature')
 	predictor = Predictor(args, model, device, mid_map_mfeature)
-	rmse_list, valid_rmse_list, loss_list = train(args, predictor, train_data, valid_data, device)
+	loss_list, precision_list, hr_list, ndcg_list = train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, device, predictor.users_has_clicked)
 
-	plot_result(args, rmse_list, valid_rmse_list, loss_list)
+	plot_result(args, loss_list, precision_list, hr_list, ndcg_list)
 
 	# 保存模型
 	if args.save == 'y':
