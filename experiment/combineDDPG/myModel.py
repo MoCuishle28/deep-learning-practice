@@ -306,6 +306,7 @@ def evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_cl
 	ndcg = get_ndcg(args, dcg_list, like_count_list)
 
 	print('{} @{} Precision:{:.4}, HR:{:.4}, NDCG:{:.4}'.format(title, args.topk, precision.item(), hr.item(), ndcg.item()))
+	logging.info('{} @{} Precision:{:.4}, HR:{:.4}, NDCG:{:.4}'.format(title, args.topk, precision.item(), hr.item(), ndcg.item()))
 	return precision.item(), hr.item(), ndcg.item()
 
 
@@ -395,7 +396,7 @@ def init_log(args):
 
 
 def main(args, device):
-	# init_log(args)
+	init_log(args)
 	print(device)
 
 	model = None
@@ -444,9 +445,6 @@ if __name__ == '__main__':
 	parser.add_argument('--predictor', default='fm')
 	parser.add_argument('--predictor_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
-	parser.add_argument('--init', default='normal')
-	parser.add_argument('--kaiming_mode', default='fan_in')
-	parser.add_argument('--kaiming_func', default='relu')
 	parser.add_argument('--init_std', type=float, default=0.01)
 	parser.add_argument('--min', type=float, default=0.0)
 	parser.add_argument('--max', type=float, default=5.0)
@@ -468,11 +466,8 @@ if __name__ == '__main__':
 	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
 	parser.add_argument('--m_emb_dim', type=int, default=128)
 	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
-
-	parser.add_argument('--n_act', default='relu')
-	parser.add_argument('--hidden_0', type=int, default=1024)
-	parser.add_argument('--hidden_1', type=int, default=512)
 	# NCF
+	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--layers', default='1024,512')
 	parser.add_argument('--actor_output', type=int, default=0)
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
