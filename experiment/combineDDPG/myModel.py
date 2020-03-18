@@ -14,6 +14,7 @@ import datetime
 import time
 import random
 import math
+import heapq
 
 
 class FM(nn.Module):
@@ -224,11 +225,17 @@ def count_evaluate_mid(data_list):
 	# 获取 验证集/测试集 的 item id
 	return list(set([mfeature[1] for mfeature in data_list]))
 
-def get_rec_list(args, ranking_tensor, mids):
-	ranking_tensor = ranking_tensor.squeeze()
-	score_tensor, idx_tensor = ranking_tensor.topk(args.topk)
-	rec_list = [[mids[idx], score] for idx, score in zip(idx_tensor.tolist(), score_tensor.tolist())]
+
+def get_rec_list(args, neg_ranking_list, mids):
+	# heap -> element:(score, mid)
+	score_mid_pairs = list(zip(neg_ranking_list, mids))
+	heapq.heapify(score_mid_pairs)
+	rec_list = []
+	for i in range(args.topk):
+		pair = heapq.heappop(score_mid_pairs)
+		rec_list.append([pair[1], -pair[0]])
 	return rec_list
+
 
 def get_index(users_has_clicked, uid, rec_list):
 	# 计算一些指标: hit, DCG, ...
@@ -240,6 +247,7 @@ def get_index(users_has_clicked, uid, rec_list):
 			hit += 1
 			dcg += (1 / math.log(i + 2, 2))
 	return hit, dcg
+	
 
 def get_ndcg(args, dcg_list, like_count_list):
 	dcg_tensor = torch.tensor(dcg_list, dtype=torch.float32).to(device)
@@ -264,9 +272,10 @@ def evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_cl
 		uid_tensor = torch.tensor([uid], dtype=torch.float32).to(device)
 
 		mids = []
-		ranking_list = []
+		neg_ranking_list = []
 		batch_data = []
 		like_cnt = 0
+
 		for mid in evaluate_mids:
 			if mid in ignore_mids:	# 训练过的数据/测试集的数据 不纳入评价范围
 				like_cnt += 1
@@ -277,15 +286,15 @@ def evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_cl
 			if len(batch_data) == args.batch_size:	# 每个 batch 计算一次
 				batch_data = torch.stack(batch_data).to(device)
 				batch_scores = predictor.predict(batch_data)
-				ranking_list.extend(batch_scores.tolist())
+				neg_ranking_list.extend((-batch_scores.view(-1)).tolist())
 				batch_data = []
 
 		if batch_data != []:
 			batch_data = torch.stack(batch_data).to(device)
 			batch_scores = predictor.predict(batch_data)
-			ranking_list.extend(batch_scores.tolist())
-
-		rec_list = get_rec_list(args, torch.tensor(ranking_list, dtype=torch.float32).to(device), mids)
+			neg_ranking_list.extend((-batch_scores.view(-1)).tolist())
+		
+		rec_list = get_rec_list(args, neg_ranking_list, mids)
 		hit, dcg = get_index(users_has_clicked, uid, rec_list)
 		hit_list.append(hit)
 		dcg_list.append(dcg)
