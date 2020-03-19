@@ -265,6 +265,7 @@ def evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_cl
 	hit_list = []			# 每个 user 的 hit
 	like_count_list = []	# 每个用户在 验证集/测试集 中点击的 item 的数量
 	dcg_list = []			# 每个用户的 dcg
+	# new_user = {}			# 在验证集没有 item 的用户
 
 	for uid in range(1, args.max_uid + 1):
 		if uid not in ignore_set:
@@ -341,11 +342,11 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 			loss = predictor.train(data)
 			
 			if (i_batch + 1) % 50 == 0:
-				print('epoch:{}, i_batch:{}, loss:{:.5}'.format(epoch + 1, 
+				print('epoch:{}/{}, i_batch:{}, loss:{:.5}'.format(epoch + 1, args.epoch,
 					i_batch+1, loss.item()))
 
 				loss_list.append(loss.item())
-				logging.info('epoch:{}, i_batch:{}, loss:{:.5}'.format(epoch + 1, 
+				logging.info('epoch:{}/{}, i_batch:{}, loss:{:.5}'.format(epoch + 1, args.epoch,
 					i_batch+1, loss.item()))
 
 		predictor.on_eval()	# 评估模式
@@ -468,7 +469,7 @@ if __name__ == '__main__':
 	parser.add_argument('--weight_decay', type=float, default=1e-4)		# 正则项
 	parser.add_argument('--norm_layer', default='ln')					# bn/ln/none
 	parser.add_argument('--early_stop', type=int, default=5)
-	parser.add_argument('--without_time_seq', default='y')				# 数据集是否按时间排序
+	parser.add_argument('--without_time_seq', default='n')				# 数据集是否按时间排序
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM
