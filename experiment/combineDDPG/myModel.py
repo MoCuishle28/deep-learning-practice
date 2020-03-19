@@ -215,6 +215,7 @@ def build_ignore_set(ignore_list):
 	for mfeature in ignore_list:
 		uid = mfeature[0]
 		mid = mfeature[1]
+
 		if uid in ignore_set:
 			ignore_set[uid].add(mid)
 		else:
@@ -269,6 +270,7 @@ def evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_cl
 		if uid not in ignore_set:
 			continue
 		ignore_mids = ignore_set[uid]
+		user_like = users_has_clicked[uid]
 		uid_tensor = torch.tensor([uid], dtype=torch.float32).to(device)
 
 		mids = []
@@ -278,8 +280,10 @@ def evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_cl
 
 		for mid in evaluate_mids:
 			if mid in ignore_mids:	# 训练过的数据/测试集的数据 不纳入评价范围
-				like_cnt += 1
 				continue
+			if mid in user_like:	# 评估 item 是在 验证集/测试集(测试时)
+				like_cnt += 1
+
 			mfeature = torch.tensor(mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(device)
 			batch_data.append(torch.cat([uid_tensor, mfeature]).to(device))
 			mids.append(mid)
@@ -294,6 +298,9 @@ def evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_cl
 			batch_scores = predictor.predict(batch_data)
 			neg_ranking_list.extend((-batch_scores.view(-1)).tolist())
 		
+		if like_cnt == 0:
+			# print('new user, no valided data set', uid)
+			continue
 		rec_list = get_rec_list(args, neg_ranking_list, mids)
 		hit, dcg = get_index(users_has_clicked, uid, rec_list)
 		hit_list.append(hit)
@@ -422,9 +429,10 @@ def main(args, device):
 	if args.recon == 'y':	# 打乱重构数据, 防止出现先验概率误差太大问题
 		data_reconstruct(args)
 	# [uid, mid, genres]
-	train_data = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'train_data.npy'), dtype=torch.float32).to(device)
-	valid_data = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'valid_data.npy'), dtype=torch.float32).to(device)
-	test_data = torch.tensor(np.load(args.base_data_dir + 'without_time_seq/' + 'test_data.npy'), dtype=torch.float32).to(device)
+	mid_dir = 'without_time_seq/' if args.without_time_seq == 'y' else ''
+	train_data = torch.tensor(np.load(args.base_data_dir + mid_dir + 'train_data.npy').astype(np.float32), dtype=torch.float32).to(device)
+	valid_data = torch.tensor(np.load(args.base_data_dir + mid_dir + 'valid_data.npy').astype(np.float32), dtype=torch.float32).to(device)
+	test_data = torch.tensor(np.load(args.base_data_dir + mid_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32).to(device)
 	
 	mid_map_mfeature = load_obj('mid_map_mfeature')
 	predictor = Predictor(args, model, device, mid_map_mfeature)
@@ -460,6 +468,7 @@ if __name__ == '__main__':
 	parser.add_argument('--weight_decay', type=float, default=1e-4)		# 正则项
 	parser.add_argument('--norm_layer', default='ln')					# bn/ln/none
 	parser.add_argument('--early_stop', type=int, default=5)
+	parser.add_argument('--without_time_seq', default='y')				# 数据集是否按时间排序
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM
