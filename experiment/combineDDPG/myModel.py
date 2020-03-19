@@ -209,118 +209,113 @@ class Predictor(object):
 		self.predictor.load_state_dict(torch.load('models/p_' + name + '.pkl'))
 
 
-def build_ignore_set(ignore_list):
-	# TODO 可是负采样的数据也是经历过训练的啊?
-	ignore_set = {}	# uid: {mid, mid, ...}	用于 训练/测试 的 items, 在 验证集 评估时忽略 (测试集同理)
-	for mfeature in ignore_list:
-		uid = mfeature[0]
-		mid = mfeature[1]
+class Evaluate(object):
+	def __init__(self, args, predictor, train_data, valid_data, test_data, users_has_clicked, mid_map_mfeature, device):
+		self.args = args
+		self.predictor = predictor
+		self.train_data = train_data
+		self.valid_data = valid_data
+		self.test_data = test_data
+		self.users_has_clicked = users_has_clicked
+		self.mid_map_mfeature = mid_map_mfeature
+		self.device = device
 
-		if uid in ignore_set:
-			ignore_set[uid].add(mid)
-		else:
-			ignore_set[uid] = set([mid])
-	return ignore_set
-
-def count_evaluate_mid(data_list):
-	# 获取 验证集/测试集 的 item id
-	return list(set([mfeature[1] for mfeature in data_list]))
+		# 先建立 valid 要忽略的 items set
+		self.build_ignore_set(train_data.tolist() + test_data.tolist())
 
 
-def get_rec_list(args, neg_ranking_list, mids):
-	# heap -> element:(score, mid)
-	score_mid_pairs = list(zip(neg_ranking_list, mids))
-	heapq.heapify(score_mid_pairs)
-	rec_list = []
-	for i in range(args.topk):
-		pair = heapq.heappop(score_mid_pairs)
-		rec_list.append([pair[1], -pair[0]])
-	return rec_list
+	def get_hr(self, rank_list, gt_item):
+		for mid in rank_list:
+			if mid == gt_item:
+				return 1
+		return 0.0
 
 
-def get_index(users_has_clicked, uid, rec_list):
-	# 计算一些指标: hit, DCG, ...
-	has_clicked = users_has_clicked[uid]
-	hit = 0
-	dcg = 0
-	for i, pair in enumerate(rec_list):
-		if pair[0] in has_clicked:
-			hit += 1
-			dcg += (1 / math.log(i + 2, 2))
-	return hit, dcg
-	
-
-def get_ndcg(args, dcg_list, like_count_list):
-	dcg_tensor = torch.tensor(dcg_list, dtype=torch.float32).to(device)
-	idcg_list = []
-	for user_like_cnt in like_count_list:
-		idcg_list.append(sum([1 / math.log(i + 2, 2) for i in range(min(args.topk, user_like_cnt))]))
-
-	idcg_tensor = torch.tensor(idcg_list, dtype=torch.float32).to(device)
-	ndcg = torch.mean(dcg_tensor / idcg_tensor)
-	return ndcg
+	def get_ndcg(self, rank_list, gt_item):
+		for i, mid in enumerate(rank_list):
+			if mid == gt_item:
+				return math.log(2.0, 2) / math.log(i + 2.0, 2)
+		return 0.0
 
 
-def evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_clicked, evaluate_mids, title='[Valid]'):
-	hit_list = []			# 每个 user 的 hit
-	like_count_list = []	# 每个用户在 验证集/测试集 中点击的 item 的数量
-	dcg_list = []			# 每个用户的 dcg
-	# new_user = {}			# 在验证集没有 item 的用户
+	def get_precs(self, rank_list, gt_item):
+		for i, mid in enumerate(rank_list):
+			if mid == gt_item:
+				return 1.0 / (i + 1.0)
+		return 0.0
 
-	for uid in range(1, args.max_uid + 1):
-		if uid not in ignore_set:
-			continue
-		ignore_mids = ignore_set[uid]
-		user_like = users_has_clicked[uid]
-		uid_tensor = torch.tensor([uid], dtype=torch.float32).to(device)
 
-		mids = []
-		neg_ranking_list = []
-		batch_data = []
-		like_cnt = 0
+	def evaluate_for_user(self, uid, mid):
+		ret = [0.0, 0.0, 0.0]	# hr, ndcg, precs
+		map_items_score = {}	# mid: score
 
-		for mid in evaluate_mids:
-			if mid in ignore_mids:	# 训练过的数据/测试集的数据 不纳入评价范围
+		uid_tensor = torch.tensor([uid], dtype=torch.float32).to(self.device)
+		mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(self.device)
+		input_vector = torch.cat([uid_tensor, mfeature]).unsqueeze(0).to(self.device)	# 一维
+		max_score = self.predictor.predict(input_vector)
+
+		user_ignore_set = self.ignore_set[uid]
+		count_larger = 0	# Early stop if there are args.topk items larger than max_score
+		early_stop = False
+		for i in range(self.args.max_mid + 1):
+			if i in user_ignore_set:	# 忽略训练过的 item (以及在验证时忽略测试集,测试时忽略验证集)
 				continue
-			if mid in user_like:	# 评估 item 是在 验证集/测试集(测试时)
-				like_cnt += 1
+			mfeature = torch.tensor(self.mid_map_mfeature[i].astype(np.float32), dtype=torch.float32).to(self.device)
+			input_vector = torch.cat([uid_tensor, mfeature]).unsqueeze(0).to(self.device)
+			score = self.predictor.predict(input_vector)
+			map_items_score[i] = score
+			if score > max_score:
+				count_larger += 1
+			if count_larger > self.args.topk:
+				early_stop = True
+				break
 
-			mfeature = torch.tensor(mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(device)
-			batch_data.append(torch.cat([uid_tensor, mfeature]).to(device))
-			mids.append(mid)
-			if len(batch_data) == args.batch_size:	# 每个 batch 计算一次
-				batch_data = torch.stack(batch_data).to(device)
-				batch_scores = predictor.predict(batch_data)
-				neg_ranking_list.extend((-batch_scores.view(-1)).tolist())
-				batch_data = []
+		if early_stop == False:
+			rank_list = heapq.nlargest(self.args.topk, map_items_score, key=map_items_score.get)
+			hr = self.get_hr(rank_list, mid)
+			ndcg = self.get_ndcg(rank_list, mid)
+			precs = self.get_precs(rank_list, mid)
 
-		if batch_data != []:
-			batch_data = torch.stack(batch_data).to(device)
-			batch_scores = predictor.predict(batch_data)
-			neg_ranking_list.extend((-batch_scores.view(-1)).tolist())
+		return ret
+
+
+	def evaluate(self, title='[Valid]'):
+		dataset = None
+		self.hits, self.ndcgs, self.precs = [], [], []
+
+		if title == '[Valid]':
+			dataset = self.valid_data.tolist()
+		else:	# Testing data set
+			dataset = self.test_data.tolist()
+			self.build_ignore_set(train_data.tolist() + valid_data.tolist())
+			print('Testing...')
 		
-		if like_cnt == 0:
-			# print('new user, no valided data set', uid)
-			continue
-		rec_list = get_rec_list(args, neg_ranking_list, mids)
-		hit, dcg = get_index(users_has_clicked, uid, rec_list)
-		hit_list.append(hit)
-		dcg_list.append(dcg)
-		like_count_list.append(like_cnt)
+		for vector in dataset:
+			uid = vector[0]
+			mid = vector[1]
+			ret = self.evaluate_for_user(uid, mid)
+			self.hits.append(ret[0])
+			self.ndcgs.append(ret[1])
+			self.precs.append(ret[2])
 
-	hit_tensor = torch.tensor(hit_list, dtype=torch.float32).to(device)
-	sum_hit = torch.sum(hit_tensor)
-	# 计算 Precision
-	precision = sum_hit / torch.tensor([args.topk * len(hit_list)], dtype=torch.float32).to(device)
-	# 计算 HR
-	like_count_tensor = torch.tensor(like_count_list, dtype=torch.float32).to(device)
-	hr = sum_hit / torch.sum(like_count_tensor)
-	# 计算 NDCG
-	ndcg = get_ndcg(args, dcg_list, like_count_list)
+		self.hits = torch.tensor(self.hits, dtype=torch.float32).to(self.device)
+		self.ndcgs = torch.tensor(self.ndcgs, dtype=torch.float32).to(self.device)
+		self.precs = torch.tensor(self.precs, dtype=torch.float32).to(self.device)
+		return self.hits.mean().item(), self.ndcgs.mean().item(), self.precs.mean().item()
+		
 
-	print('{} @{} Precision:{:.4}, HR:{:.4}, NDCG:{:.4}'.format(title, args.topk, precision.item(), hr.item(), ndcg.item()))
-	logging.info('{} @{} Precision:{:.4}, HR:{:.4}, NDCG:{:.4}'.format(title, args.topk, precision.item(), hr.item(), ndcg.item()))
-	return precision.item(), hr.item(), ndcg.item()
+	def build_ignore_set(self, ignore_list):
+		# TODO 可是负采样的数据也是经历过训练的啊?
+		self.ignore_set = {}	# uid: {mid, mid, ...}	用于 训练/测试 的 items, 在 验证集 评估时忽略 (测试集同理)
+		for mfeature in ignore_list:
+			uid = mfeature[0]
+			mid = mfeature[1]
+
+			if uid in self.ignore_set:
+				self.ignore_set[uid].add(mid)
+			else:
+				self.ignore_set[uid] = set([mid])
+		self.ignore_set
 
 
 def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, device, users_has_clicked):
@@ -331,9 +326,7 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 
 	train_data_set = Data.TensorDataset(train_data)
 	train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=True)
-	tmp_list = train_data.tolist() + test_data.tolist()
-	ignore_set = build_ignore_set(tmp_list)
-	evaluate_mids = count_evaluate_mid(valid_data.tolist())
+	evaluate = Evaluate(args, predictor, train_data, valid_data, test_data, users_has_clicked, mid_map_mfeature, device)
 
 	for epoch in range(args.epoch):
 		predictor.on_train()	# 训练模式
@@ -342,24 +335,27 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 			loss = predictor.train(data)
 			
 			if (i_batch + 1) % 50 == 0:
-				print('epoch:{}/{}, i_batch:{}, loss:{:.5}'.format(epoch + 1, args.epoch,
+				print('epoch:{}/{}, i_batch:{}, BPR LOSS:{:.5}'.format(epoch + 1, args.epoch,
 					i_batch+1, loss.item()))
-
+				logging.info('epoch:{}/{}, i_batch:{}, BPR LOSS:{:.5}'.format(epoch + 1, args.epoch,
+					i_batch+1, loss.item()))
 				loss_list.append(loss.item())
-				logging.info('epoch:{}/{}, i_batch:{}, loss:{:.5}'.format(epoch + 1, args.epoch,
-					i_batch+1, loss.item()))
 
 		predictor.on_eval()	# 评估模式
-		precision, hr, ndcg = evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_clicked, evaluate_mids)
-		precision_list.append(precision)
+		t1 = time.time()
+		hr, ndcg, precs = evaluate.evaluate()
+		t2 = time.time()
+		print('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}, Time:{}'.format(args.topk, hr, ndcg, precs, t2 - t1))
+		logging.info('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}'.format(args.topk, hr, ndcg, precs))
 		hr_list.append(hr)
 		ndcg_list.append(ndcg)
+		precision_list.append(precs)
 
 	predictor.on_eval()	# 评估模式
-	tmp_list = train_data.tolist() + valid_data.tolist()
-	ignore_set = build_ignore_set(tmp_list)
-	evaluate_mids = count_evaluate_mid(test_data.tolist())
-	precision, hr, ndcg = evaluate(args, mid_map_mfeature, predictor, ignore_set, device, users_has_clicked, evaluate_mids, title='[TEST]')
+	hr, ndcg, precs = evaluate.evaluate(title='[TEST]')
+
+	print('[TEST]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}'.format(args.topk, hr, ndcg, precs))
+	logging.info('[TEST]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}'.format(args.topk, hr, ndcg, precs))
 	return loss_list, precision_list, hr_list, ndcg_list
 
 
