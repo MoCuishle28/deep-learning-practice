@@ -15,6 +15,7 @@ import time
 import random
 import math
 import heapq
+import multiprocessing
 
 
 class FM(nn.Module):
@@ -245,7 +246,8 @@ class Evaluate(object):
 		return 0.0
 
 
-	def evaluate_for_user(self, uid, mid):
+	def evaluate_for_user(self, args):
+		uid, mid = args[0], args[1]
 		ret = [0.0, 0.0, 0.0]	# hr, ndcg, precs
 		map_items_score = {}	# mid: score
 
@@ -281,6 +283,7 @@ class Evaluate(object):
 
 	def evaluate(self, title='[Valid]'):
 		dataset = None
+		pool = multiprocessing.Pool(processes=self.args.num_thread)
 		self.hits, self.ndcgs, self.precs = [], [], []
 
 		if title == '[Valid]':
@@ -289,11 +292,13 @@ class Evaluate(object):
 			dataset = self.test_data.tolist()
 			self.build_ignore_set(train_data.tolist() + valid_data.tolist())
 			print('Testing...')
-		
-		for vector in dataset:
-			uid = vector[0]
-			mid = vector[1]
-			ret = self.evaluate_for_user(uid, mid)
+
+		thread_func_args = [[vector[0], vector[1]] for vector in dataset]	# 0->uid, 1->mid
+		ret_list = pool.map(self.evaluate_for_user, thread_func_args)
+		pool.close()
+		pool.join()
+
+		for ret in ret_list:
 			self.hits.append(ret[0])
 			self.ndcgs.append(ret[1])
 			self.precs.append(ret[2])
@@ -446,6 +451,7 @@ def main(args, device):
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters for Predictor")
 	parser.add_argument('--v', default="v")
+	parser.add_argument('--num_thread', type=int, default=4)
 	parser.add_argument('--topk', type=int, default=10)
 	parser.add_argument('--base_log_dir', default="log/myModel/")
 	parser.add_argument('--base_pic_dir', default="pic/myModel/")
@@ -473,10 +479,10 @@ if __name__ == '__main__':
 	parser.add_argument('--k', type=int, default=8)
 	# network
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
-	parser.add_argument('--u_emb_dim', type=int, default=128)
+	parser.add_argument('--u_emb_dim', type=int, default=64)
 	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
-	parser.add_argument('--m_emb_dim', type=int, default=128)
-	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
+	parser.add_argument('--m_emb_dim', type=int, default=64)
+	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
 	# NCF
 	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--layers', default='1024,512')
