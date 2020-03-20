@@ -155,7 +155,7 @@ class Predictor(object):
 
 	def bpr_loss(self, y_ij):
 		t = torch.log(torch.sigmoid(y_ij))
-		return -torch.sum(t)
+		return -torch.sum(t), -t
 
 
 	def predict(self, data):
@@ -186,12 +186,12 @@ class Predictor(object):
 		y_pos = self.predictor(pos_data)
 		y_neg = self.predictor(neg_data)
 		y_ij = y_pos - y_neg
-		loss = self.bpr_loss(y_ij)
+		loss, batch_loss = self.bpr_loss(y_ij)
 		self.optim.zero_grad()
 		loss.backward()
 		self.optim.step()
 
-		return loss
+		return loss, batch_loss
 
 
 	def on_train(self):
@@ -289,7 +289,7 @@ class Evaluate(object):
 			dataset = self.valid_data.tolist()
 		else:	# Testing data set
 			dataset = self.test_data.tolist()
-			self.build_ignore_set(train_data.tolist() + valid_data.tolist())
+			self.build_ignore_set(self.train_data.tolist() + self.valid_data.tolist())
 			print('Testing...')
 
 		ret_list = []
