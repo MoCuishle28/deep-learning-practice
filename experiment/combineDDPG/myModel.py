@@ -277,7 +277,7 @@ class Evaluate(object):
 			hr = self.get_hr(rank_list, mid)
 			ndcg = self.get_ndcg(rank_list, mid)
 			precs = self.get_precs(rank_list, mid)
-
+			ret[0], ret[1], ret[2] = hr, ndcg, precs
 		return ret
 
 

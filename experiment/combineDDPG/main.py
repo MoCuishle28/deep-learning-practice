@@ -30,8 +30,8 @@ def load_obj(name):
 
 
 class Algorithm(object):
-	def __init__(self, args, agent, predictor, env, data_list, target_list):
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	def __init__(self, args, agent, predictor, env, data_list, target_list, device):
+		self.device = device
 		self.args = args
 		self.agent = agent
 		self.ounoise = OUNoise(args.actor_output)
@@ -39,22 +39,15 @@ class Algorithm(object):
 		self.memory = ReplayMemory(args.memory_size)
 		self.env = env
 
-		self.train_data = torch.tensor(data_list.pop(0), dtype=torch.float32).to(self.device)
-		self.train_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
-		self.valid_data = torch.tensor(data_list.pop(0), dtype=torch.float32).to(self.device)
-		self.valid_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
+		self.train_data = torch.tensor(data_list.pop(0), dtype=torch.float32, device=self.device)
+		self.train_target = torch.tensor(target_list.pop(0), dtype=torch.float32, device=self.device)
+		self.valid_data = torch.tensor(data_list.pop(0), dtype=torch.float32, device=self.device)
+		self.valid_target = torch.tensor(target_list.pop(0), dtype=torch.float32, device=self.device)
 
 		train_data_set = Data.TensorDataset(self.train_data, self.train_target)
 		shuffle = True if args.shuffle == 'y' else False
 		print('shuffle train data...{}'.format(shuffle))
 		self.train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=shuffle)
-
-
-	def get_rmse(self, prediction, target):
-		if prediction.shape != target.shape:
-			prediction = prediction.squeeze()
-		rmse = torch.sqrt(torch.sum((prediction - target)**2) / prediction.shape[0])
-		return rmse.item()
 
 
 	def evaluate(self, data, target, title='[Valid]'):
@@ -319,14 +312,55 @@ def init_log(args):
 	logging.info('\n-------------------------------------------------------------\n')
 
 
-def main():
+def main(args, device):
+	train_data = np.load(args.base_data_dir + 'train_data.npy').astype(np.float32)
+	train_target = np.load(args.base_data_dir + 'train_target.npy').astype(np.float32)
+	valid_data = np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32)
+	valid_target = np.load(args.base_data_dir + 'valid_target.npy').astype(np.float32)
+	data_list = [train_data] + [valid_data]
+	target_list = [train_target] + [valid_target]
+
+	env = HistoryGenerator(args, device)
+	agent = DDPG(args, device)
+
+	# 后面还可以改成他的预测 rating 算法
+	predictor_model = None
+	if args.predictor == 'fm':
+		predictor_model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.k, args, device)
+		print('predictor_model is FM.')
+		logging.info('predictor_model is FM.')
+	elif args.predictor ==  'ncf':
+		predictor_model = NCF(args, args.u_emb_dim + args.actor_output + args.m_emb_dim + args.g_emb_dim, device)
+		print('predictor_model is NCF.')
+		logging.info('predictor_model is NCF.')
+
+	predictor = Predictor(args, predictor_model, device, env.mid_map_mfeature)
+
+	# 加载模型
+	if args.load == 'y':
+		agent.load_model(version=args.v)
+		predictor.load(args.v)
+		print('Loading version:{} models'.format(args.v))
+		logging.info('Loading version:{} models'.format(args.v))
+
+	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list, device)
+	algorithm.train()
+
+	# 保存模型
+	if args.save == 'y':
+		algorithm.agent.save_model(version=args.v)
+		predictor.save(args.v)
+		print('Saving version:{} models'.format(args.v))
+		logging.info('Saving version:{} models'.format(args.v))
+
+
+if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and Predictor")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_pic_dir', default="pic/")
 	parser.add_argument('--base_data_dir', default='../data/ml_1M_row/')
 	parser.add_argument('--memory_size', type=int, default=4096)
-	parser.add_argument('--pretrain_predictor_epoch', type=int, default=100)
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--hw', type=int, default=10)	# history window
@@ -383,58 +417,7 @@ def main():
 
 	args = parser.parse_args()
 	init_log(args)
+
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	print('device:{}'.format(device))
-
-	train_data = np.load(args.base_data_dir + 'train_data.npy').astype(np.float32)
-	train_target = np.load(args.base_data_dir + 'train_target.npy').astype(np.float32)
-	valid_data = np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32)
-	valid_target = np.load(args.base_data_dir + 'valid_target.npy').astype(np.float32)
-	data_list = [train_data] + [valid_data]
-	target_list = [train_target] + [valid_target]
-
-	env = HistoryGenerator(args, device)
-	agent = DDPG(args, device)
-
-	# 后面还可以改成他的预测 rating 算法
-	predictor_model = None
-	if args.predictor == 'fm':
-		predictor_model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.k, args, device)
-		print('predictor_model is FM.')
-		logging.info('predictor_model is FM.')
-	elif args.predictor ==  'ncf':
-		predictor_model = NCF(args, args.u_emb_dim + args.actor_output + args.m_emb_dim + args.g_emb_dim, device)
-		print('predictor_model is NCF.')
-		logging.info('predictor_model is NCF.')
-
-	predictor = Predictor(args, predictor_model, device, env.mid_map_mfeature)
-
-	# 加载模型
-	if args.load == 'y':
-		agent.load_model(version=args.v)
-		predictor.load(args.v)
-		print('Loading version:{} models'.format(args.v))
-		logging.info('Loading version:{} models'.format(args.v))
-
-	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list)
-	if args.pretrain == 'y':
-		# 暂时未发现有明显效果
-		print('----------------------------------pretrain start----------------------------------')
-		algorithm.pretrain_predictor()
-		print('----------------------------------pretrain end----------------------------------')
-		logging.info('pre-train.')
-	else:
-		print('no pre-train')
-		logging.info('no pre-train.')
-	algorithm.train()
-
-	# 保存模型
-	if args.save == 'y':
-		algorithm.agent.save_model(version=args.v)
-		predictor.save(args.v)
-		print('Saving version:{} models'.format(args.v))
-		logging.info('Saving version:{} models'.format(args.v))
-
-
-if __name__ == '__main__':
-	main()
+	main(args, device)
