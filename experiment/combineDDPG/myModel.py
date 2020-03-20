@@ -155,7 +155,7 @@ class Predictor(object):
 
 	def bpr_loss(self, y_ij):
 		t = torch.log(torch.sigmoid(y_ij))
-		return -torch.mean(t)
+		return -torch.sum(t)
 
 
 	def predict(self, data):
@@ -283,7 +283,6 @@ class Evaluate(object):
 
 	def evaluate(self, title='[Valid]'):
 		dataset = None
-		pool = multiprocessing.Pool(processes=self.args.num_thread)
 		self.hits, self.ndcgs, self.precs = [], [], []
 
 		if title == '[Valid]':
@@ -293,10 +292,17 @@ class Evaluate(object):
 			self.build_ignore_set(train_data.tolist() + valid_data.tolist())
 			print('Testing...')
 
+		ret_list = []
 		thread_func_args = [[vector[0], vector[1]] for vector in dataset]	# 0->uid, 1->mid
-		ret_list = pool.map(self.evaluate_for_user, thread_func_args)
-		pool.close()
-		pool.join()
+		if self.args.num_thread <= 1:	# 不用多线程
+			for args in thread_func_args:
+				ret = self.evaluate_for_user(args)
+				ret_list.append(ret)
+		else:
+			pool = multiprocessing.Pool(processes=self.args.num_thread)
+			ret_list = pool.map(self.evaluate_for_user, thread_func_args)
+			pool.close()
+			pool.join()
 
 		for ret in ret_list:
 			self.hits.append(ret[0])
