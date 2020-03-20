@@ -126,7 +126,7 @@ class Algorithm(object):
 			hr, ndcg, precs = self.evaluate.evaluate()
 			t2 = time.time()
 			print('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}, Time:{}'.format(self.args.topk, hr, ndcg, precs, t2 - t1))
-			logging.info('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}'.format(self.args.topk, hr, ndcg, precs))
+			logging.info('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}, Time:{}'.format(self.args.topk, hr, ndcg, precs, t2 - t1))
 			hr_list.append(hr)
 			ndcg_list.append(ndcg)
 			precision_list.append(precs)

@@ -9,6 +9,8 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
+torch.multiprocessing.set_sharing_strategy('file_system')
+
 
 def load_obj(name):
 	with open('../data/ml_1M_row/' + name + '.pkl', 'rb') as f:
@@ -148,7 +150,7 @@ class Evaluate(object):
 		self.ignore_set
 
 
-	def plot_result(args, loss_list, precision_list, hr_list, ndcg_list):
+	def plot_result(self, args, loss_list, precision_list, hr_list, ndcg_list):
 		plt.figure(figsize=(8, 8))
 		plt.subplot(1, 7, 1)
 		plt.title('Valid Precision')
