@@ -286,7 +286,7 @@ class MPO(object):
 				action = dist.sample().item()
 				action_list.append(action)
 
-			values = torch.gather(q_values, 1, torch.tensor(action_list).view(-1, 1))
+			values = torch.gather(q_values, 1, torch.tensor(action_list, device=self.device).view(-1, 1))
 			batch_values.append(values.squeeze())
 		batch_values = torch.stack(batch_values).to(self.device)
 		return batch_values.mean(dim=0)
