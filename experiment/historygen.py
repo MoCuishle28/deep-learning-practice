@@ -22,18 +22,7 @@ class HistoryGenerator(object):
 		self.mid_map_mfeature = load_obj(args.base_data_dir, 'mid_map_mfeature')		
 		self.users_rating = load_obj(args.base_data_dir, 'users_rating_without_timestamp') # uid:[[mid, rating], ...] 有序
 		self.window = args.hw
-		self.compute_mean_std()
 		self.build_index()
-
-
-	def compute_mean_std(self):
-		rating_list = []
-		for uid, behavior_list in self.users_rating.items():
-			for pair in behavior_list:
-				rating_list.append(pair[-1])
-
-		rating_tensor = torch.tensor(rating_list, dtype=torch.float32).to(self.device)
-		self.rating_mean, self.rating_std = rating_tensor.mean(), rating_tensor.std()
 
 
 	def build_index(self):
@@ -47,30 +36,27 @@ class HistoryGenerator(object):
 
 	def get_history(self, uid, curr_mid):
 		'''
-		return: tensor (window, feature size:23 dim -> [uid, mid, genre, rating])
+		return: tensor (window, feature size:23 dim -> [uid, mid, genre])
 		'''
 		ret_data = []
 		rating_list = self.users_rating[uid]
 		stop_index = self.index[uid][curr_mid]
 		for i in range(stop_index - self.window, stop_index):
 			if i < 0:
-				history_feature = torch.zeros(23, dtype=torch.float32).to(self.device)
+				history_feature = torch.zeros(22, dtype=torch.float32, device=self.device)
 				history_feature[0] = uid
+				history_feature[1] = self.args.max_mid + 1	# 9742 作为初始
 			else:
 				mid = rating_list[i][0]
-				rating  = rating_list[i][1]
-				mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(self.device)
-				# [uid, mfeature..., rating]
-				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32).to(self.device), 
-					mfeature, 
-					torch.tensor([rating], dtype=torch.float32).to(self.device)]).to(self.device)
+				mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
+				# [uid, mfeature...]
+				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32, device=self.device), mfeature]).to(self.device)
 
-			history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std
 			ret_data.append(history_feature)
 		return torch.stack(ret_data).to(self.device)
 
 
-	def get_next_history(self, curr_history, new_mid, curr_uid, rating):
+	def get_next_history(self, curr_history, new_mid, curr_uid):
 		'''
 		这个 state 的转移方式没有考虑 action(即: trasition probability = 1)
 		curr_history: tensor (window, feature size)
@@ -79,14 +65,7 @@ class HistoryGenerator(object):
 		curr_history = curr_history.tolist()
 		curr_history.pop(0)
 		uid = curr_uid
-		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32).to(self.device)
-		rating = torch.tensor([rating], dtype=torch.float32).to(self.device)
-		
-		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32).to(self.device), mfeature, rating]).to(self.device)
-		history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std
+		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32, device=self.device)
+		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32, device=self.device), mfeature]).to(self.device)
 		curr_history.append(history_feature)
-		return torch.tensor(curr_history).to(self.device)
-
-
-	def get_user_all_behaviors(self, uid):
-		return self.users_rating[uid].copy()
+		return torch.tensor(curr_history, device=self.device)

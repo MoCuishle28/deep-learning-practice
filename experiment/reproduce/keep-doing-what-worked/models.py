@@ -42,14 +42,14 @@ class SeqModel(nn.Module):
 		super(SeqModel, self).__init__()
 		self.args = args
 		self.device = device
-		self.seq_input_size = args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + 1	# +1 是 rating
+		self.seq_input_size = args.u_emb_dim + args.m_emb_dim + args.g_emb_dim	# +1 是 rating
 		self.hidden_size = args.seq_hidden_size
 		self.seq_layer_num = args.seq_layer_num
 		self.seq_output_size = args.seq_output_size
 
 		# embedding layer
 		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
-		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
+		self.m_embedding = nn.Embedding(args.max_mid + 1 + 1, args.m_emb_dim)	# 初始状态 mid=9742
 		self.g_embedding = nn.Linear(args.feature_size - 2, args.g_emb_dim)
 		# batch_first = True 则输入输出的数据格式为 (batch, seq, feature)
 		self.gru = nn.GRU(self.seq_input_size, self.hidden_size, self.seq_layer_num, batch_first=True)
@@ -65,18 +65,16 @@ class SeqModel(nn.Module):
 		x: (batch, seq_len, feature_size)
 		return: (batch, args.seq_output_size)
 		'''
-		uids = x[:, :, -(self.args.feature_size + 1)]
-		mids = x[:, :, -((self.args.feature_size + 1) - 1)]
-		genres = x[:, :, -((self.args.feature_size + 1) - 2):-1]
-		rating = x[:, :, -1].view(x.shape[0], x.shape[1], -1)
+		uids = x[:, :, -self.args.feature_size]
+		mids = x[:, :, -(self.args.feature_size - 1)]
+		genres = x[:, :, -(self.args.feature_size - 2):]
 
 		uemb = self.u_embedding(uids.long().to(self.device))
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
-		x = torch.cat([uemb, memb, gemb, rating], -1).to(self.device)
+		x = torch.cat([uemb, memb, gemb], -1).to(self.device)
+		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size, device=self.device)
 
-		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size).to(self.device)
-		
 		out, _ = self.gru(x, h0)  # out: tensor of shape (batch_size, seq_length, hidden_size)
 		out = out[:, -1, :]		# 最后时刻的 seq 作为输出
 		if self.args.norm_layer != 'none':
@@ -99,13 +97,12 @@ class Q(nn.Module):
 		elif self.args.norm_layer == 'ln':
 			layer_trick = nn.LayerNorm
 
-		params = parse_layers(args.q_layers, self.activative_func, layer_trick, args.dropout, 1)
+		params = parse_layers(args.q_layers, self.activative_func, layer_trick, args.dropout, args.max_mid + 1)
 		self.q = nn.Sequential(*params)
 
 
-	def forward(self, s, a):
-		s = self.seq(s)
-		x = torch.cat([s, a], dim=1)
+	def forward(self, s):
+		x = self.seq(s)
 		return self.q(x)
 
 
@@ -123,7 +120,7 @@ class Policy(nn.Module):
 		elif self.args.norm_layer == 'ln':
 			layer_trick = nn.LayerNorm
 
-		params = parse_layers(layers, self.activative_func, layer_trick, args.dropout, args.policy_output_size)
+		params = parse_layers(layers, self.activative_func, layer_trick, args.dropout, args.max_mid + 1)
 		self.model = nn.Sequential(*params)
 
 
@@ -150,8 +147,8 @@ class MPO(object):
 		self.policy = Policy(args, args.a_layers, self.seq, device).to(device)
 
 		# 其他参数
-		self.alpha = nn.Parameter(torch.tensor([1], dtype=torch.float32).to(device))
-		self.eta = nn.Parameter(torch.tensor([3], dtype=torch.float32).to(device))
+		self.alpha = nn.Parameter(torch.tensor([1], dtype=torch.float32, device=device))
+		self.eta = nn.Parameter(torch.tensor([3], dtype=torch.float32, device=device))
 
 		self.optim_dict = {'rms':torch.optim.RMSprop, 'adam':torch.optim.Adam, 'sgd':torch.optim.SGD}
 
@@ -161,11 +158,11 @@ class MPO(object):
 		self.alpha_optim = self.optim_dict.get(args.optim, torch.optim.Adam)
 		self.eta_optim = self.optim_dict.get(args.optim, torch.optim.Adam)
 
-		self.prior_optim = self.prior_optim(self.prior.parameters(), lr=args.p_lr)
-		self.actor_optim = self.actor_optim(self.policy.parameters(), lr=args.a_lr)
-		self.critic_optim = self.critic_optim(self.Q.parameters(), lr=args.q_lr)
-		self.alpha_optim = self.alpha_optim([self.alpha], lr=args.a_lr)
-		self.eta_optim = self.eta_optim([self.eta], lr=args.q_lr)
+		self.prior_optim = self.prior_optim(self.prior.parameters(), lr=args.p_lr, weight_decay=args.weight_decay)
+		self.actor_optim = self.actor_optim(self.policy.parameters(), lr=args.a_lr, weight_decay=args.weight_decay)
+		self.critic_optim = self.critic_optim(self.Q.parameters(), lr=args.q_lr, weight_decay=args.weight_decay)
+		self.alpha_optim = self.alpha_optim([self.alpha], lr=args.a_lr, weight_decay=args.weight_decay)
+		self.eta_optim = self.eta_optim([self.eta], lr=args.q_lr, weight_decay=args.weight_decay)
 
 		hard_update(self.target_Q, self.Q)
 		# hard_update(self.target_policy, self.policy)
@@ -173,87 +170,67 @@ class MPO(object):
 		self.state_list, self.action_list, self.reward_list, self.next_state_list = [], [], [], []
 
 
-	def select_action_from_target(self, state):
-		output = self.target_policy(state).to(self.device)		# 输出 (batch, 2) 2 -> mu, log_std
-		mu = output[:, 0]
-		log_std = output[:, 1]
-		z = torch.normal(mean=0, std=torch.ones(log_std.shape[-1])).to(self.device)
-		a = mu + torch.exp(log_std) * z
-		return a.clamp(min=self.args.min, max=self.args.max), mu, log_std
-
-
-	def select_action_without_noise(self, state):
-		output = self.policy(state).to(self.device)		# 输出 (batch, 2) 2 -> mu, log_std
-		mu = output[:, 0]
-		log_std = output[:, 1]
-		a = mu + torch.exp(log_std)
-		return a.clamp(min=self.args.min, max=self.args.max), mu, log_std
+	def select_action_from_target_policy(self, state):
+		output = self.target_policy(state).to(self.device)
+		return torch.softmax(output, dim=1)
 
 
 	def select_action(self, state):
-		output = self.policy(state).to(self.device)		# 输出 (batch, 2) 2 -> mu, log_std
-		mu = output[:, 0]
-		log_std = output[:, 1]
-		z = torch.normal(mean=0, std=torch.ones(log_std.shape[-1])).to(self.device)
-		a = mu + torch.exp(log_std) * z
-		return a.clamp(min=self.args.min, max=self.args.max), mu, log_std
+		output = self.policy(state).to(self.device)
+		return torch.softmax(output, dim=1)
 
 
 	def select_action_from_prior(self, state):
-		output = self.prior(state).to(self.device)		# 输出 (batch, 2) 2 -> mu, log_std
-		mu = output[:, 0]
-		log_std = output[:, 1]
-		z = torch.normal(mean=0, std=torch.ones(log_std.shape[-1])).to(self.device)
-		a = mu + torch.exp(log_std) * z
-		return a.clamp(min=self.args.min, max=self.args.max), mu, log_std
-
-
-	def gaussian_likelihood(self, x, mu, log_std):
-		'''
-		x: action (batch, feature size)
-		return: log pi(a|s)
-		'''
-		# 运算变量必须都是 tensor (np.pi)
-		pre_sum = -0.5 * ( ((x - mu) / (torch.exp(log_std) + EPS))**2 + 2 * log_std + torch.log(torch.tensor([2*np.pi]).to(self.device)) )
-		return torch.sum(pre_sum, dim=-1)
+		output = self.prior(state).to(self.device)		# 输出 (batch, args.max_mid)
+		return torch.softmax(output, dim=1)
 
 
 	def optimize_model(self):
 		gamma = self.args.gamma
 		state_batch = torch.stack(self.state_list).to(self.device)
+		action_idx = torch.tensor(self.action_list).view(-1, 1)
 		# abm
-		a, mu, log_std = self.select_action(state_batch)	# 维度只有 (batch)
-		log_pi = self.gaussian_likelihood(a.unsqueeze(dim=1), mu.unsqueeze(dim=1), log_std.unsqueeze(dim=1))
+		softmax_abm_a = torch.softmax(self.prior(state_batch).to(self.device), dim=1)	# 维度只有 (batch)
+		# (batch, 1)
+		action_batch = torch.gather(softmax_abm_a, 1, action_idx).squeeze()
+
 		R = self._R().squeeze()
-		values = self._values(state_batch).squeeze()
-		abm_loss = -torch.sum(self._f(R - values) * log_pi)
+		values = self._values(state_batch)
+		abm_loss = -torch.sum(self._f(R - values) * torch.log(action_batch))
 		self.prior_optim.zero_grad()
 		abm_loss.backward()
 		self.prior_optim.step()
 
-		reward_batch = torch.tensor(self.reward_list).view(len(self.reward_list), -1).to(self.device)
-		action_batch = torch.tensor(self.action_list).view(len(self.action_list), -1).to(self.device)
+		# (batch, 1)
+		reward_batch = torch.tensor(self.reward_list, dtype=torch.float32, device=self.device).view(len(self.reward_list), -1)
 		next_state_batch = torch.stack(self.next_state_list).to(self.device)
+
 		# Q
 		expected_next_values = self.args.gamma * self._values(next_state_batch).squeeze()
-		curr_q_values = self.Q(state_batch, action_batch).to(self.device).squeeze()
-		trajectory_len = len(self.state_list)
-		q_loss = (1 / trajectory_len) * torch.sum((reward_batch.squeeze() + expected_next_values - curr_q_values)**2)
+		q_values = self.Q(state_batch).to(self.device)
+		curr_q_values = torch.gather(q_values, 1, action_idx)
+		curr_q_values = curr_q_values.squeeze()
+
+		q_loss = torch.mean((reward_batch.squeeze() + expected_next_values - curr_q_values)**2)
 		self.critic_optim.zero_grad()
 		q_loss.backward()
 		self.critic_optim.step()
-		# pi
+
 		m_sum = 0
 		eat_q_sum = 0
 		for i in range(self.args.m):
-			actions, mu, log_std = self.select_action_from_prior(state_batch)
-			actions, mu, log_std = actions.unsqueeze(dim=1), mu.unsqueeze(dim=1), log_std.unsqueeze(dim=1)
-			q_values = self.Q(state_batch, actions).to(self.device)
-			log_prior = self.gaussian_likelihood(actions, mu, log_std).unsqueeze(1)
+			softmax_abm_a = torch.softmax(self.prior(state_batch).to(self.device), dim=1)
+			action_idx = softmax_abm_a.argmax(dim=1).unsqueeze(1)
+			prior_action_batch = torch.gather(softmax_abm_a, 1, action_idx).squeeze()
+			log_prior = torch.log(prior_action_batch)
 
-			_, mu, log_std = self.select_action(state_batch)
-			mu, log_std = mu.unsqueeze(dim=1), log_std.unsqueeze(dim=1)
-			log_pi = self.gaussian_likelihood(actions, mu, log_std).unsqueeze(1)
+			q_values = self.Q(state_batch).to(self.device)
+			q_values = torch.gather(q_values, 1, action_idx).squeeze()
+
+			softmax_pi_a = self.select_action(state_batch)
+			pi_action_batch = torch.gather(softmax_pi_a, 1, action_idx).squeeze()
+			log_pi = torch.log(pi_action_batch)
+
 			m_sum = m_sum + (torch.exp(q_values / self.eta) * log_pi + self.alpha * (self.args.epsilon - F.kl_div(log_prior, torch.exp(log_pi), reduction='sum')))
 			# eta loss part
 			eat_q_sum = eat_q_sum + (torch.exp(q_values / self.eta))
@@ -268,7 +245,7 @@ class MPO(object):
 		alpha_loss.backward(retain_graph=True)
 		self.alpha_optim.step()
 
-		eta_loss = -(self.eta * self.alpha + self.eta * torch.sum(torch.log(eat_q_sum)))
+		eta_loss = -(self.eta * self.alpha + self.eta * torch.log(torch.sum(eat_q_sum / self.args.m)))
 		self.eta_optim.zero_grad()
 		eta_loss.backward()
 		self.eta_optim.step()
@@ -279,8 +256,11 @@ class MPO(object):
 			hard_update(self.target_Q, self.Q)
 			# hard_update(self.target_policy, self.policy)
 
+		action = softmax_pi_a.argmax(dim=1)
+		target = torch.tensor(self.action_list).view(-1)
+		precs = torch.mean((action == target).float())
 		self.clear_buffer()
-		return a, abm_loss.item(), q_loss.item(), pi_loss.item(), alpha_loss.item(), eta_loss.item()
+		return precs.item(), abm_loss.item(), q_loss.item(), pi_loss.item(), alpha_loss.item(), eta_loss.item()
 
 
 	def _f(self, x):
@@ -296,23 +276,34 @@ class MPO(object):
 		state: batch state (batch, seq size, feature size)
 		return values (batch, 1)
 		'''
-		actions = [self.select_action(state)[0].unsqueeze(dim=1) for _ in range(self.args.m)]
-		values = torch.stack([self.target_Q(state, a).to(self.device).squeeze() for a in actions]).to(self.device)
-		return (1 / self.args.m) * torch.sum(values, dim=0)
+		batch_values = []
+		for i in range(self.args.m):
+			action_prob = self.select_action(state)
+			q_values = self.target_Q(state)
+			action_list = []
+			for i_batch, prob in enumerate(action_prob.tolist()):
+				dist = Categorical(torch.tensor(prob, device=self.device))
+				action = dist.sample().item()
+				action_list.append(action)
+
+			values = torch.gather(q_values, 1, torch.tensor(action_list).view(-1, 1))
+			batch_values.append(values.squeeze())
+		batch_values = torch.stack(batch_values).to(self.device)
+		return batch_values.mean(dim=0)
 
 
 	def _R(self):
 		# discounted R
-		discounted_R = torch.zeros(len(self.state_list)).to(self.device)
+		discounted_R = torch.zeros(len(self.state_list), device=self.device)
 		gamma = self.args.gamma
 		sn = self.state_list[-1]
 		sn = sn.view(1, sn.shape[0], sn.shape[1])
-		sn_value = self._values(sn).to(self.device).squeeze()
+		sn_value = self._values(sn)
 		N = len(self.state_list)
 
-		discounted_rewards = torch.zeros(len(self.reward_list)).to(self.device)
+		discounted_rewards = torch.zeros(len(self.reward_list), device=self.device)
 		running_add = 0
-		# 相当于在计算 discounted return
+		# 相当于在计算 discounted return, 最后一个是 0
 		for t in reversed(range(0, len(self.reward_list) - 1)):
 			running_add = running_add * gamma + self.reward_list[t]
 			discounted_rewards[t] = running_add
@@ -334,13 +325,11 @@ class MPO(object):
 	def store_next_state(self, next_state):
 		self.next_state_list.append(next_state)
 
-
 	def clear_buffer(self):
 		self.state_list.clear()
 		self.action_list.clear()
 		self.reward_list.clear()
 		self.next_state_list.clear()
-
 
 	def train(self):
 		self.prior.train()
@@ -348,7 +337,6 @@ class MPO(object):
 		self.policy.train()
 		self.target_Q.train()
 		self.Q.train()
-
 
 	def eval(self):
 		self.prior.eval()
