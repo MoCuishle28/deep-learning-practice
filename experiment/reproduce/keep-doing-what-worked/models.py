@@ -188,7 +188,7 @@ class MPO(object):
 	def optimize_model(self):
 		gamma = self.args.gamma
 		state_batch = torch.stack(self.state_list).to(self.device)
-		action_idx = torch.tensor(self.action_list).view(-1, 1)
+		action_idx = torch.tensor(self.action_list, device=self.device).view(-1, 1)
 		# abm
 		softmax_abm_a = torch.softmax(self.prior(state_batch).to(self.device), dim=1)	# 维度只有 (batch)
 		# (batch, 1)
@@ -256,8 +256,8 @@ class MPO(object):
 			hard_update(self.target_Q, self.Q)
 			# hard_update(self.target_policy, self.policy)
 
-		action = softmax_pi_a.argmax(dim=1)
-		target = torch.tensor(self.action_list).view(-1)
+		action = softmax_pi_a.argmax(dim=1).to(self.device)
+		target = torch.tensor(self.action_list, device=self.device).view(-1)
 		precs = torch.mean((action == target).float())
 		self.clear_buffer()
 		return precs.item(), abm_loss.item(), q_loss.item(), pi_loss.item(), alpha_loss.item(), eta_loss.item()
