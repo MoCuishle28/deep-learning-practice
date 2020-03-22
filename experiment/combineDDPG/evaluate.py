@@ -31,7 +31,7 @@ class Evaluate(object):
 		self.mid_map_mfeature = env.mid_map_mfeature
 		self.env = env
 
-		self.build_ignore_set(train_data.tolist() + test_data.tolist())
+		# self.build_ignore_set(train_data.tolist() + test_data.tolist())
 
 
 	def get_hr(self, rank_list, gt_item):
@@ -78,7 +78,9 @@ class Evaluate(object):
 		input_vector = self.gen_predictor_input_data(uid, mid, action)
 		max_score = self.predictor.predict(input_vector)
 
-		user_ignore_set = self.ignore_set[uid]
+		# user_ignore_set = self.ignore_set[uid]
+		user_ignore_set = self.users_has_clicked[uid]	# 忽略所有点击过的 item, 一次只评估一个 item
+
 		count_larger = 0	# Early stop if there are args.topk items larger than max_score
 		early_stop = False
 		for i in range(self.args.max_mid + 1):
@@ -110,7 +112,7 @@ class Evaluate(object):
 			dataset = self.valid_data.tolist()
 		else:	# Testing data set
 			dataset = self.test_data.tolist()
-			self.build_ignore_set(self.train_data.tolist() + self.valid_data.tolist())
+			# self.build_ignore_set(self.train_data.tolist() + self.valid_data.tolist())
 			print('Testing...')
 
 		ret_list = []

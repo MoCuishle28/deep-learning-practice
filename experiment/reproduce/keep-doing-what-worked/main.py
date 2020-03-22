@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 
 from models import Q, Policy, SeqModel, MPO
 from historygen import HistoryGenerator
+from evaluate import Evaluate
 
 
 def save_obj(obj, name):
@@ -33,6 +34,7 @@ class Algorithm(object):
 		self.agent = agent
 		self.device = device
 		self.env = env
+		self.evaluate = Evaluate(args, device, agent, env)
 
 
 	def load_data(self):
@@ -62,6 +64,8 @@ class Algorithm(object):
 
 
 	def train(self):
+		train_precs_list = []
+		valid_precs_list = []
 		for i_epoch in range(self.args.epoch):
 			remain = 777
 			self.agent.train()
@@ -75,10 +79,12 @@ class Algorithm(object):
 
 					if len(self.agent.reward_list) >= self.args.batch_size:
 						precs, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
+						train_precs_list.append(precs)
 						print_str = 'epoch:{}/{}, precs:{:.4}, abm_loss:{:.4}, q_loss:{:.4}, pi_loss:{:.4}, alpha_loss:{:.4}, eta_loss:{:.4}'
 						info = print_str.format(i_epoch + 1, self.args.epoch, precs, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
 						print(info)
 						logging.info(info)
+
 				
 				if len(self.agent.reward_list) > 0:
 					precs, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
@@ -86,13 +92,21 @@ class Algorithm(object):
 					info = print_str.format(i_epoch + 1, self.args.epoch, precs, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
 					print(info)
 					logging.info(info)
+
 			self.construct_uids_list()
-			
-			# TODO evaluate valid
 			self.agent.eval()
-			print('valid')
-		# TODO evaluate testing
-		print('test')
+			precs = self.evaluate.evaluate(title='[Valid]')
+			valid_precs_list.append(precs)
+			info = '[Valid] precs:{:.6}'.format(precs)
+			print(info)
+			logging.info(info)
+
+		self.agent.eval()
+		precs = self.evaluate.evaluate(title='[TEST]')
+		info = '[TEST] precs:{:.6}'.format(precs)
+		print(info)
+		logging.info(info)
+		self.evaluate.plot_result(train_precs_list, valid_precs_list)
 
 
 def init_log(args):
@@ -127,7 +141,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
 
 	parser.add_argument('--epoch', type=int, default=100)
-	parser.add_argument('--batch_size', type=int, default=128)
+	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--max_len', type=int, default=256)
 	parser.add_argument('--shuffle', default='y')
 	parser.add_argument('--act', default='elu')
@@ -135,10 +149,8 @@ if __name__ == '__main__':
 	parser.add_argument('--norm_layer', default='ln')		# bn/lb/none
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	parser.add_argument('--dropout', type=float, default=0.0)
-	parser.add_argument('--max', type=float, default=5.0)
-	parser.add_argument('--min', type=float, default=0.0)
 	# seq model
-	parser.add_argument('--hw', type=int, default=5)
+	parser.add_argument('--hw', type=int, default=10)
 	parser.add_argument('--seq_hidden_size', type=int, default=512)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=128)
@@ -156,14 +168,14 @@ if __name__ == '__main__':
 	parser.add_argument('--epsilon', type=float, default=0.1)
 	parser.add_argument('--tau', type=float, default=0.1)
 	# Q
-	parser.add_argument('--q_layers', default='128,256,256')
+	parser.add_argument('--q_layers', default='128,512,256')
 	parser.add_argument('--q_lr', type=float, default=1e-3)
 	parser.add_argument('--m', type=int, default=20)
 	# policy
-	parser.add_argument('--a_layers', default='128,256')
+	parser.add_argument('--a_layers', default='128,512,256')
 	parser.add_argument('--a_lr', type=float, default=1e-4)
 	# prior
-	parser.add_argument('--p_layers', default='128,256')
+	parser.add_argument('--p_layers', default='128,512,256')
 	parser.add_argument('--p_lr', type=float, default=1e-3)
 
 	args = parser.parse_args()
