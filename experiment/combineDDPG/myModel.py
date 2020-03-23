@@ -222,7 +222,7 @@ class Evaluate(object):
 		self.device = device
 
 		# 先建立 valid 要忽略的 items set
-		self.build_ignore_set(train_data.tolist() + test_data.tolist())
+		# self.build_ignore_set(train_data.tolist() + test_data.tolist())
 
 
 	def get_hr(self, rank_list, gt_item):
@@ -256,7 +256,9 @@ class Evaluate(object):
 		input_vector = torch.cat([uid_tensor, mfeature]).unsqueeze(0).to(self.device)	# 一维
 		max_score = self.predictor.predict(input_vector)
 
-		user_ignore_set = self.ignore_set[uid]
+		# user_ignore_set = self.ignore_set[uid]
+		user_ignore_set = self.users_has_clicked[uid]
+
 		count_larger = 0	# Early stop if there are args.topk items larger than max_score
 		early_stop = False
 		for i in range(self.args.max_mid + 1):
@@ -289,7 +291,7 @@ class Evaluate(object):
 			dataset = self.valid_data.tolist()
 		else:	# Testing data set
 			dataset = self.test_data.tolist()
-			self.build_ignore_set(self.train_data.tolist() + self.valid_data.tolist())
+			# self.build_ignore_set(self.train_data.tolist() + self.valid_data.tolist())
 			print('Testing...')
 
 		ret_list = []
@@ -326,7 +328,6 @@ class Evaluate(object):
 				self.ignore_set[uid].add(mid)
 			else:
 				self.ignore_set[uid] = set([mid])
-		self.ignore_set
 
 
 def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, device, users_has_clicked):
@@ -343,7 +344,7 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 		predictor.on_train()	# 训练模式
 		for i_batch, data in enumerate(train_data_loader):
 			data = data[0]
-			loss = predictor.train(data)
+			loss, _ = predictor.train(data)
 			
 			if (i_batch + 1) % 50 == 0:
 				print('epoch:{}/{}, i_batch:{}, BPR LOSS:{:.5}'.format(epoch + 1, args.epoch,
@@ -496,6 +497,6 @@ if __name__ == '__main__':
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	args = parser.parse_args()
 
-	# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-	device = torch.device('cpu')
+	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	# device = torch.device('cpu')
 	main(args, device)
