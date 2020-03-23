@@ -155,7 +155,7 @@ class Predictor(object):
 
 	def bpr_loss(self, y_ij):
 		t = torch.log(torch.sigmoid(y_ij))
-		return -torch.sum(t), -t
+		return -torch.sum(t), t
 
 
 	def predict(self, data):
@@ -235,7 +235,7 @@ class Evaluate(object):
 	def get_ndcg(self, rank_list, gt_item):
 		for i, mid in enumerate(rank_list):
 			if mid == gt_item:
-				return math.log(2.0, 2) / math.log(i + 2.0, 2)
+				return math.log(2.0) / math.log(i + 2.0)
 		return 0.0
 
 
@@ -251,8 +251,8 @@ class Evaluate(object):
 		ret = [0.0, 0.0, 0.0]	# hr, ndcg, precs
 		map_items_score = {}	# mid: score
 
-		uid_tensor = torch.tensor([uid], dtype=torch.float32).to(self.device)
-		mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(self.device)
+		uid_tensor = torch.tensor([uid], dtype=torch.float32, device=self.device)
+		mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
 		input_vector = torch.cat([uid_tensor, mfeature]).unsqueeze(0).to(self.device)	# 一维
 		max_score = self.predictor.predict(input_vector)
 
@@ -264,7 +264,7 @@ class Evaluate(object):
 		for i in range(self.args.max_mid + 1):
 			if i in user_ignore_set:	# 忽略训练过的 item (以及在验证时忽略测试集,测试时忽略验证集)
 				continue
-			mfeature = torch.tensor(self.mid_map_mfeature[i].astype(np.float32), dtype=torch.float32).to(self.device)
+			mfeature = torch.tensor(self.mid_map_mfeature[i].astype(np.float32), dtype=torch.float32, device=self.device)
 			input_vector = torch.cat([uid_tensor, mfeature]).unsqueeze(0).to(self.device)
 			score = self.predictor.predict(input_vector)
 			map_items_score[i] = score
@@ -311,9 +311,9 @@ class Evaluate(object):
 			self.ndcgs.append(ret[1])
 			self.precs.append(ret[2])
 
-		self.hits = torch.tensor(self.hits, dtype=torch.float32).to(self.device)
-		self.ndcgs = torch.tensor(self.ndcgs, dtype=torch.float32).to(self.device)
-		self.precs = torch.tensor(self.precs, dtype=torch.float32).to(self.device)
+		self.hits = torch.tensor(self.hits, dtype=torch.float32, device=self.device)
+		self.ndcgs = torch.tensor(self.ndcgs, dtype=torch.float32, device=self.device)
+		self.precs = torch.tensor(self.precs, dtype=torch.float32, device=self.device)
 		return self.hits.mean().item(), self.ndcgs.mean().item(), self.precs.mean().item()
 		
 
@@ -358,7 +358,7 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 		hr, ndcg, precs = evaluate.evaluate()
 		t2 = time.time()
 		print('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}, Time:{}'.format(args.topk, hr, ndcg, precs, t2 - t1))
-		logging.info('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}'.format(args.topk, hr, ndcg, precs))
+		logging.info('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}, Time:{}'.format(args.topk, hr, ndcg, precs, t2 - t1))
 		hr_list.append(hr)
 		ndcg_list.append(ndcg)
 		precision_list.append(precs)
@@ -435,8 +435,6 @@ def main(args, device):
 		print('Loading version:{} model'.format(args.v))
 		model.load_state_dict(torch.load(args.base_log_dir + args.v + '.pkl'))
 
-	if args.recon == 'y':	# 打乱重构数据, 防止出现先验概率误差太大问题
-		data_reconstruct(args)
 	# [uid, mid, genres]
 	mid_dir = 'without_time_seq/' if args.without_time_seq == 'y' else ''
 	train_data = torch.tensor(np.load(args.base_data_dir + mid_dir + 'train_data.npy').astype(np.float32), dtype=torch.float32).to(device)
@@ -469,12 +467,9 @@ if __name__ == '__main__':
 	parser.add_argument('--predictor_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--init_std', type=float, default=0.01)
-	parser.add_argument('--min', type=float, default=0.0)
-	parser.add_argument('--max', type=float, default=5.0)
 	parser.add_argument('--save', default='n')
 	parser.add_argument('--load', default='n')
 	parser.add_argument('--show', default='n')	# show pic
-	parser.add_argument('--recon', default='n')
 	parser.add_argument('--weight_decay', type=float, default=1e-4)		# 正则项
 	parser.add_argument('--norm_layer', default='ln')					# bn/ln/none
 	parser.add_argument('--early_stop', type=int, default=5)
@@ -484,7 +479,7 @@ if __name__ == '__main__':
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
 	parser.add_argument('--k', type=int, default=8)
-	# network
+	# embedding
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
 	parser.add_argument('--u_emb_dim', type=int, default=64)
 	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741

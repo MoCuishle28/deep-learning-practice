@@ -76,6 +76,8 @@ class Algorithm(object):
 			input_data = torch.cat([action.squeeze(), raw_feature])		# action (1, actor_output) -> (actor_output)
 			input_data = input_data.view(1, -1)	# input_data (actor_output + 22) -> (1, actor_output + 22)
 			input_data_list.append(input_data)
+		if self.args.reset == 'y':
+			self.ounoise.reset()	# reset noise vector
 
 		batch_input_data = torch.cat(input_data_list, dim=0).to(self.device)
 		# 训练 predictor
@@ -85,7 +87,7 @@ class Algorithm(object):
 		if self.args.reward == 'loss':
 			bpr_loss_list = batch_bpr_loss.tolist()
 			for state, action, next_state, bpr_loss in zip(state_list, action_list, next_state_list, bpr_loss_list):
-				reward = torch.tensor([-(bpr_loss[0] * self.args.alpha)], dtype=torch.float32, device=self.device)
+				reward = torch.tensor([bpr_loss[0] * self.args.alpha], dtype=torch.float32, device=self.device)
 				mask = torch.tensor([True], dtype=torch.float32, device=self.device)
 				self.memory.push(state, action, mask, next_state, reward)
 		return sum_bpr_loss, batch_bpr_loss
@@ -111,7 +113,7 @@ class Algorithm(object):
 				reward = 0
 				if self.args.reward == 'loss':
 					# Average Reward e.g. Negative Average predictor loss
-					reward = -(predictor_loss_mean * self.args.alpha)
+					reward = predictor_loss_mean * self.args.alpha
 
 				average_reward_list.append(reward)
 				bpr_loss_list.append(sum_bpr_loss.item())
@@ -263,9 +265,10 @@ if __name__ == '__main__':
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--shuffle', default='y')
 	# RL setting
-	parser.add_argument('--memory_size', type=int, default=8000)
+	parser.add_argument('--reset', default='y')
+	parser.add_argument('--memory_size', type=int, default=10000)
 	parser.add_argument('--hw', type=int, default=10)	# history window
-	parser.add_argument('--predictor', default='ncf')
+	parser.add_argument('--predictor', default='fm')	# fm/ncf
 	parser.add_argument('--reward', default='loss')
 	parser.add_argument('--alpha', type=float, default=1)	# raw reward 乘以的倍数(试图放大 reward 加大训练幅度)
 
