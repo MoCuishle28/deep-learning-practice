@@ -44,7 +44,7 @@ class Evaluate(object):
 	def get_ndcg(self, rank_list, gt_item):
 		for i, mid in enumerate(rank_list):
 			if mid == gt_item:
-				return math.log(2.0, 2) / math.log(i + 2.0, 2)
+				return (np.log(2.0) / np.log(i + 2.0)).item()
 		return 0.0
 
 
@@ -77,6 +77,7 @@ class Evaluate(object):
 		action = self.get_current_action(uid, mid)
 		input_vector = self.gen_predictor_input_data(uid, mid, action)
 		max_score = self.predictor.predict(input_vector)
+		map_items_score[mid] = max_score
 
 		# user_ignore_set = self.ignore_set[uid]
 		user_ignore_set = self.users_has_clicked[uid]	# 忽略所有点击过的 item, 一次只评估一个 item

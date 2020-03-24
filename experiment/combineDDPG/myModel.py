@@ -13,7 +13,6 @@ import logging
 import datetime
 import time
 import random
-import math
 import heapq
 import multiprocessing
 
@@ -235,7 +234,7 @@ class Evaluate(object):
 	def get_ndcg(self, rank_list, gt_item):
 		for i, mid in enumerate(rank_list):
 			if mid == gt_item:
-				return math.log(2.0) / math.log(i + 2.0)
+				return (np.log(2.0) / np.log(i + 2.0)).item()
 		return 0.0
 
 
@@ -255,6 +254,7 @@ class Evaluate(object):
 		mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
 		input_vector = torch.cat([uid_tensor, mfeature]).unsqueeze(0).to(self.device)	# 一维
 		max_score = self.predictor.predict(input_vector)
+		map_items_score[mid] = max_score
 
 		# user_ignore_set = self.ignore_set[uid]
 		user_ignore_set = self.users_has_clicked[uid]
@@ -456,14 +456,13 @@ def main(args, device):
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters for Predictor")
 	parser.add_argument('--v', default="v")
-	parser.add_argument('--num_thread', type=int, default=4)
+	parser.add_argument('--num_thread', type=int, default=0)
 	parser.add_argument('--topk', type=int, default=10)
 	parser.add_argument('--base_log_dir', default="log/myModel/")
 	parser.add_argument('--base_pic_dir', default="pic/myModel/")
 	parser.add_argument('--base_data_dir', default='../data/ml_1M_row/')
 	parser.add_argument('--epoch', type=int, default=20)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--predictor', default='fm')
 	parser.add_argument('--predictor_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--init_std', type=float, default=0.01)
@@ -475,6 +474,7 @@ if __name__ == '__main__':
 	parser.add_argument('--early_stop', type=int, default=5)
 	parser.add_argument('--without_time_seq', default='n')				# 数据集是否按时间排序
 	# predictor
+	parser.add_argument('--predictor', default='fm')
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output

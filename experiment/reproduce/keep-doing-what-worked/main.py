@@ -83,7 +83,8 @@ class Algorithm(object):
 						print_str = 'epoch:{}/{}, precs:{:.4}, abm_loss:{:.4}, q_loss:{:.4}, pi_loss:{:.4}, alpha_loss:{:.4}, eta_loss:{:.4}'
 						info = print_str.format(i_epoch + 1, self.args.epoch, precs, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
 						print(info)
-						logging.info(info)
+						if i % 60 == 0:
+							logging.info(info)
 
 				
 				if len(self.agent.reward_list) > 0:
@@ -141,8 +142,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
 
 	parser.add_argument('--epoch', type=int, default=100)
-	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--max_len', type=int, default=256)
+	parser.add_argument('--batch_size', type=int, default=128)
 	parser.add_argument('--shuffle', default='y')
 	parser.add_argument('--act', default='elu')
 	parser.add_argument('--optim', default='adam')
@@ -150,7 +150,7 @@ if __name__ == '__main__':
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	parser.add_argument('--dropout', type=float, default=0.0)
 	# seq model
-	parser.add_argument('--hw', type=int, default=10)
+	parser.add_argument('--hw', type=int, default=5)
 	parser.add_argument('--seq_hidden_size', type=int, default=512)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=128)
@@ -162,7 +162,6 @@ if __name__ == '__main__':
 	parser.add_argument('--m_emb_dim', type=int, default=128)
 	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
 	# RL
-	parser.add_argument('--replay_buffer', type=int, default=2*(10**6)) # 2e6
 	parser.add_argument('--update_period', type=int, default=200)		# target network update period
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--epsilon', type=float, default=0.1)
