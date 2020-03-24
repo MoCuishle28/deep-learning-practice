@@ -470,7 +470,6 @@ if __name__ == '__main__':
 	parser.add_argument('--load', default='n')
 	parser.add_argument('--show', default='n')	# show pic
 	parser.add_argument('--weight_decay', type=float, default=1e-4)		# 正则项
-	parser.add_argument('--norm_layer', default='ln')					# bn/ln/none
 	parser.add_argument('--early_stop', type=int, default=5)
 	parser.add_argument('--without_time_seq', default='n')				# 数据集是否按时间排序
 	# predictor
@@ -481,11 +480,12 @@ if __name__ == '__main__':
 	parser.add_argument('--k', type=int, default=8)
 	# embedding
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
-	parser.add_argument('--u_emb_dim', type=int, default=64)
+	parser.add_argument('--u_emb_dim', type=int, default=128)
 	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
-	parser.add_argument('--m_emb_dim', type=int, default=64)
+	parser.add_argument('--m_emb_dim', type=int, default=128)
 	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
 	# NCF
+	parser.add_argument('--norm_layer', default='ln')					# bn/ln/none
 	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--layers', default='1024,512')
 	parser.add_argument('--actor_output', type=int, default=0)

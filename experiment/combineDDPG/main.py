@@ -118,17 +118,17 @@ class Algorithm(object):
 				average_reward_list.append(reward)
 				bpr_loss_list.append(sum_bpr_loss.item())
 
-				print('epoch:{}/{} @{} i_batch:{}, Average Reward:{:.4}, BPR LOSS:{:.4}'.format(epoch+1, self.args.epoch, 
+				print('epoch:{}/{} @{} i_batch:{}, Average Reward:{:.4}, BPR LOSS:{:.6}'.format(epoch+1, self.args.epoch, 
 					self.args.topk, i_batch+1, reward, sum_bpr_loss.item()), end = ', ')
 				print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
-				logging.info('epoch:{}/{} @{} i_batch:{}, Average Reward:{:.4}'.format(epoch+1, self.args.epoch, 
-					self.args.topk, i_batch+1, reward))
+				logging.info('epoch:{}/{} @{} i_batch:{}, Average Reward:{:.4}, BPR LOSS:{:.6}'.format(epoch+1, self.args.epoch, 
+					self.args.topk, i_batch+1, reward, sum_bpr_loss.item()))
 
 			t1 = time.time()
 			hr, ndcg, precs = self.evaluate.evaluate()
 			t2 = time.time()
-			print('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}, Time:{}'.format(self.args.topk, hr, ndcg, precs, t2 - t1))
-			logging.info('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}, Time:{}'.format(self.args.topk, hr, ndcg, precs, t2 - t1))
+			print('[Valid]@{} HR:{:.6}, NDCG:{:.6}, Precision:{:.6}, Time:{}'.format(self.args.topk, hr, ndcg, precs, t2 - t1))
+			logging.info('[Valid]@{} HR:{:.6}, NDCG:{:.6}, Precision:{:.6}, Time:{}'.format(self.args.topk, hr, ndcg, precs, t2 - t1))
 			hr_list.append(hr)
 			ndcg_list.append(ndcg)
 			precision_list.append(precs)
@@ -255,7 +255,7 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and Predictor")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--topk', type=int, default=10)
-	parser.add_argument('--num_thread', type=int, default=4)	# 用 GPU 跑时设为 0
+	parser.add_argument('--num_thread', type=int, default=0)	# 用 GPU 跑时设为 0
 
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_pic_dir', default="pic/")
