@@ -29,13 +29,13 @@ class FM(nn.Module):
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
 		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
-		self.w0 = nn.Parameter(torch.empty(1, dtype=torch.float32).to(self.device))
+		self.w0 = nn.Parameter(torch.empty(1, dtype=torch.float32, device=device))
 
 		# 不加初始化会全 0
-		self.w1 = nn.Parameter(torch.empty(feature_size, 1, dtype=torch.float32).to(self.device))
+		self.w1 = nn.Parameter(torch.empty(feature_size, 1, dtype=torch.float32, device=device))
 
 		# 不加初始化会全 0
-		self.v = nn.Parameter(torch.empty(feature_size, k, dtype=torch.float32).to(self.device))
+		self.v = nn.Parameter(torch.empty(feature_size, k, dtype=torch.float32, device=device))
 
 		nn.init.normal_(self.w0, std=args.init_std)
 		nn.init.xavier_normal_(self.w1)
@@ -188,7 +188,7 @@ class Predictor(object):
 		loss.backward()
 		self.optim.step()
 
-		return loss, batch_loss, y_pos
+		return loss, batch_loss, y_pos, y_ij
 
 
 	def on_train(self):
@@ -342,7 +342,7 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 		predictor.on_train()	# 训练模式
 		for i_batch, data in enumerate(train_data_loader):
 			data = data[0]
-			loss, _, _ = predictor.train(data)
+			loss, _, _, _ = predictor.train(data)
 			
 			if (i_batch + 1) % 50 == 0:
 				print('epoch:{}/{}, i_batch:{}, BPR LOSS:{:.5}'.format(epoch + 1, args.epoch,
