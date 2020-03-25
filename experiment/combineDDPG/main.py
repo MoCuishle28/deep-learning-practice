@@ -81,16 +81,20 @@ class Algorithm(object):
 
 		batch_input_data = torch.cat(input_data_list, dim=0).to(self.device)
 		# 训练 predictor
-		sum_bpr_loss, batch_bpr_loss = self.predictor.train(batch_input_data)
+		sum_bpr_loss, batch_bpr_loss, batch_pos_score = self.predictor.train(batch_input_data)
 
+		reward_list = None
 		# bpr loss 的负数作为 reward
 		if self.args.reward == 'loss':
-			bpr_loss_list = batch_bpr_loss.tolist()
-			for state, action, next_state, bpr_loss in zip(state_list, action_list, next_state_list, bpr_loss_list):
-				reward = torch.tensor([bpr_loss[0] * self.args.alpha], dtype=torch.float32, device=self.device)
-				mask = torch.tensor([True], dtype=torch.float32, device=self.device)
-				self.memory.push(state, action, mask, next_state, reward)
-		return sum_bpr_loss, batch_bpr_loss
+			reward_list = batch_bpr_loss.tolist()
+		elif self.args.reward == 'score':	# 以正样本的 score 作为 reward
+			reward_list = batch_pos_score.tolist()
+
+		for state, action, next_state, r in zip(state_list, action_list, next_state_list, reward_list):
+			reward = torch.tensor([r[0] * self.args.alpha], dtype=torch.float32, device=self.device)
+			mask = torch.tensor([True], dtype=torch.float32, device=self.device)
+			self.memory.push(state, action, mask, next_state, reward)
+		return sum_bpr_loss, batch_bpr_loss, batch_pos_score
 
 
 	def train(self):
@@ -102,7 +106,7 @@ class Algorithm(object):
 		for epoch in range(self.args.epoch):
 			for i_batch, data in enumerate(self.train_data_loader):
 				data = data[0]				
-				sum_bpr_loss, batch_bpr_loss = self.collect_training_data(data)
+				sum_bpr_loss, batch_bpr_loss, batch_pos_score = self.collect_training_data(data)
 
 				transitions = self.memory.sample(self.args.batch_size)
 				batch = Transition(*zip(*transitions))
@@ -114,14 +118,16 @@ class Algorithm(object):
 				if self.args.reward == 'loss':
 					# Average Reward e.g. Negative Average predictor loss
 					reward = predictor_loss_mean * self.args.alpha
+				elif self.args.reward == 'score':
+					reward = batch_pos_score.mean() * self.args.alpha
 
 				average_reward_list.append(reward)
 				bpr_loss_list.append(sum_bpr_loss.item())
 
-				print('epoch:{}/{} @{} i_batch:{}, Average Reward:{:.4}, BPR LOSS:{:.6}'.format(epoch+1, self.args.epoch, 
+				print('epoch:{}/{} @{} i_batch:{}, Average Reward:{:.4}, Negative BPR LOSS:{:.6}'.format(epoch+1, self.args.epoch, 
 					self.args.topk, i_batch+1, reward, sum_bpr_loss.item()), end = ', ')
 				print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
-				logging.info('epoch:{}/{} @{} i_batch:{}, Average Reward:{:.4}, BPR LOSS:{:.6}'.format(epoch+1, self.args.epoch, 
+				logging.info('epoch:{}/{} @{} i_batch:{}, Average Reward:{:.4}, Negative BPR LOSS:{:.6}'.format(epoch+1, self.args.epoch, 
 					self.args.topk, i_batch+1, reward, sum_bpr_loss.item()))
 
 			t1 = time.time()
@@ -173,9 +179,9 @@ class HistoryGenerator(object):
 				history_feature[1] = 9742.0
 			else:
 				mid = rating_list[i][0]
-				mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(self.device)
+				mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
 				# [uid, mfeature...]
-				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32).to(self.device), 
+				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32, device=self.device), 
 					mfeature]).to(self.device)
 
 			ret_data.append(history_feature)
@@ -191,11 +197,11 @@ class HistoryGenerator(object):
 		curr_history = curr_history.tolist()
 		curr_history.pop(0)
 		uid = curr_uid
-		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32).to(self.device)		
+		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32, device=self.device)
 
 		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32, device=self.device), mfeature]).to(self.device)
 		curr_history.append(history_feature)
-		return torch.tensor(curr_history).to(self.device)
+		return torch.tensor(curr_history, device=self.device)
 
 
 def init_log(args):
@@ -266,10 +272,10 @@ if __name__ == '__main__':
 	parser.add_argument('--shuffle', default='y')
 	# RL setting
 	parser.add_argument('--reset', default='y')
-	parser.add_argument('--memory_size', type=int, default=10000)
+	parser.add_argument('--memory_size', type=int, default=8000)
 	parser.add_argument('--hw', type=int, default=10)	# history window
 	parser.add_argument('--predictor', default='fm')	# fm/ncf
-	parser.add_argument('--reward', default='loss')
+	parser.add_argument('--reward', default='score')		# loss/score
 	parser.add_argument('--alpha', type=float, default=1)	# raw reward 乘以的倍数(试图放大 reward 加大训练幅度)
 
 	parser.add_argument('--predictor_optim', default='adam')

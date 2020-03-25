@@ -142,11 +142,13 @@ class Run(object):
 					print(info)
 					logging.info(info)
 
+			t1 = time.time()
 			hr, ndcg, precs = self.evaluate.evaluate()
+			t2 = time.time()
 			hr_list.append(hr)
 			ndcg_list.append(ndcg)
 			precs_list.append(precs)
-			info = '[Valid]@{} HR{:.6}, NDCG{:.6}, Precs:{:.6}'.format(self.args.topk, hr, ndcg, precs)
+			info = '[Valid]@{} HR{:.6}, NDCG{:.6}, Precs:{:.6}, Time:{}'.format(self.args.topk, hr, ndcg, precs, t2 - t1)
 			print(info)
 			logging.info(info)
 

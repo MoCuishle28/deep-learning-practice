@@ -149,8 +149,6 @@ class Predictor(object):
 		elif args.predictor_optim == 'rmsprop':
 			self.optim = torch.optim.RMSprop(self.predictor.parameters(), lr=args.predictor_lr, weight_decay=args.weight_decay)
 
-		self.criterion = nn.MSELoss()
-
 
 	def bpr_loss(self, y_ij):
 		t = torch.log(torch.sigmoid(y_ij))
@@ -190,7 +188,7 @@ class Predictor(object):
 		loss.backward()
 		self.optim.step()
 
-		return loss, batch_loss
+		return loss, batch_loss, y_pos
 
 
 	def on_train(self):
@@ -344,7 +342,7 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 		predictor.on_train()	# 训练模式
 		for i_batch, data in enumerate(train_data_loader):
 			data = data[0]
-			loss, _ = predictor.train(data)
+			loss, _, _ = predictor.train(data)
 			
 			if (i_batch + 1) % 50 == 0:
 				print('epoch:{}/{}, i_batch:{}, BPR LOSS:{:.5}'.format(epoch + 1, args.epoch,
