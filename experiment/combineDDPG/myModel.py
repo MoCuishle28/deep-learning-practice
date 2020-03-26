@@ -254,7 +254,6 @@ class Evaluate(object):
 		max_score = self.predictor.predict(input_vector)
 		map_items_score[mid] = max_score
 
-		# user_ignore_set = self.ignore_set[uid]
 		user_ignore_set = self.users_has_clicked[uid]
 
 		count_larger = 0	# Early stop if there are args.topk items larger than max_score
@@ -345,27 +344,27 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 			loss, _, _, _ = predictor.train(data)
 			
 			if (i_batch + 1) % 50 == 0:
-				print('epoch:{}/{}, i_batch:{}, BPR LOSS:{:.5}'.format(epoch + 1, args.epoch,
-					i_batch+1, loss.item()))
-				logging.info('epoch:{}/{}, i_batch:{}, BPR LOSS:{:.5}'.format(epoch + 1, args.epoch,
-					i_batch+1, loss.item()))
+				info = f'epoch:{epoch + 1}/{args.epoch}, i_batch:{i_batch+1}, Negative BPR LOSS:{loss.item()}'
+				print(info)
+				logging.info(info)
 				loss_list.append(loss.item())
 
 		predictor.on_eval()	# 评估模式
 		t1 = time.time()
 		hr, ndcg, precs = evaluate.evaluate()
 		t2 = time.time()
-		print('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}, Time:{}'.format(args.topk, hr, ndcg, precs, t2 - t1))
-		logging.info('[Valid]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}, Time:{}'.format(args.topk, hr, ndcg, precs, t2 - t1))
+		info = f'[Valid]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}'
+		print(info)
+		logging.info(info)
 		hr_list.append(hr)
 		ndcg_list.append(ndcg)
 		precision_list.append(precs)
 
 	predictor.on_eval()	# 评估模式
 	hr, ndcg, precs = evaluate.evaluate(title='[TEST]')
-
-	print('[TEST]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}'.format(args.topk, hr, ndcg, precs))
-	logging.info('[TEST]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}'.format(args.topk, hr, ndcg, precs))
+	f'[TEST]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
+	print(info)
+	logging.info(info)
 	return loss_list, precision_list, hr_list, ndcg_list
 
 
@@ -491,5 +490,4 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-	# device = torch.device('cpu')
 	main(args, device)

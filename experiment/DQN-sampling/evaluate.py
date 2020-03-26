@@ -113,9 +113,9 @@ class Evaluate(object):
 			self.ndcgs.append(ret[1])
 			self.precs.append(ret[2])
 
-		self.hits = torch.tensor(self.hits, dtype=torch.float32).to(self.device)
-		self.ndcgs = torch.tensor(self.ndcgs, dtype=torch.float32).to(self.device)
-		self.precs = torch.tensor(self.precs, dtype=torch.float32).to(self.device)
+		self.hits = torch.tensor(self.hits, dtype=torch.float32, device=self.device)
+		self.ndcgs = torch.tensor(self.ndcgs, dtype=torch.float32, device=self.device)
+		self.precs = torch.tensor(self.precs, dtype=torch.float32, device=self.device)
 		return self.hits.mean().item(), self.ndcgs.mean().item(), self.precs.mean().item()
 
 

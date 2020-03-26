@@ -124,25 +124,25 @@ class Algorithm(object):
 				reward = batch_reward.mean() * self.args.alpha
 				average_reward_list.append(reward)
 				bpr_loss_list.append(sum_bpr_loss.item())
-
-				print('epoch:{}/{} @{} i_batch:{}, Average Reward:{:.4}, Negative BPR LOSS:{:.6}'.format(epoch+1, self.args.epoch, 
-					self.args.topk, i_batch+1, reward, sum_bpr_loss.item()), end = ', ')
-				print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
-				logging.info('epoch:{}/{} @{} i_batch:{}, Average Reward:{:.4}, Negative BPR LOSS:{:.6}'.format(epoch+1, self.args.epoch, 
-					self.args.topk, i_batch+1, reward, sum_bpr_loss.item()))
+				info = f'epoch:{epoch+1}/{self.args.epoch} @{self.args.topk} i_batch:{i_batch+1}, Average Reward:{reward}, Negative BPR LOSS:{sum_bpr_loss.item()}'
+				print(info, end = ', ')
+				print(f'value loss:{value_loss}, policy loss:{policy_loss}')
+				logging.info(info)
 
 			t1 = time.time()
 			hr, ndcg, precs = self.evaluate.evaluate()
 			t2 = time.time()
-			print('[Valid]@{} HR:{:.6}, NDCG:{:.6}, Precision:{:.6}, Time:{}'.format(self.args.topk, hr, ndcg, precs, t2 - t1))
-			logging.info('[Valid]@{} HR:{:.6}, NDCG:{:.6}, Precision:{:.6}, Time:{}'.format(self.args.topk, hr, ndcg, precs, t2 - t1))
+			info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}'
+			print(info)
+			logging.info(info)
 			hr_list.append(hr)
 			ndcg_list.append(ndcg)
 			precision_list.append(precs)
 
 		hr, ndcg, precs = self.evaluate.evaluate(title='[TEST]')
-		print('[TEST]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}'.format(self.args.topk, hr, ndcg, precs))
-		logging.info('[TEST]@{} HR:{:.4}, NDCG:{:.4}, Precision:{:.4}'.format(self.args.topk, hr, ndcg, precs))
+		info = f'[TEST]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
+		print(info)
+		logging.info(info)
 		self.evaluate.plot_result(args, bpr_loss_list, precision_list, hr_list, ndcg_list)
 
 

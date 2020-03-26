@@ -83,9 +83,6 @@ class Algorithm(object):
 			rmse, reward))
 		logging.info(title + ' RMSE:{:.6}, Average Reward:{:.8}'.format(
 			rmse, reward))
-
-		# self.agent.on_train()
-		# self.predictor.on_train()
 		return rmse
 
 
@@ -269,16 +266,12 @@ class HistoryGenerator(object):
 		'''
 		ret_data = []
 		rating_list = self.users_rating[uid]
-		# stop_index = len(rating_list) - 1
-		# for i, mid_rating_pair in enumerate(rating_list):
-		# 	if curr_mid == mid_rating_pair[0]:
-		# 		stop_index = i
-		# 		break
 		stop_index = self.index[uid][curr_mid]
 		for i in range(stop_index - self.window, stop_index):
 			if i < 0:
 				history_feature = torch.zeros(23, dtype=torch.float32).to(self.device)
 				history_feature[0] = uid
+				history_feature[1] = self.args.max_mid
 			else:
 				mid = rating_list[i][0]
 				rating  = rating_list[i][1]
@@ -377,7 +370,7 @@ def main():
 	# embedding
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
 	parser.add_argument('--u_emb_dim', type=int, default=64)
-	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
+	parser.add_argument('--max_mid', type=int, default=9742)	# 0~9741 + 1
 	parser.add_argument('--m_emb_dim', type=int, default=128)
 	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
 	# FM
