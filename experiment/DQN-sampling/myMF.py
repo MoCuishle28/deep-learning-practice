@@ -81,7 +81,8 @@ class Predictor(object):
 			mid = None
 			if self.args.sampler == 'random':
 				mid = self.random_negative_sample(uid)
-			# TODO 其他采样方式
+			else:
+				# TODO 其他 sampler
 
 			mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
 			neg_mfeature.append(mfeature)

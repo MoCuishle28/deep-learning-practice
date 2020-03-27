@@ -91,7 +91,7 @@ class Algorithm(object):
 		self.predictor.on_eval()
 
 		for i_data, raw_feature in enumerate(data):
-			mask = torch.tensor([True], dtype=torch.float32).to(self.device)
+			mask = torch.tensor([True], dtype=torch.float32, device=self.device)
 			state = self.env.get_history(raw_feature[0].item(), raw_feature[1].item())
 			next_state = self.env.get_next_history(state, raw_feature[1].item(), 
 				raw_feature[0].item(), target[i_data].item())
@@ -174,8 +174,8 @@ class Algorithm(object):
 		del self.valid_data
 		del self.valid_target
 
-		test_data = torch.tensor(np.load(self.args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32).to(self.device)
-		test_target = torch.tensor(np.load(self.args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32).to(self.device)
+		test_data = torch.tensor(np.load(self.args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32, device=self.device)
+		test_target = torch.tensor(np.load(self.args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32, device=self.device)
 		self.evaluate(test_data, test_target, title='[Test]')
 		self.plot_result(rmse_list, valid_rmse_list, mean_predictor_loss_list)
 
@@ -269,13 +269,13 @@ class HistoryGenerator(object):
 		stop_index = self.index[uid][curr_mid]
 		for i in range(stop_index - self.window, stop_index):
 			if i < 0:
-				history_feature = torch.zeros(23, dtype=torch.float32).to(self.device)
+				history_feature = torch.zeros(23, dtype=torch.float32, device=self.device)
 				history_feature[0] = uid
 				history_feature[1] = self.args.max_mid
 			else:
 				mid = rating_list[i][0]
 				rating  = rating_list[i][1]
-				mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(self.device)
+				mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
 				# [uid, mfeature..., rating]
 				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32).to(self.device), 
 					mfeature, 
@@ -295,13 +295,13 @@ class HistoryGenerator(object):
 		curr_history = curr_history.tolist()
 		curr_history.pop(0)
 		uid = curr_uid
-		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32).to(self.device)
+		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32, device=self.device)
 		rating = torch.tensor([rating], dtype=torch.float32).to(self.device)
 		
 		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32).to(self.device), mfeature, rating]).to(self.device)
 		history_feature[-1] = (history_feature[-1] - self.rating_mean) / self.rating_std
 		curr_history.append(history_feature)
-		return torch.tensor(curr_history).to(self.device)
+		return torch.tensor(curr_history, device=self.device)
 
 
 def init_log(args):
