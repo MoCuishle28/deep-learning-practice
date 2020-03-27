@@ -75,7 +75,7 @@ class SeqModel(nn.Module):
 	def __init__(self, args, device):
 		super(SeqModel, self).__init__()
 		self.device = device
-		self.seq_input_size = args.u_emb_dim + args.m_emb_dim + args.g_emb_dim
+		self.seq_input_size = args.m_emb_dim + args.g_emb_dim
 		self.hidden_size = args.seq_hidden_size
 		self.seq_layer_num = args.seq_layer_num
 		self.seq_output_size = args.seq_output_size
@@ -91,7 +91,7 @@ class SeqModel(nn.Module):
 			self.ln1 = nn.BatchNorm1d(self.hidden_size, affine=True)
 		elif args.norm_layer == 'ln':
 			self.ln1 = nn.LayerNorm(self.hidden_size, elementwise_affine=True)
-		self.fc = nn.Linear(self.hidden_size, self.seq_output_size)
+		self.fc = nn.Linear(self.hidden_size + args.u_emb_dim, self.seq_output_size)
 
 
 	def forward(self, x):
@@ -99,14 +99,14 @@ class SeqModel(nn.Module):
 		x: (batch, seq_len, feature_size)
 		return: (batch, args.seq_output_size)
 		'''
-		uids = x[:, :, -self.args.fm_feature_size]
+		uids = x[:, 0, -self.args.fm_feature_size]
 		mids = x[:, :, -(self.args.fm_feature_size - 1)]
 		genres = x[:, :, -(self.args.fm_feature_size - 2):]
 
 		uemb = self.u_embedding(uids.long().to(self.device))
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
-		x = torch.cat([uemb, memb, gemb], -1).to(self.device)
+		x = torch.cat([memb, gemb], -1).to(self.device)
 
 		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size, device=self.device)
 		
@@ -114,6 +114,7 @@ class SeqModel(nn.Module):
 		out = out[:, -1, :]		# 最后时刻的 seq 作为输出
 		if self.args.norm_layer != 'none':
 			out = self.ln1(out)
+		out = torch.cat([uemb, out], -1).to(self.device)
 		out = self.fc(out)
 		return out
 		
