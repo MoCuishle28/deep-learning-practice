@@ -90,8 +90,8 @@ class Q_Sampler(object):
 		# uid:[mid, mid, ...]	用户的正样本
 		self.user_pos = {uid:list(midset) for uid, midset in users_has_clicked.items()}
 		
-		self.Q = QNet(args, device)
-		self.target_Q = QNet(args, device)
+		self.Q = QNet(args, device).to(device)
+		self.target_Q = QNet(args, device).to(device)
 		hard_update(self.target_Q, self.Q)
 		self.ntu = 0
 
