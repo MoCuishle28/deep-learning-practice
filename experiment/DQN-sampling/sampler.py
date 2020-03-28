@@ -65,9 +65,9 @@ class QNet(nn.Module):
 		genres = x[:, 2:self.args.feature_size]
 		params = x[:, self.args.feature_size:]
 
-		uemb = self.u_embedding(uids.long())
-		memb = self.m_embedding(mids.long())
-		gemb = self.g_embedding(genres)
+		uemb = self.u_embedding(uids.long().to(self.device))
+		memb = self.m_embedding(mids.long().to(self.device))
+		gemb = self.g_embedding(genres.to(self.device))
 		x = torch.cat([uemb, memb, gemb, params], dim=1).to(self.device)
 		x = self.fc(x)
 		return self.model(x)
