@@ -136,7 +136,7 @@ class Q_Sampler(object):
 		next_prediction = batch_reward.squeeze() + (self.args.gamma * torch.max(next_q_values, dim=1).values)
 
 		current_q_values = self.Q(batch_state)
-		one_hot_act = torch.zeros(self.args.batch_size, self.args.max_mid + 1).scatter_(dim=1, index=batch_action.long(), value=1)
+		one_hot_act = torch.zeros(self.args.batch_size, self.args.max_mid + 1, device=self.device).scatter_(dim=1, index=batch_action.long(), value=1)
 		current_prediction = torch.sum(current_q_values * one_hot_act, dim=-1)
 
 		loss = self.lossFunc(next_prediction, current_prediction)
