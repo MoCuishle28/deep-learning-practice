@@ -16,6 +16,7 @@ import numpy as np
 
 from utils import Utils
 from evaluate import Evaluate
+from sampler import Q_Sampler
 
 
 class MF(nn.Module):
@@ -34,7 +35,6 @@ class MF(nn.Module):
 	def forward(self, x):
 		u, i = x[:, -self.args.feature_size].long(), x[:, -(self.args.feature_size - 1)].long()
 		u, i = u.view(-1), i.view(-1)
-		t1,t2 = self.user_params[u], self.item_params[i]
 		return torch.sum(self.user_params[u] * self.item_params[i], dim=1)
 
 
@@ -54,11 +54,14 @@ class Predictor(object):
 			self.optim = torch.optim.SGD(self.predictor.parameters(), lr=args.p_lr, momentum=args.momentum, weight_decay=args.weight_decay)
 		elif args.p_optim == 'rmsprop':
 			self.optim = torch.optim.RMSprop(self.predictor.parameters(), lr=args.p_lr, weight_decay=args.weight_decay)
+		# sampler
+		if args.sampler == 'q':
+			self.sampler = Q_Sampler(args, device, users_has_clicked)
 
 
 	def bpr_loss(self, y_ij):
 		t = torch.log(torch.sigmoid(y_ij))
-		return -torch.sum(t), -t
+		return -torch.sum(t)
 
 
 	def predict(self, data):
@@ -72,17 +75,28 @@ class Predictor(object):
 		return mid
 
 
-	def train(self, pos_data):
-		uids = pos_data[:, -self.args.feature_size].tolist()
+	def train(self, pos_data, epsilon):
 		x = pos_data[:, :-self.args.feature_size + 1]	# 除了 mid, genre, genre,..的剩余部分
+		pos_data_list = pos_data.tolist()
 
+		state_action_pairs = []
 		neg_mfeature = []
-		for uid in uids:
+		for data in pos_data_list:
+			uid, pos_mid = int(data[0]), int(data[1])
 			mid = None
 			if self.args.sampler == 'random':
 				mid = self.random_negative_sample(uid)
-			else:
-				# TODO 其他 sampler
+			elif self.args.sampler == 'q':
+				param = torch.cat([self.predictor.user_params[uid], self.predictor.item_params[pos_mid]])
+				tenosr_pos_data = torch.tensor(data, dtype=torch.float32, device=self.device).view(-1)
+				state = torch.cat([tenosr_pos_data, param]).view(1, -1)	# [uid, mid, genre, ..., params...]
+
+				if random.random() < epsilon:
+					mid = self.random_negative_sample(uid)
+				else:
+					mid = self.sampler.argmax_sample(uid, state) if self.args.sample_method == 'argmax' else self.sampler.softmax_sample(uid, state)
+				# shape 都是 (batch, size)
+				state_action_pairs.append((state.view(-1), torch.tensor([mid], dtype=torch.float32, device=self.device).view(-1)))
 
 			mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
 			neg_mfeature.append(mfeature)
@@ -93,12 +107,44 @@ class Predictor(object):
 		y_neg = self.predictor(neg_data)
 
 		y_ij = y_pos - y_neg
-		loss, batch_loss = self.bpr_loss(y_ij)
+		loss = self.bpr_loss(y_ij)
 		self.optim.zero_grad()
 		loss.backward()
 		self.optim.step()
 
-		return loss, batch_loss
+		sampler_loss, mean_reward = None, None
+		if self.args.sampler == 'q':
+			sampler_loss, mean_reward = self.train_sampler(loss, y_ij, state_action_pairs)
+		return loss.item(), sampler_loss, mean_reward
+
+
+	def train_sampler(self, loss, y_ij, state_action_pairs):
+		'''
+		return: sampler's loss, mean reward
+		'''
+		margin_list = None
+		if self.args.reward == 'loss':
+			margin_list = loss.tolist()
+		elif self.args.reward == 'dismargin':
+			margin_list = y_ij.tolist()
+
+		reward_list = []
+		for (state, action), margin in zip(state_action_pairs, margin_list):
+			uid, pos_mid = int(state[0].item()), int(state[1].item())
+			mfeature = torch.tensor(self.mid_map_mfeature[pos_mid].astype(np.float32), dtype=torch.float32, device=self.device)
+			tensor_uid = torch.tensor([uid], dtype=torch.float32, device=self.device)
+			param = torch.cat([self.predictor.user_params[uid], self.predictor.item_params[pos_mid]])
+			next_state = torch.cat([tensor_uid, mfeature, param]).view(-1)
+
+			if self.args.reward == 'loss':
+				reward = torch.tensor([margin], dtype=torch.float32, device=self.device)
+			elif self.args.reward == 'dismargin':
+				reward = torch.tensor([1 if margin <= 0 else 0], dtype=torch.float32, device=self.device)
+			reward_list.append(reward.item())
+			# shape 都是 (-1)
+			self.sampler.replay_buffer.append((state, action, reward, next_state))
+		sampler_loss = self.sampler.train()
+		return sampler_loss, sum(reward_list) / len(reward_list)
 
 
 	def on_train(self):
@@ -137,16 +183,20 @@ class Run(object):
 		train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=True)
 
 		for i_epoch in range(self.args.epoch):
+			self.predictor.on_train()
+			# 计算当前探索率
+			epsilon = max(self.args.initial_epsilon * (self.args.num_exploration_episodes - i_epoch) / self.args.num_exploration_episodes, self.args.final_epsilon)
 			for i, data in enumerate(train_data_loader):
 				data = data[0]
-				loss, _ = self.predictor.train(data)
+				loss, sampler_loss, mean_reward = self.predictor.train(data, epsilon)
 
 				if (i + 1) % self.args.interval == 0:
-					loss_list.append(loss.item())
-					info = f'{i_epoch + 1}/{self.args.epoch} {i + 1}, Negative BPR LOSS:{loss.item()}'
+					loss_list.append(loss)
+					info = f'{i_epoch + 1}/{self.args.epoch} batch:{i + 1}, Negative BPR LOSS:{loss}, sampler loss:{sampler_loss}, sampler\'s mean reward:{mean_reward}, epsilon:{epsilon}'
 					print(info)
 					logging.info(info)
 
+			self.predictor.on_eval()
 			t1 = time.time()
 			hr, ndcg, precs = self.evaluate.evaluate()
 			t2 = time.time()
@@ -157,11 +207,12 @@ class Run(object):
 			print(info)
 			logging.info(info)
 
+		self.predictor.on_eval()
 		hr, ndcg, precs = self.evaluate.evaluate(title='[TEST]')
 		info = f'[TEST]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precs:{precs}, Time:{t2 - t1}'
 		print(info)
 		logging.info(info)
-			
+		self.evaluate.plot_result(self.args, loss_list, precs_list, hr_list, ndcg_list)
 
 
 def init_log(args):
@@ -221,7 +272,7 @@ if __name__ == '__main__':
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--predictor', default='mf')
 	parser.add_argument('--interval', type=int, default=50)
-	parser.add_argument('--sampler', default='random')			# 用什么负采样方式
+	parser.add_argument('--sampler', default='q')			# 用什么负采样方式(random/q/...)
 	# embedding
 	parser.add_argument('--feature_size', type=int, default=22)	# uid, mid, genres, ...
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
@@ -230,16 +281,34 @@ if __name__ == '__main__':
 	parser.add_argument('--m_emb_dim', type=int, default=64)
 	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
 	# predictor
+	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--p_optim', default='sgd')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	parser.add_argument('--p_lr', type=float, default=1e-3)
 	parser.add_argument('--k', type=int, default=64)			# 隐因子
-	parser.add_argument('--epoch', type=int, default=100)
+	# Q sampler
+	parser.add_argument('--reward', default='dismargin')		# loss/conmargin/dismargin
+	parser.add_argument('--sample_method', default='argmax')	# argmax/softmax
+
+	parser.add_argument('--act', default='elu')
+	parser.add_argument('--layers', default='512,256')			# 第一个是输入的维度
+	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
+	parser.add_argument('--dropout', type=float, default=0.0)
+	parser.add_argument('--q_optim', default='adam')
+	parser.add_argument('--q_lr', type=float, default=1e-3)
+
+	parser.add_argument('--update_method', default='hard')		# soft/hard
+	parser.add_argument('--ntu', type=float, default=10)		# 10 次更新就替换一次 target
+	parser.add_argument('--tau', type=float, default=0.1)
+	parser.add_argument('--gamma', type=float, default=0.99)
+	parser.add_argument('--maxlen', type=int, default=8000)
+	# 探索过程所占的episode数量
+	parser.add_argument('--num_exploration_episodes', type=int, default=50)
+	parser.add_argument('--initial_epsilon', type=float, default=0.8)	# 探索起始时的探索率
+	parser.add_argument('--final_epsilon', type=float, default=0.01)	# 探索终止时的探索率
 	
-
 	args = parser.parse_args()
-
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	tmp = "cuda" if torch.cuda.is_available() else "cpu"
 	args.num_thread = 0 if tmp == 'cuda' else args.num_thread
