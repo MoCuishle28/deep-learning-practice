@@ -77,7 +77,7 @@ class Evaluate(object):
 		action = self.get_current_action(uid, mid)
 		input_vector = self.gen_predictor_input_data(uid, mid, action)
 		max_score = self.predictor.predict(input_vector)
-		map_items_score[mid] = max_score
+		map_items_score[mid] = max_score.item()
 
 		# user_ignore_set = self.ignore_set[uid]
 		user_ignore_set = self.users_has_clicked[uid]	# 忽略所有点击过的 item, 一次只评估一个 item
@@ -89,7 +89,7 @@ class Evaluate(object):
 				continue
 			input_vector = self.gen_predictor_input_data(uid, i, action)
 			score = self.predictor.predict(input_vector)
-			map_items_score[i] = score
+			map_items_score[i] = score.item()
 			if score > max_score:
 				count_larger += 1
 			if count_larger > self.args.topk:

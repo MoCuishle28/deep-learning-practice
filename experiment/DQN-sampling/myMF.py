@@ -168,7 +168,7 @@ class Run(object):
 		self.args = args
 		self.device = device
 		self.predictor = predictor
-		self.evaluate = Evaluate(args, device, predictor, users_has_clicked, mid_map_mfeature)
+		self.evaluate = Evaluate(args, device, predictor.predictor, users_has_clicked, mid_map_mfeature)
 
 		# mid: one-hot feature (21维 -> mid, genre, genre, ...)
 		self.mid_map_mfeature = mid_map_mfeature
@@ -192,7 +192,7 @@ class Run(object):
 
 				if (i + 1) % self.args.interval == 0:
 					loss_list.append(loss)
-					info = f'{i_epoch + 1}/{self.args.epoch} batch:{i + 1}, Negative BPR LOSS:{loss}, sampler loss:{sampler_loss}, sampler\'s mean reward:{mean_reward}, epsilon:{epsilon}'
+					info = f'{i_epoch + 1}/{self.args.epoch} batch:{i + 1}, model Loss:{loss}, sampler Loss:{sampler_loss}, mean reward:{mean_reward}, epsilon:{epsilon}'
 					print(info)
 					logging.info(info)
 
@@ -267,6 +267,7 @@ if __name__ == '__main__':
 	parser.add_argument('--without_time_seq', default='n')		# 数据集是否按时间排序
 	parser.add_argument('--load_model', default='n')			# 是否加载模型
 	parser.add_argument('--save_model', default='n')
+	parser.add_argument('--show', default='n')
 
 	parser.add_argument('--topk', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=512)

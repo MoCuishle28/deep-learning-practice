@@ -252,7 +252,7 @@ class Evaluate(object):
 		mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
 		input_vector = torch.cat([uid_tensor, mfeature]).unsqueeze(0).to(self.device)	# 一维
 		max_score = self.predictor.predict(input_vector)
-		map_items_score[mid] = max_score
+		map_items_score[mid] = max_score.item.item()
 
 		user_ignore_set = self.users_has_clicked[uid]
 
@@ -264,7 +264,7 @@ class Evaluate(object):
 			mfeature = torch.tensor(self.mid_map_mfeature[i].astype(np.float32), dtype=torch.float32, device=self.device)
 			input_vector = torch.cat([uid_tensor, mfeature]).unsqueeze(0).to(self.device)
 			score = self.predictor.predict(input_vector)
-			map_items_score[i] = score
+			map_items_score[i] = score.item()
 			if score > max_score:
 				count_larger += 1
 			if count_larger > self.args.topk:

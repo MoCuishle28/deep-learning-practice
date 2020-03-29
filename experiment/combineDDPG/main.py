@@ -290,7 +290,7 @@ if __name__ == '__main__':
 	# save/load model 的名字为 --v
 	parser.add_argument('--save', default='n')
 	parser.add_argument('--load', default='n')
-	parser.add_argument('--show_pic', default='n')
+	parser.add_argument('--show', default='n')
 	# init weight
 	parser.add_argument('--init_std', type=float, default=0.1)
 	# seq model

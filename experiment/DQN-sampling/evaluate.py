@@ -56,9 +56,8 @@ class Evaluate(object):
 		map_items_score = {}	# mid: score
 
 		input_vector = self.gen_predictor_input_data(uid, mid)
-		max_score = self.predictor.predict(input_vector)
-		map_items_score[mid] = max_score
-
+		max_score = self.predictor(input_vector)
+		map_items_score[mid] = max_score.item()
 		user_ignore_set = self.users_has_clicked[uid]	# 忽略所有点击过的 item, 一次只评估一个 item
 
 		count_larger = 0	# Early stop if there are args.topk items larger than max_score
@@ -67,8 +66,8 @@ class Evaluate(object):
 			if i in user_ignore_set:	# 忽略训练过的 item (以及在验证时忽略测试集,测试时忽略验证集)
 				continue
 			input_vector = self.gen_predictor_input_data(uid, i)
-			score = self.predictor.predict(input_vector)
-			map_items_score[i] = score
+			score = self.predictor(input_vector)
+			map_items_score[i] = score.item()
 			if score > max_score:
 				count_larger += 1
 			if count_larger > self.args.topk:
@@ -92,7 +91,7 @@ class Evaluate(object):
 			dataset = self.valid_data.tolist()
 		else:	# Testing data set
 			del self.valid_data
-			test_data = np.load(args.base_data_dir + self.mid_dir + 'test_data.npy')
+			test_data = np.load(self.args.base_data_dir + self.mid_dir + 'test_data.npy')
 			dataset = test_data.tolist()
 			print('Testing...')
 
