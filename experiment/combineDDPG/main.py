@@ -120,30 +120,48 @@ class Algorithm(object):
 				batch = Transition(*zip(*transitions))
 				self.agent.on_train()	# 切换为训练模式 (因为包含 BN\LN)
 				value_loss, policy_loss = self.agent.update_parameters(batch)
+				value_loss, policy_loss = round(value_loss, 5), round(policy_loss, 5)
 
 				reward = batch_reward.mean() * self.args.alpha
+				reward = round(reward.item(), 5)
+				sum_bpr_loss = round(sum_bpr_loss.item(), 5)
 				average_reward_list.append(reward)
-				bpr_loss_list.append(sum_bpr_loss.item())
-				info = f'epoch:{epoch+1}/{self.args.epoch} @{self.args.topk} i_batch:{i_batch+1}, Average Reward:{reward}, Negative BPR LOSS:{sum_bpr_loss.item()}'
+				bpr_loss_list.append(sum_bpr_loss)
+				info = f'epoch:{epoch+1}/{self.args.epoch} @{self.args.topk} i_batch:{i_batch+1}, Average Reward:{reward}, Negative BPR LOSS:{sum_bpr_loss}'
 				print(info, end = ', ')
 				print(f'value loss:{value_loss}, policy loss:{policy_loss}')
 				logging.info(info)
 
-			t1 = time.time()
-			hr, ndcg, precs = self.evaluate.evaluate()
-			t2 = time.time()
-			info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}'
-			print(info)
-			logging.info(info)
-			hr_list.append(hr)
-			ndcg_list.append(ndcg)
-			precision_list.append(precs)
+			if epoch >= 20:
+				if (epoch + 1) % self.args.save_interval == 0:
+					self.agent.save_model(version=self.args.v, epoch=epoch)
+					self.predictor.save(self.args.v, epoch=epoch)
+					info = f'Saving version:{args.v}_{epoch} models'
+					print(info)
+					logging.info(info)
 
+			if (epoch + 1) % self.args.evaluate_interval == 0:
+				self.agent.on_eval()
+				self.predictor.on_eval()
+				t1 = time.time()
+				hr, ndcg, precs = self.evaluate.evaluate()
+				hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
+				t2 = time.time()
+				info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}'
+				print(info)
+				logging.info(info)
+				hr_list.append(hr)
+				ndcg_list.append(ndcg)
+				precision_list.append(precs)
+
+		self.agent.on_eval()
+		self.predictor.on_eval()
 		hr, ndcg, precs = self.evaluate.evaluate(title='[TEST]')
+		hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 		info = f'[TEST]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
 		print(info)
 		logging.info(info)
-		self.evaluate.plot_result(args, bpr_loss_list, precision_list, hr_list, ndcg_list)
+		self.evaluate.plot_result(self.args, bpr_loss_list, precision_list, hr_list, ndcg_list)
 
 
 class HistoryGenerator(object):
@@ -227,7 +245,6 @@ def main(args, device):
 	env = HistoryGenerator(args, device)
 	agent = DDPG(args, device)
 
-	# 后面还可以改成他的预测 rating 算法
 	predictor_model = None
 	if args.predictor == 'fm':
 		predictor_model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.k, args, device)
@@ -242,27 +259,29 @@ def main(args, device):
 
 	# 加载模型
 	if args.load == 'y':
-		agent.load_model(version=args.v)
-		predictor.load(args.v)
-		print('Loading version:{} models'.format(args.v))
-		logging.info('Loading version:{} models'.format(args.v))
+		agent.load_model(version=args.load_version, epoch=args.load_epoch)
+		predictor.load(args.load_version, epoch=args.load_epoch)
+		info = f'Loading version:{args.load_version}_{args.load_epoch} models'
+		print(info)
+		logging.info(info)
 
 	algorithm = Algorithm(args, agent, predictor, env, data_list, device)
 	algorithm.train()
 
 	# 保存模型
 	if args.save == 'y':
-		algorithm.agent.save_model(version=args.v)
-		predictor.save(args.v)
-		print('Saving version:{} models'.format(args.v))
-		logging.info('Saving version:{} models'.format(args.v))
+		algorithm.agent.save_model(version=args.v, epoch='final')
+		predictor.save(args.v, epoch='final')
+		info = f'Saving version:{args.v}_final models'
+		print(info)
+		logging.info(info)
 
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and Predictor")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--topk', type=int, default=10)
-	parser.add_argument('--num_thread', type=int, default=0)	# 用 GPU 跑时设为 0
+	parser.add_argument('--num_thread', type=int, default=4)	# 用 GPU 跑时设为 0
 
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_pic_dir', default="pic/")
@@ -270,6 +289,8 @@ if __name__ == '__main__':
 
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
+	parser.add_argument('--save_interval', type=int, default=5)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--evaluate_interval', type=int, default=5)		# 多少个 epoch 评估一次
 	parser.add_argument('--shuffle', default='y')
 	# RL setting
 	parser.add_argument('--reset', default='n')
@@ -287,9 +308,11 @@ if __name__ == '__main__':
 	parser.add_argument('--weight_decay', type=float, default=1e-4)		# regularization
 	parser.add_argument('--norm_layer', default='ln')			# bn/ln/none
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
-	# save/load model 的名字为 --v
-	parser.add_argument('--save', default='n')
+	# save model 的名字为 --v; load model 名字为 --load_version + _ + --load_epoch
+	parser.add_argument('--save', default='y')
 	parser.add_argument('--load', default='n')
+	parser.add_argument('--load_version', default='v')
+	parser.add_argument('--load_epoch', default='final')
 	parser.add_argument('--show', default='n')
 	# init weight
 	parser.add_argument('--init_std', type=float, default=0.1)
@@ -317,7 +340,7 @@ if __name__ == '__main__':
 	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
-	parser.add_argument('--k', type=int, default=8)
+	parser.add_argument('--k', type=int, default=64)
 	# NCF
 	parser.add_argument('--n_act', default='elu')
 	parser.add_argument('--layers', default='1024,512')
@@ -326,5 +349,8 @@ if __name__ == '__main__':
 	init_log(args)
 
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	tmp = 'cuda' if torch.cuda.is_available() else 'cpu'
+	args.num_thread = 0 if tmp == 'cuda' else args.num_thread
+
 	print('device:{}'.format(device))
 	main(args, device)

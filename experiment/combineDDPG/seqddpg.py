@@ -311,21 +311,27 @@ class DDPG(object):
 			param += torch.randn(param.shape) * param_noise.current_stddev
 
 
-	def save_model(self, version='v'):
+	def save_model(self, version, epoch):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
+		if not os.path.exists('models/' + version + '/'):
+			os.makedirs('models/' + version + '/')
 
-		torch.save(self.actor.state_dict(), 'models/a_' + version + '.pkl')
-		torch.save(self.critic.state_dict(), 'models/c_' + version + '.pkl')
-		torch.save(self.seq_model.state_dict(), 'models/s_' + version + '.pkl')
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		torch.save(self.actor.state_dict(), based_dir + 'a_' + tail)
+		torch.save(self.critic.state_dict(), based_dir + 'c_' + tail)
+		torch.save(self.seq_model.state_dict(), based_dir + 's_' + tail)
 
 
-	def load_model(self, version):
-		self.actor.load_state_dict(torch.load('models/a_' + version + '.pkl'))
+	def load_model(self, version, epoch):
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		self.actor.load_state_dict(torch.load(based_dir + 'a_' + tail))
 		hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
 
-		self.critic.load_state_dict(torch.load('models/c_' + version + '.pkl'))
+		self.critic.load_state_dict(torch.load(based_dir + 'c_' + tail))
 		hard_update(self.critic_target, self.critic)
 
-		self.seq_model.load_state_dict(torch.load('models/s_'+ version + '.pkl'))
+		self.seq_model.load_state_dict(torch.load(based_dir + 's_'+ tail))
 		hard_update(self.target_seq_model, self.seq_model)

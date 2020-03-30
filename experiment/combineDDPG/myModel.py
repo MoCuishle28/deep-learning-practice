@@ -198,13 +198,20 @@ class Predictor(object):
 		self.predictor.eval()
 
 
-	def save(self, name):
+	def save(self, version, epoch):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
-		torch.save(self.predictor.state_dict(), 'models/p_' + name + '.pkl')
+		if not os.path.exists('models/' + version + '/'):
+			os.makedirs('models/' + version + '/')
 
-	def load(self, name):
-		self.predictor.load_state_dict(torch.load('models/p_' + name + '.pkl'))
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		torch.save(self.predictor.state_dict(), based_dir + 'p_' + tail)
+
+	def load(self, version, epoch):
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		self.predictor.load_state_dict(torch.load(based_dir + 'p_' + tail))
 
 
 class Evaluate(object):
@@ -252,7 +259,7 @@ class Evaluate(object):
 		mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
 		input_vector = torch.cat([uid_tensor, mfeature]).unsqueeze(0).to(self.device)	# 一维
 		max_score = self.predictor.predict(input_vector)
-		map_items_score[mid] = max_score.item.item()
+		map_items_score[mid] = max_score.item()
 
 		user_ignore_set = self.users_has_clicked[uid]
 
@@ -349,19 +356,29 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 				logging.info(info)
 				loss_list.append(loss.item())
 
-		predictor.on_eval()	# 评估模式
-		t1 = time.time()
-		hr, ndcg, precs = evaluate.evaluate()
-		t2 = time.time()
-		info = f'[Valid]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}'
-		print(info)
-		logging.info(info)
-		hr_list.append(hr)
-		ndcg_list.append(ndcg)
-		precision_list.append(precs)
+		if epoch >= 50:
+			if (epoch + 1) % args.save_interval == 0:
+				predictor.save(args.v + 'only', epoch)
+				info = f'Saving version:{args.v}only_{epoch} model'
+				print(info)
+				logging.info(info)
+
+		if (epoch + 1) % args.evaluate_interval == 0:
+			predictor.on_eval()	# 评估模式
+			t1 = time.time()
+			hr, ndcg, precs = evaluate.evaluate()
+			hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
+			t2 = time.time()
+			info = f'[Valid]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}'
+			print(info)
+			logging.info(info)
+			hr_list.append(hr)
+			ndcg_list.append(ndcg)
+			precision_list.append(precs)
 
 	predictor.on_eval()	# 评估模式
 	hr, ndcg, precs = evaluate.evaluate(title='[TEST]')
+	hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 	f'[TEST]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
 	print(info)
 	logging.info(info)
@@ -427,11 +444,6 @@ def main(args, device):
 		logging.info('Predictor is NCF.')
 		model = NCF(args, args.u_emb_dim + args.m_emb_dim + args.g_emb_dim, device, without_rl=True)
 
-	# 加载模型
-	if args.load == 'y':
-		print('Loading version:{} model'.format(args.v))
-		model.load_state_dict(torch.load(args.base_log_dir + args.v + '.pkl'))
-
 	# [uid, mid, genres]
 	mid_dir = 'without_time_seq/' if args.without_time_seq == 'y' else ''
 	train_data = torch.tensor(np.load(args.base_data_dir + mid_dir + 'train_data.npy').astype(np.float32), dtype=torch.float32).to(device)
@@ -440,14 +452,22 @@ def main(args, device):
 	
 	mid_map_mfeature = load_obj('mid_map_mfeature')
 	predictor = Predictor(args, model, device, mid_map_mfeature)
+	if args.load == 'y':	# 加载模型
+		predictor.load(args.load_version + 'only', args.load_epoch)
+		info = f'Loading version:{args.v}only_{args.load_epoch} model'
+		print(info)
+		logging.info(info)
+
 	loss_list, precision_list, hr_list, ndcg_list = train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, device, predictor.users_has_clicked)
 
 	plot_result(args, loss_list, precision_list, hr_list, ndcg_list)
 
 	# 保存模型
 	if args.save == 'y':
-		print('Saving version:{} model'.format(args.v))
-		torch.save(model.state_dict(), args.base_log_dir + args.v + '.pkl')
+		predictor.save(args.v + 'only', 'final')
+		info = f'Saving version:{args.v}only_final model'
+		print(info)
+		logging.info(info)
 
 
 if __name__ == '__main__':
@@ -458,23 +478,30 @@ if __name__ == '__main__':
 	parser.add_argument('--base_log_dir', default="log/myModel/")
 	parser.add_argument('--base_pic_dir', default="pic/myModel/")
 	parser.add_argument('--base_data_dir', default='../data/ml_1M_row/')
-	parser.add_argument('--epoch', type=int, default=20)
+
+	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=512)
+	parser.add_argument('--save_interval', type=int, default=5)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--evaluate_interval', type=int, default=5)		# 多少个 epoch 评估一次
+	parser.add_argument('--early_stop', type=int, default=5)
+	parser.add_argument('--without_time_seq', default='n')				# 数据集是否按时间排序
+	# save model 的名字为 --v; load model 名字为 --load_version + _ + --load_epoch
+	parser.add_argument('--save', default='y')
+	parser.add_argument('--load', default='n')
+	parser.add_argument('--load_version', default='v')
+	parser.add_argument('--load_epoch', default='final')
+	parser.add_argument('--show', default='n')
+
 	parser.add_argument('--predictor_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--init_std', type=float, default=0.01)
-	parser.add_argument('--save', default='n')
-	parser.add_argument('--load', default='n')
-	parser.add_argument('--show', default='n')	# show pic
 	parser.add_argument('--weight_decay', type=float, default=1e-4)		# 正则项
-	parser.add_argument('--early_stop', type=int, default=5)
-	parser.add_argument('--without_time_seq', default='n')				# 数据集是否按时间排序
 	# predictor
 	parser.add_argument('--predictor', default='fm')
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
-	parser.add_argument('--k', type=int, default=8)
+	parser.add_argument('--k', type=int, default=64)
 	# embedding
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
 	parser.add_argument('--u_emb_dim', type=int, default=128)
