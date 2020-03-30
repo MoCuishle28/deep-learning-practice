@@ -57,6 +57,8 @@ class Predictor(object):
 		# sampler
 		if args.sampler == 'q':
 			self.sampler = Q_Sampler(args, device, users_has_clicked)
+		else:
+			self.sampler = None
 
 
 	def bpr_loss(self, y_ij):
@@ -153,13 +155,26 @@ class Predictor(object):
 	def on_eval(self):
 		self.predictor.eval()
 
-	def save(self, name):
+
+	def save(self, version, epoch):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
-		torch.save(self.predictor.state_dict(), 'models/p_' + name + '.pkl')
+		if not os.path.exists('models/' + version + '/'):
+			os.makedirs('models/' + version + '/')
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		torch.save(self.predictor.state_dict(), based_dir + 'p_' + tail)
 
-	def load(self, name):
-		self.predictor.load_state_dict(torch.load('models/p_' + name + '.pkl'))
+		if self.sampler != None:
+			self.sampler.save(version, epoch)
+
+
+	def load(self, version, epoch):
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		self.predictor.load_state_dict(torch.load(based_dir + 'p_' + tail))
+		if self.sampler != None:
+			self.sampler.load(version, epoch)
 
 
 class Run(object):
@@ -196,19 +211,28 @@ class Run(object):
 					print(info)
 					logging.info(info)
 
-			self.predictor.on_eval()
-			t1 = time.time()
-			hr, ndcg, precs = self.evaluate.evaluate()
-			t2 = time.time()
-			hr_list.append(hr)
-			ndcg_list.append(ndcg)
-			precs_list.append(precs)
-			info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precs:{precs}, Time:{t2 - t1}'
-			print(info)
-			logging.info(info)
+			if i_epoch >= self.args.start_save and (i_epoch + 1) % self.args.save_interval == 0:
+				self.predictor.save(self.args.v, i_epoch)
+				info = f'Saving version: {self.args.v}_{i_epoch} model'
+				print(info)
+				logging.info(info)
+			
+			if (i_epoch + 1) % self.args.evaluate_interval == 0:
+				self.predictor.on_eval()
+				t1 = time.time()
+				hr, ndcg, precs = self.evaluate.evaluate()
+				t2 = time.time()
+				hr_list.append(hr)
+				ndcg_list.append(ndcg)
+				precs_list.append(precs)
+				info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precs:{precs}, Time:{t2 - t1}'
+				print(info)
+				logging.info(info)
 
 		self.predictor.on_eval()
+		t1 = time.time()
 		hr, ndcg, precs = self.evaluate.evaluate(title='[TEST]')
+		t2 = time.time()
 		info = f'[TEST]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precs:{precs}, Time:{t2 - t1}'
 		print(info)
 		logging.info(info)
@@ -250,11 +274,20 @@ def main(args, device):
 		pass
 
 	predictor = Predictor(args, model, device, mid_map_mfeature, users_has_clicked)
-	if args.load_model == 'y':
-		pass
+	if args.load == 'y':
+		predictor.load(args.load_version, args.load_epoch)
+		info = f'Loading version: {args.load_version}_{args.load_epoch} model'
+		print(info)
+		logging.info(info)
 
 	run = Run(args, device, predictor, mid_map_mfeature, users_has_clicked)
 	run.train()
+
+	if args.save == 'y':
+		predictor.save(args.v, 'final')
+		info = f'Saving version: {args.v}_final model'
+		print(info)
+		logging.info(info)
 
 
 if __name__ == '__main__':
@@ -265,9 +298,15 @@ if __name__ == '__main__':
 	parser.add_argument('--base_pic_dir', default="pic/")
 	parser.add_argument('--base_data_dir', default='../data/ml_1M_row/')
 	parser.add_argument('--without_time_seq', default='n')		# 数据集是否按时间排序
-	parser.add_argument('--load_model', default='n')			# 是否加载模型
-	parser.add_argument('--save_model', default='n')
+	parser.add_argument('--load', default='n')					# 是否加载模型
+	parser.add_argument('--save', default='y')
 	parser.add_argument('--show', default='n')
+
+	parser.add_argument('--start_save', type=int, default=20)			# 从第几个 epoch 开始 save
+	parser.add_argument('--save_interval', type=int, default=5)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--evaluate_interval', type=int, default=5)		# 多少个 epoch 评估一次
+	parser.add_argument('--load_version', default='v')
+	parser.add_argument('--load_epoch', default='final')
 
 	parser.add_argument('--topk', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=512)

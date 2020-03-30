@@ -1,5 +1,6 @@
-from collections import deque
+import os
 import random
+from collections import deque
 
 import torch
 import torch.nn as nn
@@ -161,3 +162,20 @@ class Q_Sampler(object):
 
 	def on_train(self):
 		self.Q.train()
+
+	def save(self, version, epoch):
+		if not os.path.exists('models/'):
+			os.makedirs('models/')
+		if not os.path.exists('models/' + version + '/'):
+			os.makedirs('models/' + version + '/')
+
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		torch.save(self.Q.state_dict(), based_dir + 'Q_' + tail)
+
+
+	def load(self, version, epoch):
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		self.Q.load_state_dict(torch.load(based_dir + 'Q_'+ tail))
+		hard_update(self.target_Q, self.Q)
