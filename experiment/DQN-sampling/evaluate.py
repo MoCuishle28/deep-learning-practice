@@ -13,7 +13,7 @@ class Evaluate(object):
 	def __init__(self, args, device, predictor, users_has_clicked, mid_map_mfeature):
 		self.args = args
 		self.device = device
-		self.predictor = predictor
+		self.predictor = predictor 		# 只是 model, 不是封装的 predictor
 
 		self.users_has_clicked = users_has_clicked
 		self.mid_map_mfeature = mid_map_mfeature

@@ -127,7 +127,7 @@ class Predictor(object):
 		margin_list = None
 		if self.args.reward == 'loss':
 			margin_list = loss.tolist()
-		elif self.args.reward == 'dismargin':
+		elif self.args.reward == 'dismargin' or self.args.reward == 'conmargin':
 			margin_list = y_ij.tolist()
 
 		reward_list = []
@@ -141,7 +141,10 @@ class Predictor(object):
 			if self.args.reward == 'loss':
 				reward = torch.tensor([margin], dtype=torch.float32, device=self.device)
 			elif self.args.reward == 'dismargin':
-				reward = torch.tensor([1 if margin <= 0 else 0], dtype=torch.float32, device=self.device)
+				reward = torch.tensor([1 if margin <= 0 else -1], dtype=torch.float32, device=self.device)
+			elif self.args.reward == 'conmargin':
+				reward = torch.tensor([-margin], dtype=torch.float32, device=self.device)
+
 			reward_list.append(reward.item())
 			# shape 都是 (-1)
 			self.sampler.replay_buffer.append((state, action, reward, next_state))
@@ -156,7 +159,7 @@ class Predictor(object):
 		self.predictor.eval()
 
 
-	def save(self, version, epoch):
+	def save(self, version, epoch, save_sampler=False):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
 		if not os.path.exists('models/' + version + '/'):
@@ -165,15 +168,15 @@ class Predictor(object):
 		tail = version + '-' + str(epoch) + '.pkl'
 		torch.save(self.predictor.state_dict(), based_dir + 'p_' + tail)
 
-		if self.sampler != None:
+		if self.sampler != None and save_sampler:
 			self.sampler.save(version, epoch)
 
 
-	def load(self, version, epoch):
+	def load(self, version, epoch, load_sampler=False):
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
 		self.predictor.load_state_dict(torch.load(based_dir + 'p_' + tail))
-		if self.sampler != None:
+		if self.sampler != None and load_sampler:
 			self.sampler.load(version, epoch)
 
 
@@ -212,7 +215,8 @@ class Run(object):
 					logging.info(info)
 
 			if i_epoch >= self.args.start_save and (i_epoch + 1) % self.args.save_interval == 0:
-				self.predictor.save(self.args.v, i_epoch)
+				save_sampler = True if self.args.save_sampler == 'y' else False
+				self.predictor.save(self.args.v, i_epoch, save_sampler=save_sampler)
 				info = f'Saving version: {self.args.v}_{i_epoch} model'
 				print(info)
 				logging.info(info)
@@ -275,7 +279,8 @@ def main(args, device):
 
 	predictor = Predictor(args, model, device, mid_map_mfeature, users_has_clicked)
 	if args.load == 'y':
-		predictor.load(args.load_version, args.load_epoch)
+		load_sampler = True if args.load_sampler == 'y' else False
+		predictor.load(args.load_version, args.load_epoch, load_sampler=load_sampler)
 		info = f'Loading version: {args.load_version}_{args.load_epoch} model'
 		print(info)
 		logging.info(info)
@@ -300,6 +305,7 @@ if __name__ == '__main__':
 	parser.add_argument('--without_time_seq', default='n')		# 数据集是否按时间排序
 	parser.add_argument('--load', default='n')					# 是否加载模型
 	parser.add_argument('--save', default='y')
+	parser.add_argument('--save_sampler', default='n')
 	parser.add_argument('--show', default='n')
 
 	parser.add_argument('--start_save', type=int, default=20)			# 从第几个 epoch 开始 save
@@ -307,6 +313,7 @@ if __name__ == '__main__':
 	parser.add_argument('--evaluate_interval', type=int, default=5)		# 多少个 epoch 评估一次
 	parser.add_argument('--load_version', default='v')
 	parser.add_argument('--load_epoch', default='final')
+	parser.add_argument('--load_sampler', default='y')
 
 	parser.add_argument('--topk', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=512)
