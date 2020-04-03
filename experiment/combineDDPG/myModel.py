@@ -356,12 +356,11 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 				logging.info(info)
 				loss_list.append(loss.item())
 
-		if epoch >= 50:
-			if (epoch + 1) % args.save_interval == 0:
-				predictor.save(args.v + 'only', epoch)
-				info = f'Saving version:{args.v}only_{epoch} model'
-				print(info)
-				logging.info(info)
+		if (epoch + 1) >= args.start_save and (epoch + 1) % args.save_interval == 0:
+			predictor.save(args.v + 'only', epoch)
+			info = f'Saving version:{args.v}only_{epoch} model'
+			print(info)
+			logging.info(info)
 
 		if (epoch + 1) % args.evaluate_interval == 0:
 			predictor.on_eval()	# 评估模式
@@ -379,7 +378,7 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 	predictor.on_eval()	# 评估模式
 	hr, ndcg, precs = evaluate.evaluate(title='[TEST]')
 	hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
-	f'[TEST]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
+	info = f'[TEST]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
 	print(info)
 	logging.info(info)
 	return loss_list, precision_list, hr_list, ndcg_list
@@ -454,7 +453,7 @@ def main(args, device):
 	predictor = Predictor(args, model, device, mid_map_mfeature)
 	if args.load == 'y':	# 加载模型
 		predictor.load(args.load_version + 'only', args.load_epoch)
-		info = f'Loading version:{args.v}only_{args.load_epoch} model'
+		info = f'Loading version:{args.load_version}only_{args.load_epoch} model'
 		print(info)
 		logging.info(info)
 
@@ -481,6 +480,7 @@ if __name__ == '__main__':
 
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=512)
+	parser.add_argument('--start_save', type=int, default=50)
 	parser.add_argument('--save_interval', type=int, default=5)			# 多少个 epoch 保存一次模型
 	parser.add_argument('--evaluate_interval', type=int, default=5)		# 多少个 epoch 评估一次
 	parser.add_argument('--early_stop', type=int, default=5)
@@ -510,7 +510,7 @@ if __name__ == '__main__':
 	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
 	# NCF
 	parser.add_argument('--norm_layer', default='ln')					# bn/ln/none
-	parser.add_argument('--n_act', default='relu')
+	parser.add_argument('--n_act', default='elu')
 	parser.add_argument('--layers', default='1024,512')
 	parser.add_argument('--actor_output', type=int, default=0)
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)

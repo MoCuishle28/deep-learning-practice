@@ -17,7 +17,7 @@ Changed a little
 
 
 Transition = namedtuple(
-	'Transition', ('state', 'action', 'mask', 'next_state', 'reward'))
+	'Transition', ('state', 'action', 'next_state', 'reward'))
 
 
 class ReplayMemory(object):
@@ -268,15 +268,16 @@ class DDPG(object):
 		state_batch = Variable(torch.cat(batch.state).to(self.device))
 		action_batch = Variable(torch.cat(batch.action).to(self.device))
 		reward_batch = Variable(torch.cat(batch.reward).to(self.device))
-		mask_batch = Variable(torch.cat(batch.mask).to(self.device))
+		# mask_batch = Variable(torch.cat(batch.mask).to(self.device))
 		next_state_batch = Variable(torch.cat(batch.next_state).to(self.device))
 		
 		next_action_batch = self.actor_target(next_state_batch).to(self.device)
 		next_state_action_values = self.critic_target(next_state_batch, next_action_batch).to(self.device)
 
 		reward_batch = reward_batch.unsqueeze(1)
-		mask_batch = mask_batch.unsqueeze(1)
-		expected_state_action_batch = reward_batch + (self.gamma * mask_batch * next_state_action_values)
+		# mask_batch = mask_batch.unsqueeze(1)
+		# expected_state_action_batch = reward_batch + (self.gamma * mask_batch * next_state_action_values)
+		expected_state_action_batch = reward_batch + (self.gamma * next_state_action_values)
 
 		self.critic_optim.zero_grad()
 
@@ -297,7 +298,7 @@ class DDPG(object):
 
 		soft_update(self.actor_target, self.actor, self.actor_tau)
 		soft_update(self.critic_target, self.critic, self.critic_tau)
-		return value_loss.item(), policy_loss.item()
+		return policy_loss.item(), value_loss.item(), None
 
 
 	def perturb_actor_parameters(self, param_noise):
@@ -321,17 +322,14 @@ class DDPG(object):
 		tail = version + '-' + str(epoch) + '.pkl'
 		torch.save(self.actor.state_dict(), based_dir + 'a_' + tail)
 		torch.save(self.critic.state_dict(), based_dir + 'c_' + tail)
-		torch.save(self.seq_model.state_dict(), based_dir + 's_' + tail)
 
 
 	def load_model(self, version, epoch):
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
+
 		self.actor.load_state_dict(torch.load(based_dir + 'a_' + tail))
 		hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
 
 		self.critic.load_state_dict(torch.load(based_dir + 'c_' + tail))
 		hard_update(self.critic_target, self.critic)
-
-		self.seq_model.load_state_dict(torch.load(based_dir + 's_'+ tail))
-		hard_update(self.target_seq_model, self.seq_model)

@@ -33,11 +33,14 @@ class Run(object):
 
 	def eval_RL(self):
 		hr_list, ndcg_list, precision_list = [], [], []
+		max_ndcg, max_ndcg_epoch = 0.0, 0
+
 		if not os.path.exists(f'models/{self.args.v}/'):
 			print(f'version{self.args.v} not exists!')
 			return
 		file_names = os.listdir(f"./models/{self.args.v}/")
 		version_list = list(set([x.split('-')[-1].split('.')[0] for x in file_names]))
+		print(version_list)
 
 		for epoch in version_list:
 			# 加载模型
@@ -52,10 +55,15 @@ class Run(object):
 			self.evaluate.predictor = self.predictor
 			self.evaluate.agent = self.agent
 			t1 = time.time()
-			hr, ndcg, precs = self.evaluate.evaluate()
+			with torch.no_grad():
+				hr, ndcg, precs = self.evaluate.evaluate()
 			hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 			t2 = time.time()
-			info = f'[Valid]@{self.args.topk} | epoch:{epoch} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}'
+
+			max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
+			max_ndcg_epoch = max_ndcg_epoch if max_ndcg > ndcg else epoch
+
+			info = f'[Valid]@{self.args.topk} | epoch:{epoch} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 			print(info)
 			logging.info(info)
 			hr_list.append(hr)

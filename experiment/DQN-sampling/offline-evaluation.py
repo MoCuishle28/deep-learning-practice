@@ -43,7 +43,8 @@ class Run(object):
 			# 只把 model 传入, 否则会出错
 			self.evaluate.predictor = self.predictor.predictor
 			t1 = time.time()
-			hr, ndcg, precs = self.evaluate.evaluate()
+			with torch.no_grad():
+				hr, ndcg, precs = self.evaluate.evaluate()
 			hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 			t2 = time.time()
 			info = f'[Valid]@{self.args.topk} | epoch:{epoch} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}'

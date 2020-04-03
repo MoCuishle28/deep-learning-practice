@@ -303,14 +303,14 @@ if __name__ == '__main__':
 	parser.add_argument('--base_pic_dir', default="pic/")
 	parser.add_argument('--base_data_dir', default='../data/ml_1M_row/')
 	parser.add_argument('--without_time_seq', default='n')		# 数据集是否按时间排序
+
 	parser.add_argument('--load', default='n')					# 是否加载模型
 	parser.add_argument('--save', default='y')
 	parser.add_argument('--save_sampler', default='n')
 	parser.add_argument('--show', default='n')
-
-	parser.add_argument('--start_save', type=int, default=20)			# 从第几个 epoch 开始 save
-	parser.add_argument('--save_interval', type=int, default=5)			# 多少个 epoch 保存一次模型
-	parser.add_argument('--evaluate_interval', type=int, default=5)		# 多少个 epoch 评估一次
+	parser.add_argument('--start_save', type=int, default=50)				# 从第几个 epoch 开始 save
+	parser.add_argument('--save_interval', type=int, default=10)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--evaluate_interval', type=int, default=10)		# 多少个 epoch 评估一次
 	parser.add_argument('--load_version', default='v')
 	parser.add_argument('--load_epoch', default='final')
 	parser.add_argument('--load_sampler', default='y')
@@ -329,7 +329,7 @@ if __name__ == '__main__':
 	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
 	# predictor
 	parser.add_argument('--epoch', type=int, default=100)
-	parser.add_argument('--p_optim', default='sgd')
+	parser.add_argument('--p_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	parser.add_argument('--p_lr', type=float, default=1e-3)
@@ -343,10 +343,10 @@ if __name__ == '__main__':
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.0)
 	parser.add_argument('--q_optim', default='adam')
-	parser.add_argument('--q_lr', type=float, default=1e-3)
+	parser.add_argument('--q_lr', type=float, default=5e-3)
 
 	parser.add_argument('--update_method', default='hard')		# soft/hard
-	parser.add_argument('--ntu', type=float, default=10)		# 10 次更新就替换一次 target
+	parser.add_argument('--ntu', type=float, default=50)		# ntu 次更新就替换一次 target
 	parser.add_argument('--tau', type=float, default=0.1)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--maxlen', type=int, default=8000)

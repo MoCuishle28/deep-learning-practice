@@ -15,6 +15,7 @@ from seqddpg import DDPG
 from seqddpg import Transition
 from seqddpg import ReplayMemory
 from seqddpg import OUNoise
+from seqsac import SAC
 from myModel import FM, NCF
 from myModel import Predictor
 from evaluate import Evaluate
@@ -67,7 +68,10 @@ class Algorithm(object):
 			# 转成符合 RNN 的输入数据形式
 			state = state.view(-1, state.shape[0], state.shape[1]).to(self.device)
 			next_state = next_state.view(-1, next_state.shape[0], next_state.shape[1]).to(self.device)
-			action = self.agent.select_action(state, action_noise=self.ounoise)
+			if self.args.agent == 'ddpg':
+				action = self.agent.select_action(state, action_noise=self.ounoise)
+			elif self.args.agent == 'sac':
+				action = self.agent.policy_net.get_action(state)
 
 			state_list.append(state)
 			action_list.append(action)
@@ -98,8 +102,7 @@ class Algorithm(object):
 
 		for state, action, next_state, r in zip(state_list, action_list, next_state_list, reward_list):
 			reward = torch.tensor([r[0] * self.args.alpha], dtype=torch.float32, device=self.device)
-			mask = torch.tensor([True], dtype=torch.float32, device=self.device)
-			self.memory.push(state, action, mask, next_state, reward)
+			self.memory.push(state, action, next_state, reward)
 
 		batch_reward = torch.tensor(reward_list, dtype=torch.float32, device=self.device)
 		return sum_bpr_loss, batch_reward
@@ -111,6 +114,8 @@ class Algorithm(object):
 		precision_list = []
 		hr_list = []
 		ndcg_list = []
+		max_ndcg, max_ndcg_epoch = 0, 0
+
 		for epoch in range(self.args.epoch):
 			for i_batch, data in enumerate(self.train_data_loader):
 				data = data[0]				
@@ -119,26 +124,28 @@ class Algorithm(object):
 				transitions = self.memory.sample(self.args.batch_size)
 				batch = Transition(*zip(*transitions))
 				self.agent.on_train()	# 切换为训练模式 (因为包含 BN\LN)
-				value_loss, policy_loss = self.agent.update_parameters(batch)
-				value_loss, policy_loss = round(value_loss, 5), round(policy_loss, 5)
+				policy_loss, critic_loss, value_loss = self.agent.update_parameters(batch)
+				policy_loss = round(policy_loss, 3)
+				critic_loss = round(critic_loss, 3) if critic_loss != None else None
+				value_loss = round(value_loss, 3) if value_loss != None else None
 
 				reward = batch_reward.mean() * self.args.alpha
-				reward = round(reward.item(), 5)
-				sum_bpr_loss = round(sum_bpr_loss.item(), 5)
+				reward = round(reward.item(), 3)
+				sum_bpr_loss = round(sum_bpr_loss.item(), 3)
 				average_reward_list.append(reward)
 				bpr_loss_list.append(sum_bpr_loss)
-				info = f'epoch:{epoch+1}/{self.args.epoch} @{self.args.topk} i_batch:{i_batch+1}, Average Reward:{reward}, Negative BPR LOSS:{sum_bpr_loss}'
-				print(info, end = ', ')
-				print(f'value loss:{value_loss}, policy loss:{policy_loss}')
-				logging.info(info)
-
-			if epoch >= 20:
-				if (epoch + 1) % self.args.save_interval == 0:
-					self.agent.save_model(version=self.args.v, epoch=epoch)
-					self.predictor.save(self.args.v, epoch=epoch)
-					info = f'Saving version:{args.v}_{epoch} models'
-					print(info)
+				if i_batch % 10 == 0:
+					info = f'epoch:{epoch+1}/{self.args.epoch} @{self.args.topk} i_batch:{i_batch}, Average Reward:{reward}, Negative BPR LOSS:{sum_bpr_loss}'
+					print(info, end = ', ')
+					print(f'critic loss:{critic_loss}, policy loss:{policy_loss}, value loss:{value_loss}')
 					logging.info(info)
+
+			if (epoch + 1) >= self.args.start_save and (epoch + 1) % self.args.save_interval == 0:
+				self.agent.save_model(version=self.args.v, epoch=epoch)
+				self.predictor.save(self.args.v, epoch=epoch)
+				info = f'Saving version:{args.v}_{epoch} models'
+				print(info)
+				logging.info(info)
 
 			if (epoch + 1) % self.args.evaluate_interval == 0:
 				self.agent.on_eval()
@@ -147,7 +154,9 @@ class Algorithm(object):
 				hr, ndcg, precs = self.evaluate.evaluate()
 				hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 				t2 = time.time()
-				info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}'
+				max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
+				max_ndcg_epoch = max_ndcg_epoch if max_ndcg > ndcg else epoch
+				info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 				print(info)
 				logging.info(info)
 				hr_list.append(hr)
@@ -243,7 +252,15 @@ def main(args, device):
 	data_list = [train_data] + [valid_data] + [test_data]
 
 	env = HistoryGenerator(args, device)
-	agent = DDPG(args, device)
+	agent = None
+
+	info = f'RL Agent is {args.agent}'
+	print(info)
+	logging.info(info)
+	if args.agent == 'ddpg':
+		agent = DDPG(args, device)
+	elif args.agent == 'sac':
+		agent = SAC(args, device)
 
 	predictor_model = None
 	if args.predictor == 'fm':
@@ -289,8 +306,9 @@ if __name__ == '__main__':
 
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--save_interval', type=int, default=5)			# 多少个 epoch 保存一次模型
-	parser.add_argument('--evaluate_interval', type=int, default=5)		# 多少个 epoch 评估一次
+	parser.add_argument('--start_save', type=int, default=30)
+	parser.add_argument('--save_interval', type=int, default=10)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--evaluate_interval', type=int, default=10)		# 多少个 epoch 评估一次
 	parser.add_argument('--shuffle', default='y')
 	# RL setting
 	parser.add_argument('--reset', default='n')
@@ -320,16 +338,26 @@ if __name__ == '__main__':
 	parser.add_argument('--seq_hidden_size', type=int, default=512)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=128)
-	# ddpg
+	# agent
+	parser.add_argument('--agent', default='sac')
 	parser.add_argument("--actor_lr", type=float, default=1e-5)
 	parser.add_argument("--critic_lr", type=float, default=1e-4)
 	parser.add_argument('--hidden_size', type=int, default=512)
 	parser.add_argument('--actor_output', type=int, default=64)
 	parser.add_argument('--gamma', type=float, default=0.99)
-	parser.add_argument('--actor_tau', type=float, default=0.1)
 	parser.add_argument('--critic_tau', type=float, default=0.1)
-	parser.add_argument('--a_act', default='elu')
-	parser.add_argument('--c_act', default='elu')
+	parser.add_argument('--a_act', default='relu')
+	parser.add_argument('--c_act', default='relu')
+	# ddpg
+	parser.add_argument('--actor_tau', type=float, default=0.1)
+	# sac
+	parser.add_argument('--v_act', default='relu')
+	parser.add_argument('--mean_lambda', type=float, default=1e-3)
+	parser.add_argument('--std_lambda', type=float, default=1e-3)
+	parser.add_argument('--z_lambda', type=float, default=0.0)
+	parser.add_argument('--value_lr', type=float, default=3e-3)
+	parser.add_argument('--log_std_min', type=float, default=-20)
+	parser.add_argument('--log_std_max', type=float, default=2)
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-4)
 	# embedding
@@ -342,7 +370,7 @@ if __name__ == '__main__':
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
 	parser.add_argument('--k', type=int, default=64)
 	# NCF
-	parser.add_argument('--n_act', default='elu')
+	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--layers', default='1024,512')
 
 	args = parser.parse_args()
