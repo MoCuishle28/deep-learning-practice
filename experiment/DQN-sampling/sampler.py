@@ -118,7 +118,7 @@ class Q_Sampler(object):
 		q_values = self.target_Q(state)
 		pos_items = self.user_pos[uid]
 		q_values[0, pos_items] = 0
-		prob = torch.sofmax(q_values, dim=-1)
+		prob = torch.softmax(q_values, dim=-1)
 		dist = Categorical(torch.tensor(prob, device=self.device))
 		return dist.sample().item()
 

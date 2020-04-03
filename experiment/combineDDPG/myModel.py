@@ -23,11 +23,11 @@ class FM(nn.Module):
 		self.device = device
 		self.args = args
 		self.without_rl = without_rl
+		self.fm_feature_size = args.fm_feature_size if without_rl else args.fm_feature_size - 1
 
-		
 		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
-		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
+		self.g_embedding = nn.Linear(self.fm_feature_size - 2, args.g_emb_dim)
 
 		self.w0 = nn.Parameter(torch.empty(1, dtype=torch.float32, device=device))
 
@@ -46,19 +46,19 @@ class FM(nn.Module):
 		'''
 		x: (batch, feature_size)
 		'''
-		mids = x[:, -(self.args.fm_feature_size - 1)]
-		genres = x[:, -(self.args.fm_feature_size - 2):]
+		mids = x[:, -(self.fm_feature_size - 1)]
+		genres = x[:, -(self.fm_feature_size - 2):]
 
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
-		uids = x[:, -self.args.fm_feature_size]
+		uids = x[:, -self.fm_feature_size]
 		uemb = self.u_embedding(uids.long().to(self.device))
 
 		if self.without_rl:
 			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
 		else:
-			x = x[:, :-self.args.fm_feature_size]	# 有 RL 部分的输出作为 user embedding
+			x = x[:, :-self.fm_feature_size]	# 有 RL 部分的输出作为 user embedding
 			x = torch.cat([x, uemb, memb, gemb], 1).to(self.device)
 
 		inter_1 = torch.mm(x, self.v)
@@ -74,6 +74,7 @@ class NCF(nn.Module):
 		self.args = args
 		self.device = device
 		self.without_rl = without_rl
+		self.fm_feature_size = args.fm_feature_size if without_rl else args.fm_feature_size - 1
 
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
 		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
@@ -89,7 +90,7 @@ class NCF(nn.Module):
 		layers = [int(x) for x in args.layers.split(',')]
 		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
-		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
+		self.g_embedding = nn.Linear(self.fm_feature_size - 2, args.g_emb_dim)
 
 		params.append(nn.Linear(input_hidden_size, layers[0]))
 		if layer_trick != None:
@@ -109,19 +110,19 @@ class NCF(nn.Module):
 
 
 	def forward(self, x):
-		mids = x[:, -(self.args.fm_feature_size - 1)]
-		genres = x[:, -(self.args.fm_feature_size - 2):]
+		mids = x[:, -(self.fm_feature_size - 1)]
+		genres = x[:, -(self.fm_feature_size - 2):]
 
 		memb = self.m_embedding(mids.long().to(self.device))
 		gemb = self.g_embedding(genres.to(self.device))
 
-		uids = x[:, -self.args.fm_feature_size]
+		uids = x[:, -self.fm_feature_size]
 		uemb = self.u_embedding(uids.long().to(self.device))
 
 		if self.without_rl:
 			x = torch.cat([uemb, memb, gemb], 1).to(self.device)
 		else:
-			x = x[:, :-self.args.fm_feature_size]
+			x = x[:, :-self.fm_feature_size]
 			x = torch.cat([x, uemb, memb, gemb], 1)
 		x = self.ncf(x)
 		return x
@@ -133,10 +134,11 @@ def load_obj(name):
 
 
 class Predictor(object):
-	def __init__(self, args, predictor, device, mid_map_mfeature):
+	def __init__(self, args, predictor, device, mid_map_mfeature, without_rl=False):
 		super(Predictor, self).__init__()
 		self.args = args
 		self.device = device
+		self.feature_size = args.fm_feature_size if without_rl else args.fm_feature_size - 1
 		# mid: one-hot feature (21维 -> mid, genre, genre, ...)
 		self.mid_map_mfeature = mid_map_mfeature
 		self.predictor = predictor.to(self.device)
@@ -168,12 +170,14 @@ class Predictor(object):
 
 
 	def train(self, pos_data):
-		uids = pos_data[:, -self.args.fm_feature_size].tolist()
-		x = pos_data[:, :-self.args.fm_feature_size + 1]	# 除了 mid, genre, genre,..的剩余部分
+		uids = pos_data[:, -self.feature_size].tolist()
+		x = pos_data[:, :-(self.feature_size - 1)]	# 除了 mid, genre, genre,..的剩余部分(即 action, uid)
 
 		neg_mfeature = []
+		neg_mids = []
 		for uid in uids:
 			mid = self.negative_sample(uid)
+			neg_mids.append(mid)
 			mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(self.device)
 			neg_mfeature.append(mfeature)
 
@@ -188,7 +192,7 @@ class Predictor(object):
 		loss.backward()
 		self.optim.step()
 
-		return loss, batch_loss, y_pos, y_ij
+		return loss, batch_loss, y_pos, y_ij, neg_mids
 
 
 	def on_train(self):
@@ -348,7 +352,8 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 		predictor.on_train()	# 训练模式
 		for i_batch, data in enumerate(train_data_loader):
 			data = data[0]
-			loss, _, _, _ = predictor.train(data)
+			t = predictor.train(data)
+			loss = t[0]
 			
 			if (i_batch + 1) % 50 == 0:
 				info = f'epoch:{epoch + 1}/{args.epoch}, i_batch:{i_batch+1}, Negative BPR LOSS:{loss.item()}'
@@ -450,7 +455,7 @@ def main(args, device):
 	test_data = torch.tensor(np.load(args.base_data_dir + mid_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32).to(device)
 	
 	mid_map_mfeature = load_obj('mid_map_mfeature')
-	predictor = Predictor(args, model, device, mid_map_mfeature)
+	predictor = Predictor(args, model, device, mid_map_mfeature, without_rl=True)
 	if args.load == 'y':	# 加载模型
 		predictor.load(args.load_version + 'only', args.load_epoch)
 		info = f'Loading version:{args.load_version}only_{args.load_epoch} model'

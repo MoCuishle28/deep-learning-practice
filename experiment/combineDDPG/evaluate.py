@@ -58,7 +58,10 @@ class Evaluate(object):
 	def get_current_action(self, uid, mid):
 		state = self.env.get_history(uid, mid)
 		state = state.view(-1, state.shape[0], state.shape[1]).to(self.device)
-		action = self.agent.select_action(state, action_noise=None)
+		if self.args.agent == 'ddpg':
+			action = self.agent.select_action(state, action_noise=None)
+		elif self.args.agent == 'sac':
+			action = self.agent.policy_net.get_action(state)
 		return action
 
 

@@ -63,11 +63,7 @@ class Algorithm(object):
 
 		for i_data, raw_feature in enumerate(data):
 			state = self.env.get_history(raw_feature[0].item(), raw_feature[1].item())
-			next_state = self.env.get_next_history(state, raw_feature[1].item(), raw_feature[0].item())
-
-			# 转成符合 RNN 的输入数据形式
-			state = state.view(-1, state.shape[0], state.shape[1]).to(self.device)
-			next_state = next_state.view(-1, next_state.shape[0], next_state.shape[1]).to(self.device)
+			state = state.view(-1, state.shape[0], state.shape[1]).to(self.device)	# 转成符合 RNN 的输入数据形式
 			if self.args.agent == 'ddpg':
 				action = self.agent.select_action(state, action_noise=self.ounoise)
 			elif self.args.agent == 'sac':
@@ -75,8 +71,8 @@ class Algorithm(object):
 
 			state_list.append(state)
 			action_list.append(action)
-			next_state_list.append(next_state)
 
+			# 输入到 Predictor 的数据 (没有 clicked 特征)
 			input_data = torch.cat([action.squeeze(), raw_feature])		# action (1, actor_output) -> (actor_output)
 			input_data = input_data.view(1, -1)	# input_data (actor_output + 22) -> (1, actor_output + 22)
 			input_data_list.append(input_data)
@@ -85,7 +81,20 @@ class Algorithm(object):
 
 		batch_input_data = torch.cat(input_data_list, dim=0).to(self.device)
 		# 训练 predictor
-		sum_bpr_loss, batch_bpr_loss, batch_pos_score, batch_margin = self.predictor.train(batch_input_data)
+		sum_bpr_loss, batch_bpr_loss, batch_pos_score, batch_margin, neg_mids = self.predictor.train(batch_input_data)
+		
+		# 构建 next state
+		for i, margnin in enumerate(batch_margin.tolist()):
+			state = state_list[i]
+			uid = input_data_list[i][0, -(self.args.fm_feature_size - 1)].item()
+			if margnin[0] > 0:		# 正样本加入 next state
+				clicked = torch.tensor([1.0], dtype=torch.float32, device=self.device)
+				mid = input_data_list[i][0, -(self.args.fm_feature_size - 2)].item()
+				next_state = self.env.get_next_history(state, mid, uid, clicked)
+			else:				# 负样本加入
+				clicked = torch.tensor([0.0], dtype=torch.float32, device=self.device)
+				next_state = self.env.get_next_history(state, neg_mids[i], uid, clicked)
+			next_state_list.append(next_state)
 
 		reward_list = None
 		# bpr loss 的负数作为 reward
@@ -201,35 +210,39 @@ class HistoryGenerator(object):
 		rating_list = self.users_rating[uid]
 		stop_index = self.index[uid][curr_mid]
 		for i in range(stop_index - self.window, stop_index):
+			# TODO 增加一维表示是否点击
 			if i < 0:
-				history_feature = torch.zeros(22, dtype=torch.float32, device=self.device)
+				history_feature = torch.zeros(self.args.fm_feature_size, dtype=torch.float32, device=self.device)
 				history_feature[0] = uid
 				history_feature[1] = 9742.0
 			else:
 				mid = rating_list[i][0]
 				mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
-				# [uid, mfeature...]
+				# [uid, mfeature..., clicked]
 				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32, device=self.device), 
-					mfeature]).to(self.device)
+					mfeature, torch.tensor([1.], device=self.device)]).to(self.device)
 
 			ret_data.append(history_feature)
 		return torch.stack(ret_data).to(self.device)
 
 
-	def get_next_history(self, curr_history, new_mid, curr_uid):
+	def get_next_history(self, curr_history, new_mid, curr_uid, clicked):
 		'''
 		这个 state 的转移方式没有考虑 action(即: trasition probability = 1)
 		curr_history: tensor (window, feature size)
 		return: tensor (window, feature size)
 		'''
+		curr_history = curr_history.squeeze()
 		curr_history = curr_history.tolist()
+
 		curr_history.pop(0)
-		uid = curr_uid
 		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32, device=self.device)
 
-		history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32, device=self.device), mfeature]).to(self.device)
+		history_feature = torch.cat([torch.tensor([curr_uid], dtype=torch.float32, device=self.device), 
+			mfeature, clicked]).to(self.device)
 		curr_history.append(history_feature)
-		return torch.tensor(curr_history, device=self.device)
+		ret = torch.tensor(curr_history, device=self.device)
+		return ret.view(1, ret.shape[0], ret.shape[1])
 
 
 def init_log(args):
@@ -366,8 +379,9 @@ if __name__ == '__main__':
 	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
 	parser.add_argument('--m_emb_dim', type=int, default=128)
 	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
+	parser.add_argument('--c_emb_dim', type=int, default=1)		# clicked emb dim
 	# FM
-	parser.add_argument('--fm_feature_size', type=int, default=22)	# 还要原来基础加上 actor_output
+	parser.add_argument('--fm_feature_size', type=int, default=23)	# uid, mid, genres, ..., clicked
 	parser.add_argument('--k', type=int, default=64)
 	# NCF
 	parser.add_argument('--n_act', default='relu')
