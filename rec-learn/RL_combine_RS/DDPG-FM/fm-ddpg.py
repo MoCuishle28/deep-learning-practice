@@ -124,6 +124,8 @@ class Algorithm(object):
 		rmse_list = []
 		valid_rmse_list = []
 		mean_predictor_loss_list = []
+		min_rmse, min_rmse_epoch = 99999, 0
+
 		for epoch in range(self.args.epoch):
 			for i_batch, (data, target) in enumerate(self.train_data_loader):
 				data = data.to(self.device)
@@ -162,12 +164,27 @@ class Algorithm(object):
 				elif self.args.reward == 'rmse':
 					reward = -(rmse * self.args.alpha)
 
-				print('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
-					i_batch+1, rmse, reward), end = ', ')
-				print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
-				logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
-					i_batch+1, rmse, reward))
-			valid_rmse_list.append(self.evaluate(self.valid_data, self.valid_target))
+				if i_batch % 10 == 0:
+					print('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
+						i_batch+1, rmse, reward), end = ', ')
+					print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
+					logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
+						i_batch+1, rmse, reward))
+					break
+
+			if (i_batch + 1) % self.args.evaluate_interval == 0:
+				rmse = self.evaluate(self.valid_data, self.valid_target)
+				min_rmse = rmse if rmse < min_rmse else min_rmse
+				min_rmse_epoch = epoch if rmse < min_rmse else min_rmse_epoch
+				print(f'Current Min RMSE:{round(min_rmse, 5)}, in epoch: {min_rmse_epoch}')
+				valid_rmse_list.append(rmse)
+
+			if (i_batch + 1) >= self.args.start_save and (i_batch + 1) % self.args.save_interval == 0:
+				self.agent.save_model(version=self.args.v, epoch=epoch)
+				self.predictor.save(self.args.v, epoch=epoch)
+				info = f'Saving version:{self.args.v}_{epoch} models'
+				print(info)
+				logging.info(info)
 
 		del self.train_data
 		del self.train_target
@@ -178,29 +195,6 @@ class Algorithm(object):
 		test_target = torch.tensor(np.load(self.args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32, device=self.device)
 		self.evaluate(test_data, test_target, title='[Test]')
 		self.plot_result(rmse_list, valid_rmse_list, mean_predictor_loss_list)
-
-
-	def pretrain_predictor(self):
-		train_data_set = Data.TensorDataset(self.train_data, self.train_target)
-		data_loader = Data.DataLoader(dataset=train_data_set, batch_size=self.args.batch_size, 
-			shuffle=True)
-		for epoch in range(self.args.pretrain_predictor_epoch):
-			for i_batch, (data, target) in enumerate(data_loader):
-				data = data.to(self.device)
-				target = target.to(self.device)
-				data_list = []
-				# 补上 agent 输出的那部分为 0 向量
-				for feature_vec in data:
-					zero_vec = torch.zeros(self.args.actor_output).to(self.device)
-					data_list.append(torch.cat([zero_vec, feature_vec]))
-
-				data = torch.stack(data_list).to(self.device)
-				prediction, loss = self.predictor.train(data, target)
-				rmse = self.get_rmse(prediction, target)
-				
-				if (i_batch + 1) % 50 == 0:
-					print('pretrain epoch:{}, i_batch:{}, loss:{:.5}, RMSE:{:.5}'.format(epoch + 1, 
-						i_batch+1, loss.item(), rmse))
 
 
 	def plot_result(self, rmse_list, valid_rmse_list, mean_predictor_loss_list):
@@ -317,18 +311,68 @@ def init_log(args):
 	logging.info('\n-------------------------------------------------------------\n')
 
 
-def main():
+def main(args):
+	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	print('device:{}'.format(device))
+
+	train_data = np.load(args.base_data_dir + 'train_data.npy').astype(np.float32)
+	train_target = np.load(args.base_data_dir + 'train_target.npy').astype(np.float32)
+	valid_data = np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32)
+	valid_target = np.load(args.base_data_dir + 'valid_target.npy').astype(np.float32)
+	data_list = [train_data] + [valid_data]
+	target_list = [train_target] + [valid_target]
+
+	env = HistoryGenerator(args, device)
+	agent = DDPG(args, device)
+
+	# 后面还可以改成他的预测 rating 算法
+	predictor_model = None
+	if args.predictor == 'net':
+		predictor_model = Net(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.hidden_0, args.hidden_1, 1, args, device)
+		print('predictor_model is Network.')
+		logging.info('predictor_model is Network.')
+	elif args.predictor == 'fm':
+		predictor_model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.k, args, device)
+		print('predictor_model is FM.')
+		logging.info('predictor_model is FM.')
+	elif args.predictor ==  'ncf':
+		predictor_model = NCF(args, args.u_emb_dim + args.actor_output + args.m_emb_dim + args.g_emb_dim, device)
+		print('predictor_model is NCF.')
+		logging.info('predictor_model is NCF.')
+
+	predictor = Predictor(args, predictor_model, device)
+
+	# 加载模型
+	if args.load == 'y':
+		agent.load_model(version=args.load_version, epoch=args.load_epoch)
+		predictor.load(args.load_version, epoch=args.load_epoch)
+		info = f'Loading version:{args.load_version}_{args.load_epoch} models'
+		print(info)
+		logging.info(info)
+
+	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list)
+	algorithm.train()
+
+	# 保存模型
+	if args.save == 'y':
+		algorithm.agent.save_model(version=args.v, epoch='final')
+		predictor.save(args.v, epoch='final')
+		info = f'Saving version:{args.v}_final models'
+		print(info)
+		logging.info(info)
+
+
+if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and Predictor")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
 	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/pic/")
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
-	parser.add_argument('--memory_size', type=int, default=4096)
-	parser.add_argument('--pretrain_predictor_epoch', type=int, default=100)
+	parser.add_argument('--memory_size', type=int, default=8000)
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--hw', type=int, default=10)	# history window
-	parser.add_argument('--predictor', default='ncf')
+	parser.add_argument('--predictor', default='fm')
 	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
 	parser.add_argument('--shuffle', default='y')
@@ -345,7 +389,12 @@ def main():
 	parser.add_argument('--weight_decay', type=float, default=0.0)		# regularization
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	# save/load model 的名字为 --v
-	parser.add_argument('--save', default='n')
+	parser.add_argument('--start_save', type=int, default=60)
+	parser.add_argument('--save_interval', type=int, default=10)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--evaluate_interval', type=int, default=10)		# 多少个 epoch 评估一次
+	parser.add_argument('--load_version', default='v')
+	parser.add_argument('--load_epoch', default='final')
+	parser.add_argument('--save', default='y')
 	parser.add_argument('--load', default='n')
 	parser.add_argument('--show_pic', default='n')
 	# init weight
@@ -384,62 +433,4 @@ def main():
 
 	args = parser.parse_args()
 	init_log(args)
-	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-	print('device:{}'.format(device))
-
-	train_data = np.load(args.base_data_dir + 'train_data.npy').astype(np.float32)
-	train_target = np.load(args.base_data_dir + 'train_target.npy').astype(np.float32)
-	valid_data = np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32)
-	valid_target = np.load(args.base_data_dir + 'valid_target.npy').astype(np.float32)
-	data_list = [train_data] + [valid_data]
-	target_list = [train_target] + [valid_target]
-
-	env = HistoryGenerator(args, device)
-	agent = DDPG(args, device)
-
-	# 后面还可以改成他的预测 rating 算法
-	predictor_model = None
-	if args.predictor == 'net':
-		predictor_model = Net(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.hidden_0, args.hidden_1, 1, args, device)
-		print('predictor_model is Network.')
-		logging.info('predictor_model is Network.')
-	elif args.predictor == 'fm':
-		predictor_model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.k, args, device)
-		print('predictor_model is FM.')
-		logging.info('predictor_model is FM.')
-	elif args.predictor ==  'ncf':
-		predictor_model = NCF(args, args.u_emb_dim + args.actor_output + args.m_emb_dim + args.g_emb_dim, device)
-		print('predictor_model is NCF.')
-		logging.info('predictor_model is NCF.')
-
-	predictor = Predictor(args, predictor_model, device)
-
-	# 加载模型
-	if args.load == 'y':
-		agent.load_model(version=args.v)
-		predictor.load(args.v)
-		print('Loading version:{} models'.format(args.v))
-		logging.info('Loading version:{} models'.format(args.v))
-
-	algorithm = Algorithm(args, agent, predictor, env, data_list, target_list)
-	if args.pretrain == 'y':
-		# 暂时未发现有明显效果
-		print('----------------------------------pretrain start----------------------------------')
-		algorithm.pretrain_predictor()
-		print('----------------------------------pretrain end----------------------------------')
-		logging.info('pre-train.')
-	else:
-		print('no pre-train')
-		logging.info('no pre-train.')
-	algorithm.train()
-
-	# 保存模型
-	if args.save == 'y':
-		algorithm.agent.save_model(version=args.v)
-		predictor.save(args.v)
-		print('Saving version:{} models'.format(args.v))
-		logging.info('Saving version:{} models'.format(args.v))
-
-
-if __name__ == '__main__':
-	main()
+	main(args)

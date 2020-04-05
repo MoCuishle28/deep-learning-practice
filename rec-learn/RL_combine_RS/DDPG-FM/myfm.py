@@ -216,15 +216,20 @@ class Predictor(object):
 		return prediction, loss
 
 
-	def save(self, name):
+	def save(self, version, epoch):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
-			 
-		torch.save(self.predictor.state_dict(), 'models/p_' + name + '.pkl')
+		if not os.path.exists('models/' + version + '/'):
+			os.makedirs('models/' + version + '/')
 
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		torch.save(self.predictor.state_dict(), based_dir + 'p_' + tail)
 
-	def load(self, name):
-		self.predictor.load_state_dict(torch.load('models/p_' + name + '.pkl'))
+	def load(self, version, epoch):
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		self.predictor.load_state_dict(torch.load(based_dir + 'p_' + tail))
 
 
 def get_rmse(prediction, target):
