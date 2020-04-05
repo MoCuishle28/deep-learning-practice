@@ -358,9 +358,9 @@ if __name__ == '__main__':
 	parser.add_argument('--hidden_size', type=int, default=512)
 	parser.add_argument('--actor_output', type=int, default=64)
 	parser.add_argument('--gamma', type=float, default=0.99)
-	parser.add_argument('--critic_tau', type=float, default=0.1)
 	parser.add_argument('--a_act', default='relu')
 	parser.add_argument('--c_act', default='relu')
+	parser.add_argument('--critic_tau', type=float, default=0.1)
 	# ddpg
 	parser.add_argument('--actor_tau', type=float, default=0.1)
 	# sac

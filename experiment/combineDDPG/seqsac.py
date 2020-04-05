@@ -1,5 +1,6 @@
 import math
 import random
+import os
 
 import numpy as np
 
@@ -14,7 +15,6 @@ from seqmodel import SeqModel
 # test
 import argparse
 import matplotlib.pyplot as plt
-import gym
 
 
 def soft_update(target, source, tau):
