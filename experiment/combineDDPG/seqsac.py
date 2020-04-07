@@ -166,7 +166,7 @@ class PolicyNetwork(nn.Module):
 		return action, log_prob, z, mean, log_std
 		
 	
-	def get_action(self, state):
+	def select_action(self, state):
 		mean, log_std = self.forward(state)
 		std = log_std.exp()
 		
@@ -243,6 +243,10 @@ class SAC(object):
 		self.policy_optimizer.step()
 		soft_update(self.target_value_net, self.value_net, self.args.critic_tau)
 		return q_value_loss.item(), policy_loss.item(), value_loss.item()
+
+
+	def select_action(self, state, action_noise=None):
+		return self.policy_net.select_action(state)
 
 
 	def on_eval(self):
