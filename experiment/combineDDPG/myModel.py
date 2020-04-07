@@ -343,6 +343,7 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 	precision_list = []
 	hr_list = []
 	ndcg_list = []
+	max_ndcg, max_ndcg_epoch = 0, 0
 
 	train_data_set = Data.TensorDataset(train_data)
 	train_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=True)
@@ -373,7 +374,9 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 			hr, ndcg, precs = evaluate.evaluate()
 			hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 			t2 = time.time()
-			info = f'[Valid]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}'
+			max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
+			max_ndcg_epoch = max_ndcg_epoch if max_ndcg > ndcg else epoch
+			info = f'[Valid]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 			print(info)
 			logging.info(info)
 			hr_list.append(hr)
@@ -477,7 +480,7 @@ def main(args, device):
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters for Predictor")
 	parser.add_argument('--v', default="v")
-	parser.add_argument('--num_thread', type=int, default=0)
+	parser.add_argument('--num_thread', type=int, default=4)
 	parser.add_argument('--topk', type=int, default=10)
 	parser.add_argument('--base_log_dir', default="log/myModel/")
 	parser.add_argument('--base_pic_dir', default="pic/myModel/")
@@ -485,9 +488,9 @@ if __name__ == '__main__':
 
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--start_save', type=int, default=50)
-	parser.add_argument('--save_interval', type=int, default=5)			# 多少个 epoch 保存一次模型
-	parser.add_argument('--evaluate_interval', type=int, default=5)		# 多少个 epoch 评估一次
+	parser.add_argument('--start_save', type=int, default=80)
+	parser.add_argument('--save_interval', type=int, default=15)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--evaluate_interval', type=int, default=10)		# 多少个 epoch 评估一次
 	parser.add_argument('--early_stop', type=int, default=5)
 	parser.add_argument('--without_time_seq', default='n')				# 数据集是否按时间排序
 	# save model 的名字为 --v; load model 名字为 --load_version + _ + --load_epoch
@@ -522,4 +525,7 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	tmp = 'cuda' if torch.cuda.is_available() else 'cpu'
+	args.num_thread = 0 if tmp == 'cuda' else args.num_thread
+	
 	main(args, device)

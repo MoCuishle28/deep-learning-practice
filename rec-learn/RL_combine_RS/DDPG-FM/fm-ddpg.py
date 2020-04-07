@@ -170,7 +170,6 @@ class Algorithm(object):
 					print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
 					logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
 						i_batch+1, rmse, reward))
-					break
 
 			if (i_batch + 1) % self.args.evaluate_interval == 0:
 				rmse = self.evaluate(self.valid_data, self.valid_target)

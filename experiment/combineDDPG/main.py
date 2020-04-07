@@ -319,7 +319,7 @@ if __name__ == '__main__':
 
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--start_save', type=int, default=30)
+	parser.add_argument('--start_save', type=int, default=50)
 	parser.add_argument('--save_interval', type=int, default=10)			# 多少个 epoch 保存一次模型
 	parser.add_argument('--evaluate_interval', type=int, default=10)		# 多少个 epoch 评估一次
 	parser.add_argument('--shuffle', default='y')
