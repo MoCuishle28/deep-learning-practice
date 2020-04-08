@@ -85,7 +85,7 @@ class SeqModel(nn.Module):
 		self.m_embedding = nn.Embedding(args.max_mid + 1 + 1, args.m_emb_dim)	# 初始状态 9742
 		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 		# batch_first = True 则输入输出的数据格式为 (batch, seq, feature)
-		self.gru = nn.GRU(self.seq_input_size, self.hidden_size, self.seq_layer_num, batch_first=True)
+		self.gru = nn.GRU(self.seq_input_size, self.hidden_size, self.seq_layer_num, batch_first=True, dropout=args.dropout)
 		self.args = args
 		if args.norm_layer == 'bn':
 			self.ln1 = nn.BatchNorm1d(self.hidden_size, affine=True)

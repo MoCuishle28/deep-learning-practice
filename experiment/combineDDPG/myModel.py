@@ -171,10 +171,8 @@ class Predictor(object):
 		x = pos_data[:, :-(self.args.fm_feature_size - 1)]	# 除了 mid, genre, genre,..的剩余部分(即 action, uid)
 
 		neg_mfeature = []
-		neg_mids = []
 		for uid in uids:
 			mid = self.negative_sample(uid)
-			neg_mids.append(mid)
 			mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32).to(self.device)
 			neg_mfeature.append(mfeature)
 
@@ -189,7 +187,7 @@ class Predictor(object):
 		loss.backward()
 		self.optim.step()
 
-		return loss, batch_loss, y_pos, y_ij, neg_mids
+		return loss, batch_loss, y_pos, y_ij
 
 
 	def on_train(self):

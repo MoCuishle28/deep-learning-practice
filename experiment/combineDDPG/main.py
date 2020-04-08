@@ -77,7 +77,7 @@ class Algorithm(object):
 
 		batch_input_data = torch.cat(input_data_list, dim=0).to(self.device)
 		# 训练 predictor
-		sum_bpr_loss, batch_bpr_loss, batch_pos_score, batch_margin, neg_mids = self.predictor.train(batch_input_data)
+		sum_bpr_loss, batch_bpr_loss, batch_pos_score, batch_margin = self.predictor.train(batch_input_data)
 		
 		# 构建 next state
 		for i, margnin in enumerate(batch_margin.tolist()):
