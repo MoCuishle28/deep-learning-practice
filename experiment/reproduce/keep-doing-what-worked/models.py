@@ -1,11 +1,10 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Categorical
 import numpy as np
-
-
-EPS = 1e-8
+import matplotlib.pyplot as plt
 
 
 def parse_layers(layers, activative_func, layer_trick, p, output_size):
@@ -256,11 +255,8 @@ class MPO(object):
 			hard_update(self.target_Q, self.Q)
 			# hard_update(self.target_policy, self.policy)
 
-		action = softmax_pi_a.argmax(dim=1).to(self.device)
-		target = torch.tensor(self.action_list, device=self.device).view(-1)
-		precs = torch.mean((action == target).float())
 		self.clear_buffer()
-		return precs.item(), abm_loss.item(), q_loss.item(), pi_loss.item(), alpha_loss.item(), eta_loss.item()
+		return abm_loss.item(), q_loss.item(), pi_loss.item(), alpha_loss.item(), eta_loss.item()
 
 
 	def _f(self, x):
@@ -344,3 +340,33 @@ class MPO(object):
 		self.policy.eval()
 		self.target_Q.eval()
 		self.Q.eval()
+
+
+	def save_model(self, version, epoch):
+		if not os.path.exists('models/'):
+			os.makedirs('models/')
+		if not os.path.exists('models/' + version + '/'):
+			os.makedirs('models/' + version + '/')
+
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+		torch.save(self.prior.state_dict(), based_dir + 'prior_' + tail)
+		torch.save(self.Q.state_dict(), based_dir + 'Q_' + tail)
+		torch.save(self.policy.state_dict(), based_dir + 'policy_' + tail)
+
+		torch.save(self.alpha, based_dir + 'alpha_' + tail)
+		torch.save(self.eta, based_dir + 'eta_' + tail)
+
+
+	def load_model(self, version, epoch):
+		based_dir = 'models/' + version + '/'
+		tail = version + '-' + str(epoch) + '.pkl'
+
+		self.prior.load_state_dict(torch.load(based_dir + 'prior_' + tail))
+		self.Q.load_state_dict(torch.load(based_dir + 'Q_' + tail))
+		hard_update(self.target_Q, self.Q)
+
+		self.policy.load_state_dict(torch.load(based_dir + 'policy_' + tail))
+
+		self.alpha = torch.load(based_dir + 'alpha_' + tail)
+		self.eta = torch.load(based_dir + 'eta_' + tail)

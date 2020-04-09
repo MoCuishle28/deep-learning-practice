@@ -64,8 +64,8 @@ class Algorithm(object):
 
 
 	def train(self):
-		train_precs_list = []
-		valid_precs_list = []
+		hr_list, ndcg_list, precs_list = [], [], []
+		max_ndcg, max_ndcg_epoch = 0, 0
 		for i_epoch in range(self.args.epoch):
 			remain = 777
 			self.agent.train()
@@ -78,36 +78,69 @@ class Algorithm(object):
 					self.agent.store_next_state(next_state)
 
 					if len(self.agent.reward_list) >= self.args.batch_size:
-						precs, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
-						train_precs_list.append(precs)
-						print_str = 'epoch:{}/{}, precs:{:.4}, abm_loss:{:.4}, q_loss:{:.4}, pi_loss:{:.4}, alpha_loss:{:.4}, eta_loss:{:.4}'
-						info = print_str.format(i_epoch + 1, self.args.epoch, precs, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
-						print(info)
+						abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
 						if i % 60 == 0:
+							abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = round(abm_loss, 4), round(q_loss, 4), round(pi_loss, 4), round(alpha_loss, 4), round(eta_loss, 4)
+							info = f'epoch:{i_epoch + 1}/{self.args.epoch}, abm_loss:{abm_loss}, q_loss:{q_loss}, pi_loss:{pi_loss}, alpha_loss:{alpha_loss}, eta_loss:{eta_loss}'
+							print(info)
 							logging.info(info)
-
 				
 				if len(self.agent.reward_list) > 0:
-					precs, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
-					print_str = 'epoch:{}/{}, precs:{:.4}, abm_loss:{:.4}, q_loss:{:.4}, pi_loss:{:.4}, alpha_loss:{:.4}, eta_loss:{:.4}'
-					info = print_str.format(i_epoch + 1, self.args.epoch, precs, abm_loss, q_loss, pi_loss, alpha_loss, eta_loss)
+					abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
+					abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = round(abm_loss, 4), round(q_loss, 4), round(pi_loss, 4), round(alpha_loss, 4), round(eta_loss, 4)
+					info = f'epoch:{i_epoch + 1}/{self.args.epoch}, abm_loss:{abm_loss}, q_loss:{q_loss}, pi_loss:{pi_loss}, alpha_loss:{alpha_loss}, eta_loss:{eta_loss}'
 					print(info)
 					logging.info(info)
 
 			self.construct_uids_list()
-			self.agent.eval()
-			precs = self.evaluate.evaluate(title='[Valid]')
-			valid_precs_list.append(precs)
-			info = '[Valid] precs:{:.6}'.format(precs)
-			print(info)
-			logging.info(info)
+			if ((i_epoch + 1) >= self.args.start_save) and ((i_epoch + 1) % self.args.save_interval == 0):
+				self.agent.save_model(version=self.args.v, epoch=i_epoch)
+				info = f'Saving version:{args.v}_{i_epoch} models'
+				print(info)
+				logging.info(info)
+
+			if ((i_epoch + 1) >= self.args.start_eval) and ((i_epoch + 1) % self.args.eval_interval == 0):
+				self.agent.eval()
+				t1 = time.time()
+				hr, ndcg, precs = self.evaluate.evaluate()
+				t2 = time.time()
+				hr, ndcg, precs = round(hr, 4), round(ndcg, 4), round(precs, 4)
+				max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
+				max_ndcg_epoch = max_ndcg_epoch if max_ndcg > ndcg else i_epoch
+				info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precs:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
+				print(info)
+				logging.info(info)
 
 		self.agent.eval()
-		precs = self.evaluate.evaluate(title='[TEST]')
-		info = '[TEST] precs:{:.6}'.format(precs)
+		hr, ndcg, precs = self.evaluate.evaluate(mode='test')
+		hr, ndcg, precs = round(hr, 4), round(ndcg, 4), round(precs, 4)
+		info = f'[TEST]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precs:{precs}'
 		print(info)
 		logging.info(info)
-		self.evaluate.plot_result(train_precs_list, valid_precs_list)
+		self.evaluate.plot_result(hr_list, ndcg_list, precs_list)
+
+
+def main(args):
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+	agent = MPO(args, device)
+	# 加载模型
+	if args.load == 'y':
+		agent.load_model(version=args.load_version, epoch=args.load_epoch)
+		info = f'Loading version:{args.load_version}_{args.load_epoch} models'
+		print(info)
+		logging.info(info)
+
+	env = HistoryGenerator(args, device)
+	algorithm = Algorithm(args, agent, device, env)
+	algorithm.load_data()
+	algorithm.train()
+
+	if args.save == 'y':
+		agent.save_model(version=args.v, epoch='final')
+		info = f'Saving version:{args.v}_final models'
+		print(info)
+		logging.info(info)
 
 
 def init_log(args):
@@ -122,25 +155,24 @@ def init_log(args):
 	logging.info('\n-------------------------------------------------------------\n')
 
 
-def main(args):
-	init_log(args)
-	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-	agent = MPO(args, device)
-	env = HistoryGenerator(args, device)
-	algorithm = Algorithm(args, agent, device, env)
-	algorithm.load_data()
-	algorithm.train()
-
-
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters")
 	parser.add_argument('--v', default="v")
-	parser.add_argument('--num_thread', type=int, default=4)
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_pic_dir', default="pic/")
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
+	parser.add_argument('--show', default='n')
 
+	parser.add_argument('--load', default='n')			# 是否加载模型
+	parser.add_argument('--save', default='y')
+	parser.add_argument('--load_version', default='v')
+	parser.add_argument('--load_epoch', default='final')
+	parser.add_argument('--start_save', type=int, default=50)
+	parser.add_argument('--save_interval', type=int, default=20)
+	parser.add_argument('--start_eval', type=int, default=0)
+	parser.add_argument('--eval_interval', type=int, default=20)
+
+	parser.add_argument('--topk', type=int, default=10)
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=128)
 	parser.add_argument('--shuffle', default='y')
@@ -148,10 +180,10 @@ if __name__ == '__main__':
 	parser.add_argument('--optim', default='adam')
 	parser.add_argument('--norm_layer', default='ln')		# bn/lb/none
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
-	parser.add_argument('--dropout', type=float, default=0.0)
+	parser.add_argument('--dropout', type=float, default=0.5)
 	# seq model
 	parser.add_argument('--hw', type=int, default=5)
-	parser.add_argument('--seq_hidden_size', type=int, default=512)
+	parser.add_argument('--seq_hidden_size', type=int, default=256)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=128)
 	# embedding
@@ -178,4 +210,5 @@ if __name__ == '__main__':
 	parser.add_argument('--p_lr', type=float, default=1e-3)
 
 	args = parser.parse_args()
+	init_log(args)
 	main(args)

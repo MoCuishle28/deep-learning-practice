@@ -50,7 +50,7 @@ class Run(object):
 			self.optim = torch.optim.RMSprop(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 		self.build_data_loader()
 		self.evaluate = Evaluation(args, device, self.q, self.env)
-		self.n = 0		# 更新 target
+		self.n = 0		# n 等于 update_interval 更新 target net
 
 
 	def fill_replay(self, data):
