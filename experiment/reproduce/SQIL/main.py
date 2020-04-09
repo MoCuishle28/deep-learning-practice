@@ -37,8 +37,8 @@ class Run(object):
 		self.demo_replay = deque(maxlen=args.maxlen)
 		self.samp_replay = deque(maxlen=args.maxlen)
 
-		self.q = SoftQ(args, device)
-		# self.target_q = SoftQ(args, device)
+		self.q = SoftQ(args, device).to(device)
+		# self.target_q = SoftQ(args, device).to(device)
 		# hard_update(self.target_q, self.q)
 
 		self.optim = None
@@ -69,6 +69,7 @@ class Run(object):
 
 	def run(self):
 		max_ndcg, max_ndcg_epoch = 0, 0
+		hr_list, ndcg_list, precs_list = [], [], []
 		for i_epoch in range(self.args.epoch):
 			for i_batch, data in enumerate(self.expert_data_loader):
 				data = data[0]
@@ -92,6 +93,9 @@ class Run(object):
 				info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 				print(info)
 				logging.info(info)
+				hr_list.append(hr)
+				ndcg_list.append(ndcg)
+				precs_list.append(precs)
 
 			if ((i_epoch + 1) >= self.args.start_save) and ((i_epoch + 1) % self.args.save_interval == 0):
 				self.save_model(version=self.args.v, epoch=i_epoch)
@@ -104,7 +108,8 @@ class Run(object):
 		hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 		info = f'[TEST]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
 		print(info)
-		logging.info(info)		
+		logging.info(info)
+		self.evaluate.plot_result(precs_list, hr_list, ndcg_list)
 
 
 	def update_parameters(self):
@@ -243,6 +248,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_pic_dir', default="pic/")
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
 	parser.add_argument('--shuffle', default='y')
+	parser.add_argument('--show', default='n')
 
 	parser.add_argument('--load', default='n')			# 是否加载模型
 	parser.add_argument('--save', default='y')

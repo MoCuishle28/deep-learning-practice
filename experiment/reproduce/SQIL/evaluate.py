@@ -1,6 +1,7 @@
 import torch
 import torch.utils.data as Data
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 class Evaluation(object):
@@ -56,3 +57,28 @@ class Evaluation(object):
 			if mid == gt_item:
 				return 1.0 / (i + 1.0)
 		return 0.0
+
+
+	def plot_result(self, precision_list, hr_list, ndcg_list):
+		plt.figure(figsize=(8, 8))
+		plt.subplot(1, 5, 1)
+		plt.title('Valid Precision')
+		plt.xlabel('Step')
+		plt.ylabel('Precision')
+		plt.plot(precision_list)
+
+		plt.subplot(1, 5, 3)
+		plt.title('Valid HR')
+		plt.xlabel('Step')
+		plt.ylabel('HR')
+		plt.plot(hr_list)
+
+		plt.subplot(1, 5, 5)
+		plt.title('Valid NDCG')
+		plt.xlabel('Step')
+		plt.ylabel('LOSS')
+		plt.plot(ndcg_list)
+
+		plt.savefig(self.args.base_pic_dir + self.args.v + '.png')
+		if self.args.show == 'y':
+			plt.show()
