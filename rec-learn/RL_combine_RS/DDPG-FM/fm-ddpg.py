@@ -166,19 +166,19 @@ class Algorithm(object):
 
 				if i_batch % 10 == 0:
 					print('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
-						i_batch+1, rmse, reward), end = ', ')
+						i_batch, rmse, reward), end = ', ')
 					print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
 					logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
-						i_batch+1, rmse, reward))
+						i_batch, rmse, reward))
 
-			if (i_batch + 1) % self.args.evaluate_interval == 0:
+			if (epoch + 1) % self.args.evaluate_interval == 0:
 				rmse = self.evaluate(self.valid_data, self.valid_target)
 				min_rmse = rmse if rmse < min_rmse else min_rmse
 				min_rmse_epoch = epoch if rmse < min_rmse else min_rmse_epoch
 				print(f'Current Min RMSE:{round(min_rmse, 5)}, in epoch: {min_rmse_epoch}')
 				valid_rmse_list.append(rmse)
 
-			if (i_batch + 1) >= self.args.start_save and (i_batch + 1) % self.args.save_interval == 0:
+			if (epoch + 1) >= self.args.start_save and (epoch + 1) % self.args.save_interval == 0:
 				self.agent.save_model(version=self.args.v, epoch=epoch)
 				self.predictor.save(self.args.v, epoch=epoch)
 				info = f'Saving version:{self.args.v}_{epoch} models'
@@ -372,7 +372,6 @@ if __name__ == '__main__':
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--hw', type=int, default=10)	# history window
 	parser.add_argument('--predictor', default='fm')
-	parser.add_argument('--pretrain', default='n')	# y -> pretrain predictor
 	parser.add_argument('--reward', default='loss')
 	parser.add_argument('--shuffle', default='y')
 	parser.add_argument('--alpha', type=float, default=1)	# raw reward 乘以的倍数(试图放大 reward 加大训练幅度)
@@ -388,7 +387,7 @@ if __name__ == '__main__':
 	parser.add_argument('--weight_decay', type=float, default=0.0)		# regularization
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	# save/load model 的名字为 --v
-	parser.add_argument('--start_save', type=int, default=60)
+	parser.add_argument('--start_save', type=int, default=70)
 	parser.add_argument('--save_interval', type=int, default=10)			# 多少个 epoch 保存一次模型
 	parser.add_argument('--evaluate_interval', type=int, default=10)		# 多少个 epoch 评估一次
 	parser.add_argument('--load_version', default='v')
