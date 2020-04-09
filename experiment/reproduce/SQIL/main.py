@@ -38,8 +38,6 @@ class Run(object):
 		self.samp_replay = deque(maxlen=args.maxlen)
 
 		self.q = SoftQ(args, device).to(device)
-		self.target_q = SoftQ(args, device).to(device)
-		hard_update(self.target_q, self.q)
 
 		self.optim = None
 		if args.optim == 'adam':
@@ -50,7 +48,7 @@ class Run(object):
 			self.optim = torch.optim.RMSprop(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 		self.build_data_loader()
 		self.evaluate = Evaluation(args, device, self.q, self.env)
-		self.n = 0		# n 等于 update_interval 更新 target net
+		self.EPS = 1e-10
 
 
 	def fill_replay(self, data):
@@ -125,15 +123,6 @@ class Run(object):
 		self.optim.zero_grad()
 		loss.backward()
 		self.optim.step()
-
-		if self.args.update == 'hard':
-			self.n += 1
-			if self.n == self.args.update_interval:
-				hard_update(self.target_q, self.q)
-				self.n = 0
-		elif self.args.update == 'soft':
-			soft_update(self.target_q, self.q, self.args.tau)
-
 		return loss.item(), demo_error.item(), samp_error.item()
 
 
@@ -142,13 +131,12 @@ class Run(object):
 		return: (tensor) -> Soft Ballman Error
 		'''
 		current_q_values = self.q(state)
-		# next_q_values = self.q(next_state)
-		next_q_values = self.target_q(next_state)
+		next_q_values = self.q(next_state)
 
 		action = action.view(-1, 1)		# (batch, 1), dtype=int64
 		current_q_values = torch.gather(current_q_values, 1, action).squeeze()		# (batch)
 		exp_next_q_values = torch.sum(torch.exp(next_q_values), dim=-1)				# (batch)
-		error = (current_q_values - (reward + self.args.gamma * torch.log(exp_next_q_values)))**2
+		error = (current_q_values - (reward + self.args.gamma * torch.log(exp_next_q_values + self.EPS)))**2
 		error = error.mean()
 		return error
 
@@ -167,9 +155,7 @@ class Run(object):
 
 	def get_action(self, state):
 		state = state.view(1, state.shape[0], state.shape[1])
-
-		q_values = self.target_q(state)
-		# q_values = self.q(state)
+		q_values = self.q(state)
 
 		if self.args.action_method == 'argmax':
 			action = q_values.argmax().item()	# mid
@@ -201,18 +187,14 @@ class Run(object):
 	def load_model(self, version, epoch):
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
-
 		self.q.load_state_dict(torch.load(based_dir + 'softQ_' + tail))
-		hard_update(self.target_q, self.q)  # Make sure target is with the same weight
 
 
 	def eval(self):
 		self.q.eval()
-		self.target_q.eval()
 
 	def train(self):
 		self.q.train()
-		self.target_q.train()
 
 
 def main(args, device):
@@ -273,9 +255,6 @@ if __name__ == '__main__':
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--topk', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--update', default='hard')				# soft/hard
-	parser.add_argument('--tau', type=float, default=0.1)
-	parser.add_argument('--update_interval', type=int, default=100)
 
 	parser.add_argument('--optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
