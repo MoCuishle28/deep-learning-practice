@@ -263,24 +263,24 @@ if __name__ == '__main__':
 	# embedding
 	parser.add_argument('--feature_size', type=int, default=22)	# uid, mid, genres, ...
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
-	parser.add_argument('--u_emb_dim', type=int, default=64)
+	parser.add_argument('--u_emb_dim', type=int, default=128)
 	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
-	parser.add_argument('--m_emb_dim', type=int, default=64)
-	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
+	parser.add_argument('--m_emb_dim', type=int, default=128)
+	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
 	# seq model
 	parser.add_argument('--hw', type=int, default=10)
-	parser.add_argument('--seq_hidden_size', type=int, default=128)
-	parser.add_argument('--seq_layer_num', type=int, default=2)
+	parser.add_argument('--seq_hidden_size', type=int, default=256)
+	parser.add_argument('--seq_layer_num', type=int, default=1)
 	parser.add_argument('--seq_output_size', type=int, default=128)
 	# Soft Q
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--lammbda_samp', type=float, default=1.0)
 	parser.add_argument('--action_method', default='argmax')	# argmax/sample
-	parser.add_argument('--maxlen', type=int, default=8000)
+	parser.add_argument('--maxlen', type=int, default=10000)
 	parser.add_argument('--layers', default='128,512,256')		# 第一个对应 seq_output_size
-	parser.add_argument('--act', default='elu')
+	parser.add_argument('--act', default='relu')
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
-	parser.add_argument('--dropout', type=float, default=0.0)
+	parser.add_argument('--dropout', type=float, default=0.5)
 
 	args = parser.parse_args()
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

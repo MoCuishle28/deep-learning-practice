@@ -150,7 +150,7 @@ class Algorithm(object):
 				print(info)
 				logging.info(info)
 
-			if (epoch + 1) % self.args.evaluate_interval == 0:
+			if ((epoch + 1) >= self.args.start_eval) and ((epoch + 1) % self.args.evaluate_interval == 0):
 				self.agent.on_eval()
 				self.predictor.on_eval()
 				t1 = time.time()
@@ -314,6 +314,7 @@ if __name__ == '__main__':
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--start_save', type=int, default=50)
 	parser.add_argument('--save_interval', type=int, default=10)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--start_eval', type=int, default=0)
 	parser.add_argument('--evaluate_interval', type=int, default=10)		# 多少个 epoch 评估一次
 	parser.add_argument('--shuffle', default='y')
 	# RL setting
