@@ -79,15 +79,15 @@ class Algorithm(object):
 
 					if len(self.agent.reward_list) >= self.args.batch_size:
 						abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
-						if i % 60 == 0:
-							abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = round(abm_loss, 4), round(q_loss, 4), round(pi_loss, 4), round(alpha_loss, 4), round(eta_loss, 4)
+						if i % 200 == 0:
+							abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = round(abm_loss, 3), round(q_loss, 3), round(pi_loss, 3), round(alpha_loss, 3), round(eta_loss, 3)
 							info = f'epoch:{i_epoch + 1}/{self.args.epoch}, abm_loss:{abm_loss}, q_loss:{q_loss}, pi_loss:{pi_loss}, alpha_loss:{alpha_loss}, eta_loss:{eta_loss}'
 							print(info)
 							logging.info(info)
 				
 				if len(self.agent.reward_list) > 0:
 					abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = self.agent.optimize_model()
-					abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = round(abm_loss, 4), round(q_loss, 4), round(pi_loss, 4), round(alpha_loss, 4), round(eta_loss, 4)
+					abm_loss, q_loss, pi_loss, alpha_loss, eta_loss = round(abm_loss, 3), round(q_loss, 3), round(pi_loss, 3), round(alpha_loss, 3), round(eta_loss, 3)
 					info = f'epoch:{i_epoch + 1}/{self.args.epoch}, abm_loss:{abm_loss}, q_loss:{q_loss}, pi_loss:{pi_loss}, alpha_loss:{alpha_loss}, eta_loss:{eta_loss}'
 					print(info)
 					logging.info(info)
@@ -102,7 +102,8 @@ class Algorithm(object):
 			if ((i_epoch + 1) >= self.args.start_eval) and ((i_epoch + 1) % self.args.eval_interval == 0):
 				self.agent.eval()
 				t1 = time.time()
-				hr, ndcg, precs = self.evaluate.evaluate()
+				with torch.no_grad():
+					hr, ndcg, precs = self.evaluate.evaluate()
 				t2 = time.time()
 				hr, ndcg, precs = round(hr, 4), round(ndcg, 4), round(precs, 4)
 				max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
@@ -196,7 +197,6 @@ if __name__ == '__main__':
 	# RL
 	parser.add_argument('--update_period', type=int, default=200)		# target network update period
 	parser.add_argument('--gamma', type=float, default=0.99)
-	parser.add_argument('--epsilon', type=float, default=0.1)
 	parser.add_argument('--tau', type=float, default=0.1)
 	# Q
 	parser.add_argument('--q_layers', default='128,512,256')

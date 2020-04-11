@@ -154,7 +154,8 @@ class Algorithm(object):
 				self.agent.on_eval()
 				self.predictor.on_eval()
 				t1 = time.time()
-				hr, ndcg, precs = self.evaluate.evaluate()
+				with torch.no_grad():
+					hr, ndcg, precs = self.evaluate.evaluate()
 				hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 				t2 = time.time()
 				max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg

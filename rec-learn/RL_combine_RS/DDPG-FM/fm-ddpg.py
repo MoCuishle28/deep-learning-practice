@@ -171,8 +171,9 @@ class Algorithm(object):
 					logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
 						i_batch, rmse, reward))
 
-			if (epoch + 1) % self.args.evaluate_interval == 0:
-				rmse = self.evaluate(self.valid_data, self.valid_target)
+			if (epoch + 1) >= self.args.start_eval and (epoch + 1) % self.args.evaluate_interval == 0:
+				with torch.no_grad():
+					rmse = self.evaluate(self.valid_data, self.valid_target)
 				min_rmse = rmse if rmse < min_rmse else min_rmse
 				min_rmse_epoch = epoch if rmse < min_rmse else min_rmse_epoch
 				print(f'Current Min RMSE:{round(min_rmse, 5)}, in epoch: {min_rmse_epoch}')
@@ -387,6 +388,7 @@ if __name__ == '__main__':
 	parser.add_argument('--weight_decay', type=float, default=0.0)		# regularization
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	# save/load model 的名字为 --v
+	parser.add_argument('--start_eval', type=int, default=0)
 	parser.add_argument('--start_save', type=int, default=70)
 	parser.add_argument('--save_interval', type=int, default=10)			# 多少个 epoch 保存一次模型
 	parser.add_argument('--evaluate_interval', type=int, default=10)		# 多少个 epoch 评估一次

@@ -84,7 +84,8 @@ class Run(object):
 			if ((i_epoch + 1) >= self.args.start_eval) and ((i_epoch + 1) % self.args.eval_interval == 0):
 				self.eval()
 				t1 = time.time()
-				hr, ndcg, precs = self.evaluate.eval()
+				with torch.no_grad():
+					hr, ndcg, precs = self.evaluate.eval()
 				hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 				t2 = time.time()
 				max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
@@ -250,7 +251,7 @@ if __name__ == '__main__':
 	parser.add_argument('--start_save', type=int, default=50)
 	parser.add_argument('--save_interval', type=int, default=20)
 	parser.add_argument('--start_eval', type=int, default=0)
-	parser.add_argument('--eval_interval', type=int, default=20)
+	parser.add_argument('--eval_interval', type=int, default=10)
 
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--topk', type=int, default=10)

@@ -363,10 +363,11 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 			print(info)
 			logging.info(info)
 
-		if (epoch + 1) % args.evaluate_interval == 0:
+		if (epoch + 1) >= args.start_eval and (epoch + 1) % args.evaluate_interval == 0:
 			predictor.on_eval()	# 评估模式
 			t1 = time.time()
-			hr, ndcg, precs = evaluate.evaluate()
+			with torch.no_grad():
+				hr, ndcg, precs = evaluate.evaluate()
 			hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 			t2 = time.time()
 			max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
@@ -485,6 +486,7 @@ if __name__ == '__main__':
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--start_save', type=int, default=80)
 	parser.add_argument('--save_interval', type=int, default=15)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--start_eval', type=int, default=0)
 	parser.add_argument('--evaluate_interval', type=int, default=10)		# 多少个 epoch 评估一次
 	parser.add_argument('--early_stop', type=int, default=5)
 	parser.add_argument('--without_time_seq', default='n')				# 数据集是否按时间排序
