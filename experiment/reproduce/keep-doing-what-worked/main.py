@@ -113,7 +113,8 @@ class Algorithm(object):
 				logging.info(info)
 
 		self.agent.eval()
-		hr, ndcg, precs = self.evaluate.evaluate(mode='test')
+		with torch.no_grad():
+			hr, ndcg, precs = self.evaluate.evaluate(mode='test')
 		hr, ndcg, precs = round(hr, 4), round(ndcg, 4), round(precs, 4)
 		info = f'[TEST]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precs:{precs}'
 		print(info)

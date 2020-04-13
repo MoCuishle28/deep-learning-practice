@@ -380,7 +380,8 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 			precision_list.append(precs)
 
 	predictor.on_eval()	# 评估模式
-	hr, ndcg, precs = evaluate.evaluate(title='[TEST]')
+	with torch.no_grad():
+		hr, ndcg, precs = evaluate.evaluate(title='[TEST]')
 	hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 	info = f'[TEST]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
 	print(info)

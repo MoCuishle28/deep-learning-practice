@@ -16,6 +16,7 @@ from seqddpg import DDPG
 from seqddpg import Transition
 from seqddpg import ReplayMemory
 from seqddpg import OUNoise
+from seqsac import SAC
 from myfm import FM, Net, NCF
 from myfm import Predictor
 
@@ -53,7 +54,7 @@ class Algorithm(object):
 	def get_rmse(self, prediction, target):
 		if prediction.shape != target.shape:
 			prediction = prediction.squeeze()
-		rmse = torch.sqrt(torch.sum((prediction - target)**2) / prediction.shape[0])
+		rmse = torch.sqrt(((prediction - target)**2).mean())
 		return rmse.item()
 
 
@@ -137,7 +138,7 @@ class Algorithm(object):
 				transitions = self.memory.sample(self.args.batch_size)
 				batch = Transition(*zip(*transitions))
 				self.agent.on_train()	# 切换为训练模式 (因为包含 BN\LN)
-				value_loss, policy_loss = self.agent.update_parameters(batch)
+				q_loss, policy_loss, value_loss = self.agent.update_parameters(batch)
 
 				# 再训练 predictor
 				self.agent.on_eval()	# 采集数据训练 predictor，所以切换为评估模式
@@ -152,7 +153,8 @@ class Algorithm(object):
 
 				input_data = torch.stack(input_data).to(self.device)
 				prediction, predictor_loss = self.predictor.train(input_data, target)
-				rmse = self.get_rmse(prediction, target)
+				with torch.no_grad():
+					rmse = self.get_rmse(prediction, target)
 
 				predictor_loss_mean = predictor_loss.mean().item()
 				mean_predictor_loss_list.append(predictor_loss_mean)
@@ -165,10 +167,10 @@ class Algorithm(object):
 					reward = -(rmse * self.args.alpha)
 
 				if i_batch % 10 == 0:
-					print('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
+					print('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.5}'.format(epoch+1, self.args.epoch, 
 						i_batch, rmse, reward), end = ', ')
-					print('value loss:{:.4}, policy loss:{:.4}'.format(value_loss, policy_loss))
-					logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.8}'.format(epoch+1, self.args.epoch, 
+					print('Q loss:{:.4}, policy loss:{:.4}, Value loss:{:.4}'.format(q_loss, policy_loss, value_loss))
+					logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.5}'.format(epoch+1, self.args.epoch, 
 						i_batch, rmse, reward))
 
 			if (epoch + 1) >= self.args.start_eval and (epoch + 1) % self.args.evaluate_interval == 0:
@@ -193,7 +195,8 @@ class Algorithm(object):
 
 		test_data = torch.tensor(np.load(self.args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32, device=self.device)
 		test_target = torch.tensor(np.load(self.args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32, device=self.device)
-		self.evaluate(test_data, test_target, title='[Test]')
+		with torch.no_grad():
+			self.evaluate(test_data, test_target, title='[Test]')
 		self.plot_result(rmse_list, valid_rmse_list, mean_predictor_loss_list)
 
 
@@ -323,7 +326,11 @@ def main(args):
 	target_list = [train_target] + [valid_target]
 
 	env = HistoryGenerator(args, device)
-	agent = DDPG(args, device)
+
+	if args.agent == 'ddpg':
+		agent = DDPG(args, device)
+	elif args.agent == 'sac':
+		agent = SAC(args, device)
 
 	# 后面还可以改成他的预测 rating 算法
 	predictor_model = None
@@ -368,6 +375,8 @@ if __name__ == '__main__':
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
 	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/pic/")
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
+
+	parser.add_argument('--agent', default='ddpg')
 	parser.add_argument('--memory_size', type=int, default=8000)
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
@@ -385,8 +394,8 @@ if __name__ == '__main__':
 	parser.add_argument('--critic_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)	# sgd 时
 	parser.add_argument('--norm_layer', default='ln')			# bn/ln/none
-	parser.add_argument('--weight_decay', type=float, default=0.0)		# regularization
-	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
+	parser.add_argument('--weight_decay', type=float, default=1e-4)		# regularization
+	parser.add_argument('--dropout', type=float, default=0.5)	# dropout (BN 可以不需要)
 	# save/load model 的名字为 --v
 	parser.add_argument('--start_eval', type=int, default=0)
 	parser.add_argument('--start_save', type=int, default=70)
@@ -400,12 +409,12 @@ if __name__ == '__main__':
 	# init weight
 	parser.add_argument('--init_std', type=float, default=0.1)
 	# seq model
-	parser.add_argument('--seq_hidden_size', type=int, default=512)
+	parser.add_argument('--seq_hidden_size', type=int, default=256)
 	parser.add_argument('--seq_layer_num', type=int, default=2)
 	parser.add_argument('--seq_output_size', type=int, default=128)
 	# ddpg
-	parser.add_argument("--actor_lr", type=float, default=1e-5)
-	parser.add_argument("--critic_lr", type=float, default=1e-4)
+	parser.add_argument("--actor_lr", type=float, default=1e-4)
+	parser.add_argument("--critic_lr", type=float, default=1e-3)
 	parser.add_argument('--hidden_size', type=int, default=512)
 	parser.add_argument('--actor_output', type=int, default=64)
 	parser.add_argument('--gamma', type=float, default=0.99)
@@ -413,8 +422,17 @@ if __name__ == '__main__':
 	parser.add_argument('--critic_tau', type=float, default=0.1)
 	parser.add_argument('--a_act', default='elu')
 	parser.add_argument('--c_act', default='elu')
+	# sac
+	parser.add_argument('--v_act', default='elu')
+	parser.add_argument('--mean_lambda', type=float, default=1e-3)
+	parser.add_argument('--std_lambda', type=float, default=1e-3)
+	parser.add_argument('--z_lambda', type=float, default=0.0)
+	parser.add_argument('--value_lr', type=float, default=3e-3)
+	parser.add_argument('--log_std_min', type=float, default=-20)
+	parser.add_argument('--log_std_max', type=float, default=2)
+
 	# predictor
-	parser.add_argument("--predictor_lr", type=float, default=1e-4)
+	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	parser.add_argument('--n_act', default='elu')
 	# embedding
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610

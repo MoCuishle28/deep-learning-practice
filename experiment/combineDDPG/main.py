@@ -169,7 +169,8 @@ class Algorithm(object):
 
 		self.agent.on_eval()
 		self.predictor.on_eval()
-		hr, ndcg, precs = self.evaluate.evaluate(title='[TEST]')
+		with torch.no_grad():
+			hr, ndcg, precs = self.evaluate.evaluate(title='[TEST]')
 		hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 		info = f'[TEST]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
 		print(info)
