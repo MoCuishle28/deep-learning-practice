@@ -45,6 +45,12 @@ class Algorithm(object):
 		self.valid_data = torch.tensor(data_list.pop(0), dtype=torch.float32).to(self.device)
 		self.valid_target = torch.tensor(target_list.pop(0), dtype=torch.float32).to(self.device)
 
+		if args.mode == 'test':
+			self.train_data = torch.cat([self.train_data, self.valid_data], dim=0)
+			self.train_target = torch.cat([self.train_target, self.valid_target], dim=0)
+			self.valid_data = torch.tensor(np.load(self.args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32, device=self.device)
+			self.valid_target = torch.tensor(np.load(self.args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32, device=self.device)
+
 		train_data_set = Data.TensorDataset(self.train_data, self.train_target)
 		shuffle = True if args.shuffle == 'y' else False
 		print('shuffle train data...{}'.format(shuffle))
@@ -58,7 +64,7 @@ class Algorithm(object):
 		return rmse.item()
 
 
-	def evaluate(self, data, target, title='[Valid]'):
+	def evaluate(self, data, target):
 		self.agent.on_eval()
 		self.predictor.on_eval()
 
@@ -80,10 +86,10 @@ class Algorithm(object):
 		elif self.args.reward == 'rmse':
 			reward = -(rmse * self.args.alpha)
 
-		print(title + ' RMSE:{:.6}, Average Reward:{:.8}'.format(
-			rmse, reward))
-		logging.info(title + ' RMSE:{:.6}, Average Reward:{:.8}'.format(
-			rmse, reward))
+		rmse, reward = round(rmse, 5), round(reward, 5)
+		info = f'[{self.args.mode}] RMSE:{rmse}, Average Reward:{reward}'
+		print(info)
+		logging.info(info)
 		return rmse
 
 
@@ -167,11 +173,11 @@ class Algorithm(object):
 					reward = -(rmse * self.args.alpha)
 
 				if i_batch % 10 == 0:
-					print('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.5}'.format(epoch+1, self.args.epoch, 
-						i_batch, rmse, reward), end = ', ')
-					print('Q loss:{:.4}, policy loss:{:.4}, Value loss:{:.4}'.format(q_loss, policy_loss, value_loss))
-					logging.info('epoch:{}/{} i_batch:{}, RMSE:{:.6}, Average Reward:{:.5}'.format(epoch+1, self.args.epoch, 
-						i_batch, rmse, reward))
+					rmse, reward = round(rmse, 5), round(reward, 5)
+					q_loss, policy_loss, value_loss = round(q_loss, 4), round(policy_loss, 4), round(value_loss, 4)
+					info = f'epoch:{epoch+1}/{self.args.epoch} i_batch:{i_batch}, RMSE:{rmse}, Average Reward:{reward}'
+					print(info + f' Q loss:{q_loss}, policy loss:{policy_loss}, Value loss:{value_loss}')
+					logging.info(info)
 
 			if (epoch + 1) >= self.args.start_eval and (epoch + 1) % self.args.evaluate_interval == 0:
 				with torch.no_grad():
@@ -191,15 +197,6 @@ class Algorithm(object):
 				print(info)
 				logging.info(info)
 
-		del self.train_data
-		del self.train_target
-		del self.valid_data
-		del self.valid_target
-
-		test_data = torch.tensor(np.load(self.args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32, device=self.device)
-		test_target = torch.tensor(np.load(self.args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32, device=self.device)
-		with torch.no_grad():
-			self.evaluate(test_data, test_target, title='[Test]')
 		self.plot_result(rmse_list, valid_rmse_list, mean_predictor_loss_list)
 
 
@@ -379,11 +376,12 @@ if __name__ == '__main__':
 	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/pic/")
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
 	parser.add_argument('--seed', type=int, default=1)
+	parser.add_argument('--mode', default='test')		# valid/test 两种
 
 	parser.add_argument('--agent', default='ddpg')
 	parser.add_argument('--memory_size', type=int, default=8000)
 	parser.add_argument('--epoch', type=int, default=5)
-	parser.add_argument('--batch_size', type=int, default=512)
+	parser.add_argument('--batch_size', type=int, default=1024)
 	parser.add_argument('--hw', type=int, default=10)	# history window
 	parser.add_argument('--predictor', default='fm')
 	parser.add_argument('--reward', default='loss')
