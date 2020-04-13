@@ -286,5 +286,13 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+	
+	# 保持可复现
+	random.seed(args.seed)
+	np.random.seed(args.seed)
+	torch.manual_seed(args.seed)
+	if torch.cuda.is_available():
+		torch.cuda.manual_seed(args.seed)
+
 	init_log(args)
 	main(args, device)

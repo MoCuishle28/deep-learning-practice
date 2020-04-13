@@ -178,7 +178,10 @@ class Algorithm(object):
 					rmse = self.evaluate(self.valid_data, self.valid_target)
 				min_rmse = rmse if rmse < min_rmse else min_rmse
 				min_rmse_epoch = epoch if rmse < min_rmse else min_rmse_epoch
-				print(f'Current Min RMSE:{round(min_rmse, 5)}, in epoch: {min_rmse_epoch}')
+				rmse = round(rmse, 5)
+				info = f'RMSE:{rmse} Current Min RMSE:{round(min_rmse, 5)}, in epoch: {min_rmse_epoch}'
+				print(info)
+				logging.info(info)
 				valid_rmse_list.append(rmse)
 
 			if (epoch + 1) >= self.args.start_save and (epoch + 1) % self.args.save_interval == 0:
@@ -375,6 +378,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_log_dir', default="../data/ddpg-fm/log/")
 	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/pic/")
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
+	parser.add_argument('--seed', type=int, default=1)
 
 	parser.add_argument('--agent', default='ddpg')
 	parser.add_argument('--memory_size', type=int, default=8000)
@@ -450,5 +454,13 @@ if __name__ == '__main__':
 	parser.add_argument('--layers', default='1024,512,256')
 
 	args = parser.parse_args()
+
+	# 保持可复现
+	random.seed(args.seed)
+	np.random.seed(args.seed)
+	torch.manual_seed(args.seed)
+	if torch.cuda.is_available():
+		torch.cuda.manual_seed(args.seed)
+
 	init_log(args)
 	main(args)

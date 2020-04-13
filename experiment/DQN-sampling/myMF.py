@@ -359,4 +359,12 @@ if __name__ == '__main__':
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	tmp = "cuda" if torch.cuda.is_available() else "cpu"
 	args.num_thread = 0 if tmp == 'cuda' else args.num_thread
+	
+	# 保持可复现
+	random.seed(args.seed)
+	np.random.seed(args.seed)
+	torch.manual_seed(args.seed)
+	if torch.cuda.is_available():
+		torch.cuda.manual_seed(args.seed)
+
 	main(args, device)
