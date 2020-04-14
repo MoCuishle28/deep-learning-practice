@@ -182,10 +182,11 @@ class Algorithm(object):
 			if (epoch + 1) >= self.args.start_eval and (epoch + 1) % self.args.evaluate_interval == 0:
 				with torch.no_grad():
 					rmse = self.evaluate(self.valid_data, self.valid_target)
-				min_rmse = rmse if rmse < min_rmse else min_rmse
-				min_rmse_epoch = epoch if rmse < min_rmse else min_rmse_epoch
+				if rmse < min_rmse:
+					min_rmse = rmse 
+					min_rmse_epoch = epoch
 				rmse = round(rmse, 5)
-				info = f'RMSE:{rmse} Current Min RMSE:{round(min_rmse, 5)}, in epoch: {min_rmse_epoch}'
+				info = f'Current Min RMSE:{round(min_rmse, 5)}, in epoch: {min_rmse_epoch}'
 				print(info)
 				logging.info(info)
 				valid_rmse_list.append(rmse)

@@ -88,8 +88,9 @@ class Run(object):
 					hr, ndcg, precs = self.evaluate.eval()
 				hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 				t2 = time.time()
-				max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
-				max_ndcg_epoch = max_ndcg_epoch if max_ndcg > ndcg else i_epoch
+				if ndcg > max_ndcg:
+					max_ndcg = ndcg
+					max_ndcg_epoch = i_epoch
 				info = f'[{self.args.mode}]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 				print(info)
 				logging.info(info)

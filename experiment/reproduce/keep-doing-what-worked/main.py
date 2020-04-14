@@ -106,8 +106,9 @@ class Algorithm(object):
 					hr, ndcg, precs = self.evaluate.evaluate()
 				t2 = time.time()
 				hr, ndcg, precs = round(hr, 4), round(ndcg, 4), round(precs, 4)
-				max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
-				max_ndcg_epoch = max_ndcg_epoch if max_ndcg > ndcg else i_epoch
+				if ndcg > max_ndcg:
+					max_ndcg = ndcg
+					max_ndcg_epoch = i_epoch
 				info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precs:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 				print(info)
 				logging.info(info)

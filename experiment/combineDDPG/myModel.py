@@ -370,8 +370,9 @@ def train(args, predictor, mid_map_mfeature, train_data, valid_data, test_data, 
 				hr, ndcg, precs = evaluate.evaluate()
 			hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 			t2 = time.time()
-			max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
-			max_ndcg_epoch = max_ndcg_epoch if max_ndcg > ndcg else epoch
+			if ndcg > max_ndcg else:
+				max_ndcg = ndcg
+				max_ndcg_epoch = epoch
 			info = f'[Valid]@{args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 			print(info)
 			logging.info(info)
