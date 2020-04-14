@@ -90,7 +90,7 @@ class Run(object):
 				t2 = time.time()
 				max_ndcg = max_ndcg if max_ndcg > ndcg else ndcg
 				max_ndcg_epoch = max_ndcg_epoch if max_ndcg > ndcg else i_epoch
-				info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
+				info = f'[{self.args.mode}]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 				print(info)
 				logging.info(info)
 				hr_list.append(hr)
@@ -103,13 +103,6 @@ class Run(object):
 				print(info)
 				logging.info(info)
 
-		self.eval()
-		with torch.no_grad():
-			hr, ndcg, precs = self.evaluate.eval()
-		hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
-		info = f'[TEST]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
-		print(info)
-		logging.info(info)
 		self.evaluate.plot_result(precs_list, hr_list, ndcg_list)
 
 
@@ -169,6 +162,10 @@ class Run(object):
 
 	def build_data_loader(self):
 		train_data = torch.tensor(np.load(args.base_data_dir + 'train_data.npy').astype(np.float32), dtype=torch.float32, device=self.device)
+		if self.args.mode == 'test':
+			print('Testing mode...')
+			valid_data = torch.tensor(np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32), dtype=torch.float32, device=self.device)
+			train_data = torch.cat([train_data, valid_data], dim=0)
 		train_data_set = Data.TensorDataset(train_data)
 		shuffle = True if self.args.shuffle == 'y' else False
 		print('shuffle train data...{}'.format(shuffle))
@@ -244,6 +241,8 @@ if __name__ == '__main__':
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
 	parser.add_argument('--shuffle', default='y')
 	parser.add_argument('--show', default='n')
+	parser.add_argument('--mode', default='valid')		# test/valid
+	parser.add_argument('--seed', type=int, default=1)
 
 	parser.add_argument('--load', default='n')			# 是否加载模型
 	parser.add_argument('--save', default='y')

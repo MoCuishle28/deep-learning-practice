@@ -482,6 +482,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_log_dir', default="log/myModel/")
 	parser.add_argument('--base_pic_dir', default="pic/myModel/")
 	parser.add_argument('--base_data_dir', default='../data/ml_1M_row/')
+	parser.add_argument('--seed', type=int, default=1)
 
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=512)
@@ -525,5 +526,12 @@ if __name__ == '__main__':
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	tmp = 'cuda' if torch.cuda.is_available() else 'cpu'
 	args.num_thread = 0 if tmp == 'cuda' else args.num_thread
+
+	# 保持可复现
+	random.seed(args.seed)
+	np.random.seed(args.seed)
+	torch.manual_seed(args.seed)
+	if torch.cuda.is_available():
+		torch.cuda.manual_seed(args.seed)
 	
 	main(args, device)

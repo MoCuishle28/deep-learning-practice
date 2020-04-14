@@ -164,6 +164,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_pic_dir', default="pic/")
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
 	parser.add_argument('--show', default='n')
+	parser.add_argument('--seed', type=int, default=1)
 
 	parser.add_argument('--load', default='n')			# 是否加载模型
 	parser.add_argument('--save', default='y')

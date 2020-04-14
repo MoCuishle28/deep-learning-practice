@@ -12,14 +12,10 @@ class Evaluation(object):
 		self.model = model
 		self.env = env
 
-		self.eval_data = np.load(args.base_data_dir + 'valid_data.npy').tolist()
+		self.eval_data = np.load(args.base_data_dir + 'valid_data.npy').tolist() if args.mode == 'valid' else np.load(self.args.base_data_dir + 'test_data.npy').tolist()
 
 
-	def eval(self, mode='valid'):
-		if mode == 'test':
-			del self.eval_data
-			self.eval_data = np.load(self.args.base_data_dir + 'test_data.npy').tolist()
-		
+	def eval(self):		
 		hr_list, ndcg_list, precs_list = [], [], []
 		for data in self.eval_data:
 			uid, mid = data[0], data[1]
