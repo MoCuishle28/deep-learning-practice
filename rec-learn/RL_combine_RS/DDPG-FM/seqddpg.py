@@ -154,6 +154,7 @@ class Critic(nn.Module):
 class DDPG(object):
 	def __init__(self, args, device):
 		self.device = device
+		self.args = args
 		self.seq_model = SeqModel(args, self.device).to(self.device)
 		self.target_seq_model = SeqModel(args, self.device).to(self.device)	# 还需要一个 seq_model 给 target network
 
@@ -167,6 +168,8 @@ class DDPG(object):
 			self.actor_optim = torch.optim.SGD(self.actor.parameters(), lr=args.actor_lr, momentum=args.momentum, weight_decay=args.weight_decay)
 		elif args.actor_optim == 'rmsprop':
 			self.actor_optim = torch.optim.RMSprop(self.actor.parameters(), lr=args.actor_lr, weight_decay=args.weight_decay)
+		else:
+			self.actor_optim = None
 
 		self.critic = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.seq_model, args).to(self.device)
 		self.critic_target = Critic(args.hidden_size, args.seq_output_size, args.actor_output, self.target_seq_model, args).to(self.device)
@@ -177,10 +180,9 @@ class DDPG(object):
 			self.critic_optim = torch.optim.SGD(self.critic.parameters(), lr=args.critic_lr, momentum=args.momentum)
 		elif args.critic_optim == 'rmsprop':
 			self.critic_optim = torch.optim.RMSprop(self.critic.parameters(), lr=args.critic_lr)
+		else:
+			self.critic_optim = None
 
-		self.gamma = args.gamma
-		self.actor_tau = args.actor_tau
-		self.critic_tau = args.critic_tau
 
 		hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
 		hard_update(self.critic_target, self.critic)
@@ -231,7 +233,7 @@ class DDPG(object):
 
 		reward_batch = reward_batch.unsqueeze(1)
 		mask_batch = mask_batch.unsqueeze(1)
-		expected_state_action_batch = reward_batch + (self.gamma * mask_batch * next_state_action_values)
+		expected_state_action_batch = reward_batch + (self.args.gamma * mask_batch * next_state_action_values)
 
 		self.critic_optim.zero_grad()
 
@@ -250,9 +252,8 @@ class DDPG(object):
 		policy_loss.backward()
 		self.actor_optim.step()
 
-		soft_update(self.actor_target, self.actor, self.actor_tau)
-		soft_update(self.critic_target, self.critic, self.critic_tau)
-		# soft_update(self.target_seq_model, self.seq_model, self.actor_tau)
+		soft_update(self.actor_target, self.actor, self.args.actor_tau)
+		soft_update(self.critic_target, self.critic, self.args.critic_tau)
 
 		return value_loss.item(), policy_loss.item(), 0.0
 
@@ -284,8 +285,8 @@ class DDPG(object):
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
 
-		self.actor.load_state_dict(torch.load(based_dir + 'a_' + tail))
+		self.actor.load_state_dict(torch.load(based_dir + 'a_' + tail, map_location=self.args.device))
 		hard_update(self.actor_target, self.actor)  # Make sure target is with the same weight
 
-		self.critic.load_state_dict(torch.load(based_dir + 'c_' + tail))
+		self.critic.load_state_dict(torch.load(based_dir + 'c_' + tail, map_location=self.args.device))
 		hard_update(self.critic_target, self.critic)

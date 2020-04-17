@@ -194,9 +194,17 @@ class SAC(object):
 		self.value_criterion  = nn.MSELoss()
 		self.soft_q_criterion = nn.MSELoss()
 
-		self.value_optimizer = optim.Adam(self.value_net.parameters(), lr=args.value_lr)
-		self.soft_q_optimizer = optim.Adam(self.soft_q_net.parameters(), lr=args.critic_lr)
-		self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=args.actor_lr)
+		if self.args.critic_optim == 'adam':
+			self.value_optimizer = optim.Adam(self.value_net.parameters(), lr=args.value_lr)
+			self.soft_q_optimizer = optim.Adam(self.soft_q_net.parameters(), lr=args.critic_lr)
+		else:
+			self.value_optimizer = None
+			self.soft_q_optimizer = None
+
+		if self.args.actor_optim == 'adam':
+			self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=args.actor_lr)
+		else:
+			self.policy_optimizer = None
 
 		hard_update(self.target_value_net, self.value_net)
 
@@ -279,8 +287,8 @@ class SAC(object):
 	def load_model(self, version, epoch):
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
-		self.value_net.load_state_dict(torch.load(based_dir + 'value_' + tail))
-		hard_update(self.target_value, self.value_net)
+		self.value_net.load_state_dict(torch.load(based_dir + 'value_' + tail, map_location=self.args.device))
+		hard_update(self.target_value_net, self.value_net)
 
-		self.soft_q_net.load_state_dict(torch.load(based_dir + 'soft_q_' + tail))
-		self.policy_net.load_state_dict(torch.load(based_dir + 'policy_'+ tail))
+		self.soft_q_net.load_state_dict(torch.load(based_dir + 'soft_q_' + tail, map_location=self.args.device))
+		self.policy_net.load_state_dict(torch.load(based_dir + 'policy_'+ tail, map_location=self.args.device))

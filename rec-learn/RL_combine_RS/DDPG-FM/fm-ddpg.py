@@ -453,6 +453,7 @@ if __name__ == '__main__':
 	parser.add_argument('--layers', default='1024,512,256')
 
 	args = parser.parse_args()
+	args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 	# 保持可复现
 	random.seed(args.seed)

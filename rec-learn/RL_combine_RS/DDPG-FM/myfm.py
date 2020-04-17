@@ -179,6 +179,7 @@ class NCF(nn.Module):
 class Predictor(object):
 	def __init__(self, args, predictor, device):
 		super(Predictor, self).__init__()
+		self.args = args
 		self.device = device
 		self.predictor = predictor.to(self.device)
 		if args.predictor_optim == 'adam':
@@ -229,7 +230,7 @@ class Predictor(object):
 	def load(self, version, epoch):
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
-		self.predictor.load_state_dict(torch.load(based_dir + 'p_' + tail))
+		self.predictor.load_state_dict(torch.load(based_dir + 'p_' + tail, map_location=self.args.device))
 
 
 def get_rmse(prediction, target):
