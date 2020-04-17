@@ -158,7 +158,7 @@ class Algorithm(object):
 					hr, ndcg, precs = self.evaluate.evaluate()
 				hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 				t2 = time.time()
-				if ndcg > max_ndcg else:
+				if ndcg > max_ndcg:
 					max_ndcg = ndcg
 					max_ndcg_epoch = epoch
 				info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
@@ -351,8 +351,8 @@ if __name__ == '__main__':
 	parser.add_argument('--seq_output_size', type=int, default=128)
 	# agent
 	parser.add_argument('--agent', default='sac')
-	parser.add_argument("--actor_lr", type=float, default=1e-5)
-	parser.add_argument("--critic_lr", type=float, default=1e-4)
+	parser.add_argument("--actor_lr", type=float, default=1e-4)
+	parser.add_argument("--critic_lr", type=float, default=1e-3)
 	parser.add_argument('--hidden_size', type=int, default=512)
 	parser.add_argument('--actor_output', type=int, default=64)
 	parser.add_argument('--gamma', type=float, default=0.99)
@@ -366,11 +366,11 @@ if __name__ == '__main__':
 	parser.add_argument('--mean_lambda', type=float, default=1e-3)
 	parser.add_argument('--std_lambda', type=float, default=1e-3)
 	parser.add_argument('--z_lambda', type=float, default=0.0)
-	parser.add_argument('--value_lr', type=float, default=3e-3)
+	parser.add_argument('--value_lr', type=float, default=1e-3)
 	parser.add_argument('--log_std_min', type=float, default=-20)
 	parser.add_argument('--log_std_max', type=float, default=2)
 	# predictor
-	parser.add_argument("--predictor_lr", type=float, default=1e-4)
+	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# embedding
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
 	parser.add_argument('--u_emb_dim', type=int, default=64)
