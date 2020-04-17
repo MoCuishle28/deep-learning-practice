@@ -280,7 +280,7 @@ class SAC(object):
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
 		self.value_net.load_state_dict(torch.load(based_dir + 'value_' + tail))
-		hard_update(self.target_value, self.value_net)
+		hard_update(self.target_value_net, self.value_net)
 
 		self.soft_q_net.load_state_dict(torch.load(based_dir + 'soft_q_' + tail))
 		self.policy_net.load_state_dict(torch.load(based_dir + 'policy_'+ tail))
