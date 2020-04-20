@@ -66,7 +66,6 @@ class MLP(nn.Module):
 		super(MLP, self).__init__()
 		self.args = args
 		self.device = device
-		self.without_rl = without_rl
 
 		activative_func_dict = {'relu':nn.ReLU(), 'elu':nn.ELU(), 'leaky':nn.LeakyReLU(), 
 		'selu':nn.SELU(), 'prelu':nn.PReLU(), 'tanh':nn.Tanh()}
@@ -244,7 +243,7 @@ def train(args, predictor, train_data, train_target, valid_data, valid_target, d
 	with torch.no_grad():
 		valid_rmse, mae, loss = evaluate(predictor, test_data, test_target)
 	valid_rmse, mae, loss = round(valid_rmse, 5), round(mae,5), round(loss, 5)
-	info = f'[TEST], LOSS:{loss}, RMSE:{valid_rmse}, MAE:{mae}, Current Min RMSE:{min_rmse} (in epoch:{min_rmse_epoch})'
+	info = f'[TEST], LOSS:{loss}, RMSE:{valid_rmse}, MAE:{mae}'
 	print(info)
 	logging.info(info)
 	return rmse_list, valid_rmse_list, loss_list

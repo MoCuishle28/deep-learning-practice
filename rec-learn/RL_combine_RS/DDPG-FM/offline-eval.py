@@ -19,11 +19,17 @@ from myfm import FM, Net, NCF
 '''
 SAC
 offline-eval.py --v v28 --load_epoch 39 --agent sac
+RMSE:0.88625, MAE:0.68285
+
 offline-eval.py --v v29 --load_epoch 29 --agent sac --predictor ncf
+RMSE:0.88013, MAE:0.67177
 
 DDPG
 offline-eval.py --v v30 --load_epoch 29
+RMSE:0.89311, MAE:0.69092
+
 offline-eval.py --v v27 --load_epoch 29 --predictor ncf
+RMSE:0.87868, MAE:0.67159
 '''
 
 
