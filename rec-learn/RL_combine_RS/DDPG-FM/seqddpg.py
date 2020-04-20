@@ -277,8 +277,8 @@ class DDPG(object):
 
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
-		torch.save(self.actor.state_dict(), based_dir + 'a_' + tail)
-		torch.save(self.critic.state_dict(), based_dir + 'c_' + tail)
+		torch.save(self.actor.cpu().state_dict(), based_dir + 'a_' + tail)
+		torch.save(self.critic.cpu().state_dict(), based_dir + 'c_' + tail)
 
 
 	def load_model(self, version, epoch):

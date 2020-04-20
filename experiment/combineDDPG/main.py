@@ -155,27 +155,22 @@ class Algorithm(object):
 				self.predictor.on_eval()
 				t1 = time.time()
 				with torch.no_grad():
-					hr, ndcg, precs = self.evaluate.evaluate()
+					if self.args.mode == 'valid':
+						hr, ndcg, precs = self.evaluate.evaluate()
+					else:
+						hr, ndcg, precs = self.evaluate.evaluate(title='[TEST]')
 				hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
 				t2 = time.time()
 				if ndcg > max_ndcg:
 					max_ndcg = ndcg
 					max_ndcg_epoch = epoch
-				info = f'[Valid]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
+				info = f'[{self.args.mode}]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 				print(info)
 				logging.info(info)
 				hr_list.append(hr)
 				ndcg_list.append(ndcg)
 				precision_list.append(precs)
 
-		self.agent.on_eval()
-		self.predictor.on_eval()
-		with torch.no_grad():
-			hr, ndcg, precs = self.evaluate.evaluate(title='[TEST]')
-		hr, ndcg, precs = round(hr, 5), round(ndcg, 5), round(precs, 5)
-		info = f'[TEST]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}'
-		print(info)
-		logging.info(info)
 		self.evaluate.plot_result(self.args, bpr_loss_list, precision_list, hr_list, ndcg_list)
 
 
@@ -309,6 +304,7 @@ if __name__ == '__main__':
 	parser.add_argument('--topk', type=int, default=10)
 	parser.add_argument('--num_thread', type=int, default=4)	# 用 GPU 跑时设为 0
 	parser.add_argument('--seed', type=int, default=1)
+	parser.add_argument('--mode', default='valid')	# valid/test
 
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_pic_dir', default="pic/")
@@ -316,10 +312,10 @@ if __name__ == '__main__':
 
 	parser.add_argument('--epoch', type=int, default=5)
 	parser.add_argument('--batch_size', type=int, default=512)
-	parser.add_argument('--start_save', type=int, default=50)
-	parser.add_argument('--save_interval', type=int, default=10)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--start_save', type=int, default=0)
+	parser.add_argument('--save_interval', type=int, default=50)			# 多少个 epoch 保存一次模型
 	parser.add_argument('--start_eval', type=int, default=0)
-	parser.add_argument('--evaluate_interval', type=int, default=10)		# 多少个 epoch 评估一次
+	parser.add_argument('--evaluate_interval', type=int, default=50)		# 多少个 epoch 评估一次
 	parser.add_argument('--shuffle', default='y')
 	# RL setting
 	parser.add_argument('--reset', default='n')

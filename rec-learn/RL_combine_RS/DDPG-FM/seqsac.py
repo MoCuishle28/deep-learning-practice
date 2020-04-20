@@ -279,9 +279,9 @@ class SAC(object):
 
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
-		torch.save(self.value_net.state_dict(), based_dir + 'value_' + tail)
-		torch.save(self.soft_q_net.state_dict(), based_dir + 'soft_q_' + tail)
-		torch.save(self.policy_net.state_dict(), based_dir + 'policy_' + tail)
+		torch.save(self.value_net.cpu().state_dict(), based_dir + 'value_' + tail)
+		torch.save(self.soft_q_net.cpu().state_dict(), based_dir + 'soft_q_' + tail)
+		torch.save(self.policy_net.cpu().state_dict(), based_dir + 'policy_' + tail)
 
 
 	def load_model(self, version, epoch):

@@ -50,6 +50,12 @@ class Algorithm(object):
 			self.train_target = torch.cat([self.train_target, self.valid_target], dim=0)
 			self.valid_data = torch.tensor(np.load(self.args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32, device=self.device)
 			self.valid_target = torch.tensor(np.load(self.args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32, device=self.device)
+		elif args.mode == 'al':
+			self.train_data, self.train_target = torch.cat([self.train_data, self.valid_data], dim=0), torch.cat([self.train_target, self.valid_target], dim=0)
+			self.valid_data = torch.tensor(np.load(self.args.base_data_dir + 'test_data.npy').astype(np.float32), dtype=torch.float32, device=self.device)
+			self.valid_target = torch.tensor(np.load(self.args.base_data_dir + 'test_target.npy').astype(np.float32), dtype=torch.float32, device=self.device)
+			self.train_data = torch.cat([self.train_data, self.valid_data], dim=0)
+			self.train_target = torch.cat([self.train_target, self.valid_target], dim=0)
 
 		train_data_set = Data.TensorDataset(self.train_data, self.train_target)
 		shuffle = True if args.shuffle == 'y' else False
@@ -377,7 +383,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_pic_dir', default="../data/ddpg-fm/pic/")
 	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
 	parser.add_argument('--seed', type=int, default=1)
-	parser.add_argument('--mode', default='test')		# valid/test 两种
+	parser.add_argument('--mode', default='test')		# valid/test 两种 (all)
 
 	parser.add_argument('--agent', default='ddpg')
 	parser.add_argument('--memory_size', type=int, default=8000)
