@@ -349,6 +349,7 @@ if __name__ == '__main__':
 	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
 	# MLP
 	parser.add_argument('--layers', default='1024,512,256')
+	parser.add_argument('--n_act', default='relu')
 	parser.add_argument('--u_emb_dim', type=int, default=128)
 	parser.add_argument('--m_emb_dim', type=int, default=128)
 	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
