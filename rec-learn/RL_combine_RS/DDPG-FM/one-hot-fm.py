@@ -81,6 +81,7 @@ class MLP(nn.Module):
 		layers = [int(x) for x in args.layers.split(',')]
 		self.u_embedding = nn.Embedding(args.max_uid + 1, args.u_emb_dim)
 		self.m_embedding = nn.Embedding(args.max_mid + 1, args.m_emb_dim)
+		self.g_embedding = nn.Linear(args.fm_feature_size - 2, args.g_emb_dim)
 
 		params.append(nn.Linear(input_hidden_size, layers[0]))
 		if layer_trick != None:
