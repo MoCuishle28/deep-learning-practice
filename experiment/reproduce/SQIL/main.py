@@ -13,7 +13,7 @@ import torch.utils.data as Data
 from torch.distributions import Categorical
 import numpy as np
 
-from sq import SoftQ, SeqModel
+from sq import SoftQ
 from historygen import HistoryGenerator
 from evaluate import Evaluation
 
@@ -34,21 +34,35 @@ class Run(object):
 		self.args = args
 		self.device = device
 		self.env = HistoryGenerator(args, device)
-		self.demo_replay = deque(maxlen=args.maxlen)
-		self.samp_replay = deque(maxlen=args.maxlen)
-
 		self.q = SoftQ(args, device).to(device)
+		self.target_q = SoftQ(args, device).to(device)
 
 		self.optim = None
-		if args.optim == 'adam':
-			self.optim = torch.optim.Adam(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-		elif args.optim == 'sgd':
+		if args.optim == 'sgd':
 			self.optim = torch.optim.SGD(self.q.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 		elif args.optim == 'rmsprop':
 			self.optim = torch.optim.RMSprop(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-		self.build_data_loader()
+		else:
+			self.optim = torch.optim.Adam(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+		args.maxlen = self.build_data_loader()
 		self.evaluate = Evaluation(args, device, self.q, self.env)
 		self.EPS = 1e-10
+		self.demo_replay = deque(maxlen=args.maxlen)
+		self.samp_replay = deque(maxlen=args.maxlen)
+		self.fill_expert_replay()
+
+
+	def fill_expert_replay(self):
+		print('fill expert replay...')
+		for data in self.expert_data_loader:
+			data = data[0]
+			for feature_vector in data.tolist():	
+				uid, mid = feature_vector[0], feature_vector[1]
+				state = self.env.get_history(uid, mid)
+				next_state = self.env.get_next_history(state, mid, uid)
+				# fill demo_replay
+				self.demo_replay.append((state, mid, next_state))
 
 
 	def fill_replay(self, data):
@@ -57,8 +71,6 @@ class Run(object):
 			uid, mid = feature_vector[0], feature_vector[1]
 			state = self.env.get_history(uid, mid)
 			next_state = self.env.get_next_history(state, mid, uid)
-			# fill demo_replay
-			self.demo_replay.append((state, mid, next_state))
 			# fill samp_replay
 			samp_action = self.get_action(state)
 			# 如果输出的 action 是 expert action 则 state 转移, 否则不转移
@@ -119,6 +131,8 @@ class Run(object):
 		self.optim.zero_grad()
 		loss.backward()
 		self.optim.step()
+
+		soft_update(self.target_q, self.q, self.args.tau)
 		return loss.item(), demo_error.item(), samp_error.item()
 
 
@@ -127,7 +141,9 @@ class Run(object):
 		return: (tensor) -> Soft Ballman Error
 		'''
 		current_q_values = self.q(state)
-		next_q_values = self.q(next_state)
+		# next_q_values = self.q(next_state)
+		with torch.no_grad():
+			next_q_values = self.target_q(next_state)
 
 		action = action.view(-1, 1)		# (batch, 1), dtype=int64
 		current_q_values = torch.gather(current_q_values, 1, action).squeeze()		# (batch)
@@ -171,6 +187,7 @@ class Run(object):
 		shuffle = True if self.args.shuffle == 'y' else False
 		print('shuffle train data...{}'.format(shuffle))
 		self.expert_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=shuffle)
+		return train_data.size()[0]
 
 
 	def save_model(self, version, epoch):
@@ -235,11 +252,12 @@ def init_log(args):
 
 
 if __name__ == '__main__':
+	base_data_dir = '../../data/'
 	parser = argparse.ArgumentParser(description="Hyperparameters")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_pic_dir', default="pic/")
-	parser.add_argument('--base_data_dir', default='../../data/ml_1M_row/')
+	parser.add_argument('--base_data_dir', default=base_data_dir + 'ml_1M_row/')
 	parser.add_argument('--shuffle', default='y')
 	parser.add_argument('--show', default='n')
 	parser.add_argument('--mode', default='valid')		# test/valid
@@ -249,10 +267,10 @@ if __name__ == '__main__':
 	parser.add_argument('--save', default='y')
 	parser.add_argument('--load_version', default='v')
 	parser.add_argument('--load_epoch', default='final')
-	parser.add_argument('--start_save', type=int, default=50)
-	parser.add_argument('--save_interval', type=int, default=20)
+	parser.add_argument('--start_save', type=int, default=0)
+	parser.add_argument('--save_interval', type=int, default=5)
 	parser.add_argument('--start_eval', type=int, default=0)
-	parser.add_argument('--eval_interval', type=int, default=10)
+	parser.add_argument('--eval_interval', type=int, default=5)
 
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--topk', type=int, default=10)
@@ -261,7 +279,7 @@ if __name__ == '__main__':
 	parser.add_argument('--optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
-	parser.add_argument('--lr', type=float, default=1e-3)
+	parser.add_argument('--lr', type=float, default=1e-4)
 	# embedding
 	parser.add_argument('--feature_size', type=int, default=22)	# uid, mid, genres, ...
 	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
@@ -269,18 +287,15 @@ if __name__ == '__main__':
 	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
 	parser.add_argument('--m_emb_dim', type=int, default=128)
 	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
-	# seq model
+	# Soft Q
 	parser.add_argument('--hw', type=int, default=10)
 	parser.add_argument('--seq_hidden_size', type=int, default=256)
 	parser.add_argument('--seq_layer_num', type=int, default=1)
-	parser.add_argument('--seq_output_size', type=int, default=128)
-	# Soft Q
+	parser.add_argument('--tau', type=float, default=0.9)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--lammbda_samp', type=float, default=1.0)
 	parser.add_argument('--action_method', default='argmax')	# argmax/sample
-	parser.add_argument('--maxlen', type=int, default=10000)
-	parser.add_argument('--layers', default='128,512,256')		# 第一个对应 seq_output_size
-	parser.add_argument('--act', default='relu')
+	parser.add_argument('--maxlen', type=int, default=80000)
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.5)
 

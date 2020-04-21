@@ -339,7 +339,7 @@ if __name__ == '__main__':
 	parser.add_argument('--save', default='n')
 	parser.add_argument('--load', default='n')
 	parser.add_argument('--show', default='n')	# show pic
-	parser.add_argument('--norm_layer', default='none')	# bn/ln/none
+	parser.add_argument('--norm_layer', default='bn')	# bn/ln/none
 	parser.add_argument('--early_stop', type=int, default=3)
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-2)
