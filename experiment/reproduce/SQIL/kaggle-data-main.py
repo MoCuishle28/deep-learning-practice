@@ -1,5 +1,3 @@
-import sys
-sys.path.append("../..")
 import os
 import logging
 import argparse
@@ -9,13 +7,147 @@ import random
 from collections import deque
 
 import torch
+import torch.nn as nn
 import torch.utils.data as Data
 from torch.distributions import Categorical
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
-from sq import SoftQ
-from historygen import HistoryGenerator
-from evaluate import Evaluation
+
+class Evaluation(object):
+	def __init__(self, args, device, agent):
+		super(Evaluation, self).__init__()
+		self.args = args
+		self.device = device
+		self.agent = agent
+		
+		if args.mode == 'valid':
+			self.eval_sessions = pd.read_pickle(args.base_data_dir + 'sampled_val.df')
+		elif args.mode == 'test':
+			self.eval_sessions = pd.read_pickle(args.base_data_dir + 'sampled_test.df')
+
+
+	def eval(self):
+		eval_ids = self.eval_sessions.session_id.unique()
+		groups = self.eval_sessions.groupby('session_id')
+		hr_list, ndcg_list, precs_list = [], [], []
+		state_batch, action_batch = [], []
+		for sid in eval_ids:
+			group = groups.get_group(sid)
+			history = []
+			for index, row in group.iterrows():
+				if history == []:
+					history.append(row['item_id'])
+					continue
+				state = list(history)
+				state = self.pad_history(state, 10, self.args.max_iid)
+				state_batch.append(state)
+				action_batch.append(row['item_id'])
+				history.append(row['item_id'])
+
+			if len(state_batch) >= self.args.batch_size:
+				state_batch = torch.tensor(state_batch, dtype=torch.float32, device=self.device)
+				prediction_batch = self.agent(state_batch)
+				for prediction, action in zip(prediction_batch, action_batch):
+					_, rec_iids = prediction.topk(self.args.topk)
+					rec_iids = rec_iids.view(-1).tolist()
+					hr, ndcg, precs = self.get_hr(rec_iids, action), self.get_ndcg(rec_iids, action), self.get_precs(rec_iids, action)
+					hr_list.append(hr), ndcg_list.append(ndcg), precs_list.append(precs)
+				state_batch, action_batch = [], []
+
+		hr = torch.tensor(hr_list, dtype=torch.float32, device=self.device)
+		ndcg = torch.tensor(ndcg_list, dtype=torch.float32, device=self.device)
+		precs = torch.tensor(precs_list, dtype=torch.float32, device=self.device)
+		return hr.mean().item(), ndcg.mean().item(), precs.mean().item()
+
+
+	def pad_history(self, itemlist, length, pad_item):
+		if len(itemlist) >= length:
+			return itemlist[-length:]
+		if len(itemlist) < length:
+			temp = [pad_item] * (length - len(itemlist))
+			itemlist.extend(temp)
+			return itemlist
+
+
+	def get_hr(self, rank_list, gt_item):
+		for iid in rank_list:
+			if iid == gt_item:
+				return 1
+		return 0.0
+
+	def get_ndcg(self, rank_list, gt_item):
+		for i, iid in enumerate(rank_list):
+			if iid == gt_item:
+				return (np.log(2.0) / np.log(i + 2.0)).item()
+		return 0.0
+
+	def get_precs(self, rank_list, gt_item):
+		for i, iid in enumerate(rank_list):
+			if iid == gt_item:
+				return 1.0 / (i + 1.0)
+		return 0.0
+
+	def plot_result(self, precision_list, hr_list, ndcg_list):
+		plt.figure(figsize=(8, 8))
+		plt.subplot(1, 5, 1)
+		plt.title('Valid Precision')
+		plt.xlabel('Step')
+		plt.ylabel('Precision')
+		plt.plot(precision_list)
+
+		plt.subplot(1, 5, 3)
+		plt.title('Valid HR')
+		plt.xlabel('Step')
+		plt.ylabel('HR')
+		plt.plot(hr_list)
+
+		plt.subplot(1, 5, 5)
+		plt.title('Valid NDCG')
+		plt.xlabel('Step')
+		plt.ylabel('LOSS')
+		plt.plot(ndcg_list)
+
+		plt.savefig(self.args.base_pic_dir + self.args.v + '.png')
+		if self.args.show == 'y':
+			plt.show()
+
+
+class SoftQ(nn.Module):
+	def __init__(self, args, device):
+		super(SoftQ, self).__init__()
+		self.args = args
+		self.device = device
+		self.seq_input_size = args.m_emb_dim
+		self.hidden_size = args.seq_hidden_size
+		self.seq_layer_num = args.seq_layer_num
+
+		self.m_embedding = nn.Embedding(args.max_iid + 1 + 1, args.m_emb_dim)	# 初始状态 mid=70852
+
+		dropout = args.dropout if self.seq_layer_num > 1 else 0.0
+		# batch_first = True 则输入输出的数据格式为 (batch, seq, feature)
+		self.gru = nn.GRU(self.seq_input_size, self.hidden_size, self.seq_layer_num, batch_first=True, dropout=dropout)
+		self.ln = None
+		if args.layer_trick == 'bn':
+			self.ln = nn.BatchNorm1d(self.hidden_size, affine=True)
+		elif args.layer_trick == 'ln':
+			self.ln = nn.LayerNorm(self.hidden_size, elementwise_affine=True)		
+		self.fc = nn.Linear(self.hidden_size, args.max_iid + 1)
+
+	
+	def forward(self, x):
+		x = self.m_embedding(x.long().to(self.device))
+		x = x.view(x.shape[0], x.shape[1], -1)
+
+		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size, device=self.device)
+
+		out, _ = self.gru(x, h0)  	# out: tensor of shape (batch_size, seq_length, hidden_size)
+		out = out[:, -1, :]			# 最后时刻的 seq 作为输出
+		if self.args.layer_trick != 'none':
+			out = self.ln(out)
+		out = self.fc(out)
+		return out
 
 
 def soft_update(target, source, tau):
@@ -33,7 +165,6 @@ class Run(object):
 		super(Run, self).__init__()
 		self.args = args
 		self.device = device
-		self.env = HistoryGenerator(args, device)
 		self.q = SoftQ(args, device).to(device)
 		if args.target == 'y':
 			self.target_q = SoftQ(args, device).to(device)
@@ -47,36 +178,42 @@ class Run(object):
 		else:
 			self.optim = torch.optim.Adam(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-		args.maxlen = self.build_data_loader()
-		self.evaluate = Evaluation(args, device, self.q, self.env)
+		self.evaluate = Evaluation(args, device, self.q)
 		self.EPS = 1e-10
-		self.demo_replay = deque(maxlen=args.maxlen)
+		self.build_data_loder()
 		self.samp_replay = deque(maxlen=args.maxlen)
-		self.fill_expert_replay()
 
 
-	def fill_expert_replay(self):
-		print('fill expert replay...')
-		for data in self.expert_data_loader:
-			data = data[0]
-			for feature_vector in data.tolist():	
-				uid, mid = feature_vector[0], feature_vector[1]
-				state = self.env.get_history(uid, mid)
-				next_state = self.env.get_next_history(state, mid, uid)
-				# fill demo_replay
-				self.demo_replay.append((state, mid, next_state))
+	def build_data_loder(self):
+		state_list = torch.tensor(np.load(self.args.base_data_dir + 'state.npy'), dtype=torch.float32, device=self.device)
+		next_state_list = torch.tensor(np.load(self.args.base_data_dir + 'next_state.npy'), dtype=torch.float32, device=self.device)
+		action_list = torch.tensor(np.load(self.args.base_data_dir + 'action.npy'), device=self.device)
+		self.args.maxlen = state_list.shape[0]
+		self.demo_replay = deque(maxlen=self.args.maxlen)
+		self.fill_expert_replay(state_list, next_state_list, action_list)
+
+		dataset = Data.TensorDataset(state_list, next_state_list, action_list)
+		shuffle = True if self.args.shuffle == 'y' else False
+		print('shuffle train data...{}'.format(shuffle))
+		self.data_loader = Data.DataLoader(dataset=dataset, batch_size=self.args.batch_size, shuffle=shuffle)
+
+
+	def fill_expert_replay(self, state_list, next_state_list, action_list):
+		print(f'fill expert replay, maxlen:{self.args.maxlen}...')
+		for state, next_state, action in zip(state_list, next_state_list, action_list):
+			# fill demo_replay
+			self.demo_replay.append((state, action, next_state))
 
 
 	def fill_replay(self, data):
 		# 收集训练数据
-		for feature_vector in data.tolist():
-			uid, mid = feature_vector[0], feature_vector[1]
-			state = self.env.get_history(uid, mid)
-			next_state = self.env.get_next_history(state, mid, uid)
-			# fill samp_replay
+		for state, next_state, action in zip(data[0].tolist(), data[1].tolist(), data[2].tolist()):
+			state = torch.tensor(state, dtype=torch.float32, device=self.device).view(-1, 1)
+			next_state = torch.tensor(next_state, dtype=torch.float32, device=self.device).view(-1, 1)
+
 			samp_action = self.get_action(state)
 			# 如果输出的 action 是 expert action 则 state 转移, 否则不转移
-			next_state = next_state if samp_action == mid else state
+			next_state = next_state if samp_action == action else state
 			self.samp_replay.append((state, samp_action, next_state))
 
 
@@ -84,12 +221,11 @@ class Run(object):
 		max_ndcg, max_ndcg_epoch = 0, 0
 		hr_list, ndcg_list, precs_list = [], [], []
 		for i_epoch in range(self.args.epoch):
-			for i_batch, data in enumerate(self.expert_data_loader):
-				data = data[0]
+			for i_batch, data in enumerate(self.data_loader):
 				self.fill_replay(data)
 				self.train()
 				soft_q_loss, demo_error, samp_error = self.update_parameters()
-				if i_batch % 10 == 0:
+				if i_batch % 200 == 0:
 					soft_q_loss, demo_error, samp_error = round(soft_q_loss, 5), round(demo_error, 5), round(samp_error, 5)
 					info = f'{i_epoch + 1}/{self.args.epoch}, i_batch:{i_batch}, Soft Q Loss:{soft_q_loss}, Demo Error:{demo_error}, Samp Error:{samp_error}'
 					print(info)
@@ -108,9 +244,7 @@ class Run(object):
 				info = f'[{self.args.mode}]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 				print(info)
 				logging.info(info)
-				hr_list.append(hr)
-				ndcg_list.append(ndcg)
-				precs_list.append(precs)
+				hr_list.append(hr), ndcg_list.append(ndcg), precs_list.append(precs)
 
 			if ((i_epoch + 1) >= self.args.start_save) and ((i_epoch + 1) % self.args.save_interval == 0):
 				self.save_model(version=self.args.v, epoch=i_epoch)
@@ -182,20 +316,6 @@ class Run(object):
 			action = dist.sample().item()
 		return action
 
-
-	def build_data_loader(self):
-		train_data = torch.tensor(np.load(args.base_data_dir + 'train_data.npy').astype(np.float32), dtype=torch.float32, device=self.device)
-		if self.args.mode == 'test':
-			print('Testing mode...')
-			valid_data = torch.tensor(np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32), dtype=torch.float32, device=self.device)
-			train_data = torch.cat([train_data, valid_data], dim=0)
-		train_data_set = Data.TensorDataset(train_data)
-		shuffle = True if self.args.shuffle == 'y' else False
-		print('shuffle train data...{}'.format(shuffle))
-		self.expert_data_loader = Data.DataLoader(dataset=train_data_set, batch_size=args.batch_size, shuffle=shuffle)
-		return train_data.size()[0]
-
-
 	def save_model(self, version, epoch):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
@@ -206,7 +326,6 @@ class Run(object):
 		tail = version + '-' + str(epoch) + '.pkl'
 		torch.save(self.q.state_dict(), based_dir + 'softQ_' + tail)
 
-
 	def load_model(self, version, epoch):
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
@@ -214,9 +333,10 @@ class Run(object):
 		if self.args.target == 'y':
 			hard_update(self.target_q, self.q)
 
-
 	def eval(self):
 		self.q.eval()
+		if self.args.target == 'y':
+			self.target_q.eval()
 
 	def train(self):
 		self.q.train()
@@ -234,7 +354,6 @@ def main(args, device):
 		logging.info(info)
 
 	run.run()
-
 	if args.save == 'y':
 		run.save_model(version=args.v, epoch='final')
 		info = f'Saving version:{args.v}_final models'
@@ -265,7 +384,7 @@ if __name__ == '__main__':
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_pic_dir', default="pic/")
-	parser.add_argument('--base_data_dir', default=base_data_dir + 'ml_1M_row/')
+	parser.add_argument('--base_data_dir', default=base_data_dir + 'kaggle-RL4REC/')
 	parser.add_argument('--shuffle', default='y')
 	parser.add_argument('--show', default='n')
 	parser.add_argument('--mode', default='valid')		# test/valid
@@ -277,9 +396,9 @@ if __name__ == '__main__':
 	parser.add_argument('--load_version', default='v')
 	parser.add_argument('--load_epoch', default='final')
 	parser.add_argument('--start_save', type=int, default=0)
-	parser.add_argument('--save_interval', type=int, default=5)
+	parser.add_argument('--save_interval', type=int, default=10)
 	parser.add_argument('--start_eval', type=int, default=0)
-	parser.add_argument('--eval_interval', type=int, default=5)
+	parser.add_argument('--eval_interval', type=int, default=10)
 
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--topk', type=int, default=10)
@@ -290,15 +409,10 @@ if __name__ == '__main__':
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	parser.add_argument('--lr', type=float, default=1e-4)
 	# embedding
-	parser.add_argument('--feature_size', type=int, default=22)	# uid, mid, genres, ...
-	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
-	parser.add_argument('--u_emb_dim', type=int, default=128)
-	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
+	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
 	parser.add_argument('--m_emb_dim', type=int, default=128)
-	parser.add_argument('--g_emb_dim', type=int, default=16)	# genres emb dim
 	# Soft Q
-	parser.add_argument('--hw', type=int, default=10)
-	parser.add_argument('--seq_hidden_size', type=int, default=256)
+	parser.add_argument('--seq_hidden_size', type=int, default=128)
 	parser.add_argument('--seq_layer_num', type=int, default=1)
 	parser.add_argument('--tau', type=float, default=0.9)
 	parser.add_argument('--gamma', type=float, default=0.99)
