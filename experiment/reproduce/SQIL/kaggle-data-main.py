@@ -28,10 +28,20 @@ class Evaluation(object):
 			self.eval_sessions = pd.read_pickle(args.base_data_dir + 'sampled_test.df')
 
 
+	def compute_index(self, state_batch, action_batch):
+		state_batch = torch.tensor(state_batch, dtype=torch.float32, device=self.device)
+		prediction_batch = self.agent(state_batch)
+		for prediction, action in zip(prediction_batch, action_batch):
+			_, rec_iids = prediction.topk(self.args.topk)
+			rec_iids = rec_iids.view(-1).tolist()
+			hr, ndcg, precs = self.get_hr(rec_iids, action), self.get_ndcg(rec_iids, action), self.get_precs(rec_iids, action)
+			self.hr_list.append(hr), self.ndcg_list.append(ndcg), self.precs_list.append(precs)
+
+
 	def eval(self):
 		eval_ids = self.eval_sessions.session_id.unique()
 		groups = self.eval_sessions.groupby('session_id')
-		hr_list, ndcg_list, precs_list = [], [], []
+		self.hr_list, self.ndcg_list, self.precs_list = [], [], []
 		state_batch, action_batch = [], []
 		for sid in eval_ids:
 			group = groups.get_group(sid)
@@ -47,18 +57,14 @@ class Evaluation(object):
 				history.append(row['item_id'])
 
 			if len(state_batch) >= self.args.batch_size:
-				state_batch = torch.tensor(state_batch, dtype=torch.float32, device=self.device)
-				prediction_batch = self.agent(state_batch)
-				for prediction, action in zip(prediction_batch, action_batch):
-					_, rec_iids = prediction.topk(self.args.topk)
-					rec_iids = rec_iids.view(-1).tolist()
-					hr, ndcg, precs = self.get_hr(rec_iids, action), self.get_ndcg(rec_iids, action), self.get_precs(rec_iids, action)
-					hr_list.append(hr), ndcg_list.append(ndcg), precs_list.append(precs)
+				self.compute_index(state_batch, action_batch)
 				state_batch, action_batch = [], []
-
-		hr = torch.tensor(hr_list, dtype=torch.float32, device=self.device)
-		ndcg = torch.tensor(ndcg_list, dtype=torch.float32, device=self.device)
-		precs = torch.tensor(precs_list, dtype=torch.float32, device=self.device)
+		
+		if len(state_batch)	!= 0:
+			self.compute_index(state_batch, action_batch)
+		hr = torch.tensor(self.hr_list, dtype=torch.float32, device=self.device)
+		ndcg = torch.tensor(self.ndcg_list, dtype=torch.float32, device=self.device)
+		precs = torch.tensor(self.precs_list, dtype=torch.float32, device=self.device)
 		return hr.mean().item(), ndcg.mean().item(), precs.mean().item()
 
 
@@ -419,8 +425,8 @@ if __name__ == '__main__':
 	parser.add_argument('--lammbda_samp', type=float, default=1.0)
 	parser.add_argument('--action_method', default='argmax')	# argmax/sample
 	parser.add_argument('--maxlen', type=int, default=80000)
-	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
-	parser.add_argument('--dropout', type=float, default=0.5)
+	parser.add_argument('--layer_trick', default='none')			# ln/bn/none
+	parser.add_argument('--dropout', type=float, default=0.0)
 
 	args = parser.parse_args()
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
