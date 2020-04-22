@@ -35,7 +35,9 @@ class Run(object):
 		self.device = device
 		self.env = HistoryGenerator(args, device)
 		self.q = SoftQ(args, device).to(device)
-		self.target_q = SoftQ(args, device).to(device)
+		if args.target == 'y':
+			self.target_q = SoftQ(args, device).to(device)
+			hard_update(self.target_q, self.q)
 
 		self.optim = None
 		if args.optim == 'sgd':
@@ -132,7 +134,8 @@ class Run(object):
 		loss.backward()
 		self.optim.step()
 
-		soft_update(self.target_q, self.q, self.args.tau)
+		if self.args.target == 'y':
+			soft_update(self.target_q, self.q, self.args.tau)
 		return loss.item(), demo_error.item(), samp_error.item()
 
 
@@ -141,9 +144,11 @@ class Run(object):
 		return: (tensor) -> Soft Ballman Error
 		'''
 		current_q_values = self.q(state)
-		# next_q_values = self.q(next_state)
-		with torch.no_grad():
-			next_q_values = self.target_q(next_state)
+		if self.args.target == 'y':
+			with torch.no_grad():
+				next_q_values = self.target_q(next_state)
+		else:
+			next_q_values = self.q(next_state)
 
 		action = action.view(-1, 1)		# (batch, 1), dtype=int64
 		current_q_values = torch.gather(current_q_values, 1, action).squeeze()		# (batch)
@@ -205,6 +210,8 @@ class Run(object):
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
 		self.q.load_state_dict(torch.load(based_dir + 'softQ_' + tail))
+		if self.args.target == 'y':
+			hard_update(self.target_q, self.q)
 
 
 	def eval(self):
@@ -261,6 +268,7 @@ if __name__ == '__main__':
 	parser.add_argument('--shuffle', default='y')
 	parser.add_argument('--show', default='n')
 	parser.add_argument('--mode', default='valid')		# test/valid
+	parser.add_argument('--target', default='n')		# n/y -> target net
 	parser.add_argument('--seed', type=int, default=1)
 
 	parser.add_argument('--load', default='n')			# 是否加载模型
