@@ -310,7 +310,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_pic_dir', default="pic/")
 	parser.add_argument('--base_data_dir', default='../data/ml_1M_row/')
 
-	parser.add_argument('--epoch', type=int, default=5)
+	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--start_save', type=int, default=0)
 	parser.add_argument('--save_interval', type=int, default=50)			# 多少个 epoch 保存一次模型
@@ -354,9 +354,9 @@ if __name__ == '__main__':
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--a_act', default='relu')
 	parser.add_argument('--c_act', default='relu')
-	parser.add_argument('--critic_tau', type=float, default=0.1)
+	parser.add_argument('--critic_tau', type=float, default=0.9)
 	# ddpg
-	parser.add_argument('--actor_tau', type=float, default=0.1)
+	parser.add_argument('--actor_tau', type=float, default=0.9)
 	# sac
 	parser.add_argument('--v_act', default='relu')
 	parser.add_argument('--mean_lambda', type=float, default=1e-3)

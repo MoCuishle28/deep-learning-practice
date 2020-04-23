@@ -145,7 +145,7 @@ class SoftQ(nn.Module):
 	def forward(self, x):
 		x = self.m_embedding(x.long().to(self.device))
 		x = x.view(x.shape[0], x.shape[1], -1)
-
+		# 需要 requires_grad=True 吗？
 		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size, device=self.device)
 
 		out, _ = self.gru(x, h0)  	# out: tensor of shape (batch_size, seq_length, hidden_size)
@@ -183,6 +183,8 @@ class Run(object):
 			self.optim = torch.optim.RMSprop(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 		else:
 			self.optim = torch.optim.Adam(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+		# 每次调用 self.scheduler.step(),都降低 lr
+		self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optim, args.lr_decay)
 
 		self.evaluate = Evaluation(args, device, self.q)
 		self.EPS = 1e-10
@@ -226,6 +228,7 @@ class Run(object):
 	def run(self):
 		max_ndcg, max_ndcg_epoch = 0, 0
 		hr_list, ndcg_list, precs_list = [], [], []
+		no_improve_times = 0
 		for i_epoch in range(self.args.epoch):
 			for i_batch, data in enumerate(self.data_loader):
 				self.fill_replay(data)
@@ -247,6 +250,15 @@ class Run(object):
 				if ndcg > max_ndcg:
 					max_ndcg = ndcg
 					max_ndcg_epoch = i_epoch
+				else:
+					no_improve_times += 1
+					if no_improve_times == 2:	# 降低 lr
+						self.scheduler.step()
+						info = f'LR decay:{self.args.lr_decay}, Optim:{self.optim.lr}'
+						print(info)
+						logging.info(info)
+						no_improve_times = 0
+
 				info = f'[{self.args.mode}]@{self.args.topk} HR:{hr}, NDCG:{ndcg}, Precision:{precs}, Time:{t2 - t1}, Current Max NDCG:{max_ndcg} (epoch:{max_ndcg_epoch})'
 				print(info)
 				logging.info(info)
@@ -288,6 +300,7 @@ class Run(object):
 			self.target_q.eval()
 			with torch.no_grad():
 				next_q_values = self.target_q(next_state)
+				next_q_values.detach_()
 		else:
 			next_q_values = self.q(next_state)
 
@@ -414,6 +427,7 @@ if __name__ == '__main__':
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	parser.add_argument('--lr', type=float, default=1e-4)
+	parser.add_argument('--lr_decay', type=float, default=0.5)
 	# embedding
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
 	parser.add_argument('--m_emb_dim', type=int, default=128)
