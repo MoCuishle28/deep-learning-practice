@@ -143,6 +143,7 @@ class SoftQ(nn.Module):
 
 	
 	def forward(self, x):
+		# input x:(1, 10, 1)/(batch, 10), output x->(1, 10, 1, 128)/(batch, 10, 128)
 		x = self.m_embedding(x.long().to(self.device))
 		x = x.view(x.shape[0], x.shape[1], -1)
 		# 需要 requires_grad=True 吗？
@@ -319,8 +320,8 @@ class Run(object):
 		batch_state, batch_action, batch_next_state = zip(
 			*random.sample(replay, self.args.batch_size))
 		batch_action = torch.tensor(batch_action, dtype=torch.long, device=self.device)	# (512), int64
-		batch_state = torch.stack(batch_state).to(self.device)				# (512, 10, 22)
-		batch_next_state = torch.stack(batch_next_state).to(self.device)	# (512, 10, 22)
+		batch_state = torch.stack(batch_state).to(self.device)				# (512, 10)
+		batch_next_state = torch.stack(batch_next_state).to(self.device)	# (512, 10)
 		return batch_state, batch_action, batch_next_state
 
 
