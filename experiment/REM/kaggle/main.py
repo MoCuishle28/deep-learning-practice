@@ -32,9 +32,9 @@ class Run(object):
 		self.args = args
 		self.device = device
 
-		self.rem = REM(args, device)
+		self.rem = REM(args, device).to(device)
 		if args.target == 'y':
-			self.target_rem = REM(args, device)
+			self.target_rem = REM(args, device).to(device)
 			hard_update(self.target_rem, self.rem)
 
 		self.optim = None
@@ -225,7 +225,7 @@ if __name__ == '__main__':
 	parser.add_argument('--optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
-	parser.add_argument('--lr', type=float, default=1e-4)
+	parser.add_argument('--lr', type=float, default=1e-3)
 	parser.add_argument('--lr_decay', type=float, default=0.5)
 	# embedding
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
