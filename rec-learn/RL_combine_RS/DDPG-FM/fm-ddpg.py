@@ -161,7 +161,7 @@ class Algorithm(object):
 					state = state.reshape((-1, state.shape[0], state.shape[1])).to(self.device)
 
 					action = self.agent.select_action(state, action_noise=None)	# 不加噪声
-					input_data.append(torch.cat([action.squeeze(), raw_feature]).to(self.device))
+					input_data.append(torch.cat([action.detach().squeeze(), raw_feature]).to(self.device))
 
 				input_data = torch.stack(input_data).to(self.device)
 				prediction, predictor_loss = self.predictor.train(input_data, target)

@@ -69,7 +69,7 @@ class Algorithm(object):
 			state_list.append(state)
 			action_list.append(action)
 
-			input_data = torch.cat([action.squeeze(), raw_feature])		# action (1, actor_output) -> (actor_output)
+			input_data = torch.cat([action.detach().squeeze(), raw_feature])		# action (1, actor_output) -> (actor_output)
 			input_data = input_data.view(1, -1)	# input_data (actor_output + 22) -> (1, actor_output + 22)
 			input_data_list.append(input_data)
 		if self.args.reset == 'y':
