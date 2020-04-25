@@ -19,7 +19,7 @@ class Evaluation(object):
 
 	def compute_index(self, state_batch, action_batch):
 		state_batch = torch.tensor(state_batch, dtype=torch.float32, device=self.device)
-		prediction_batch = self.agent(state_batch)
+		prediction_batch = self.agent(state_batch, is_train=False)
 		for prediction, action in zip(prediction_batch, action_batch):
 			_, rec_iids = prediction.topk(self.args.topk)
 			rec_iids = rec_iids.view(-1).tolist()

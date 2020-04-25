@@ -435,7 +435,7 @@ if __name__ == '__main__':
 	# Soft Q
 	parser.add_argument('--seq_hidden_size', type=int, default=128)
 	parser.add_argument('--seq_layer_num', type=int, default=1)
-	parser.add_argument('--tau', type=float, default=0.9)
+	parser.add_argument('--tau', type=float, default=0.1)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--lammbda_samp', type=float, default=1.0)
 	parser.add_argument('--action_method', default='argmax')	# argmax/sample

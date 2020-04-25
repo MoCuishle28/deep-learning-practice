@@ -1,3 +1,4 @@
+import os
 import pickle
 import argparse
 import random
@@ -31,18 +32,13 @@ def load_obj(name):
 
 
 class Algorithm(object):
-	def __init__(self, args, agent, predictor, env, data_list, device):
+	def __init__(self, args, agent, predictor, device):
 		self.device = device
 		self.args = args
 		self.agent = agent
 		self.ounoise = OUNoise(args.actor_output) if args.agent == 'ddpg' else None
 		self.predictor = predictor
 		self.memory = ReplayMemory(args.memory_size)
-		self.env = env
-
-		self.train_data = torch.tensor(data_list.pop(0), dtype=torch.float32, device=self.device)
-		self.valid_data = torch.tensor(data_list.pop(0), dtype=torch.float32, device=self.device)
-		self.test_data = torch.tensor(data_list.pop(0), dtype=torch.float32, device=self.device)
 
 		train_data_set = Data.TensorDataset(self.train_data)
 		shuffle = True if args.shuffle == 'y' else False
@@ -69,7 +65,7 @@ class Algorithm(object):
 			state_list.append(state)
 			action_list.append(action)
 
-			input_data = torch.cat([action.detach().squeeze(), raw_feature])		# action (1, actor_output) -> (actor_output)
+			input_data = torch.cat([action.squeeze(), raw_feature])		# action (1, actor_output) -> (actor_output)
 			input_data = input_data.view(1, -1)	# input_data (actor_output + 22) -> (1, actor_output + 22)
 			input_data_list.append(input_data)
 		if self.args.reset == 'y':
@@ -174,69 +170,11 @@ class Algorithm(object):
 		self.evaluate.plot_result(self.args, bpr_loss_list, precision_list, hr_list, ndcg_list)
 
 
-class HistoryGenerator(object):
-	def __init__(self, args, device):
-		self.device = device
-		self.args = args
-		# mid: one-hot feature (21维 -> mid, genre, genre, ...)
-		self.mid_map_mfeature = load_obj('mid_map_mfeature')	
-		self.users_rating = load_obj('users_rating_without_timestamp') # uid:[[mid, rating], ...] 有序
-		self.window = args.hw
-		self.build_index()
-
-
-	def build_index(self):
-		'''建立 uid, mid 的索引'''
-		self.index = {}		# uid: {mid: idx, ...}, ...
-		for uid, items_list in self.users_rating.items():
-			self.index[uid] = {}
-			for i, item in enumerate(items_list):
-				self.index[uid][item[0]] = i
-
-
-	def get_history(self, uid, curr_mid):
-		'''
-		return: tensor (window, feature size:23 dim -> [uid, mid, genre, rating])
-		'''
-		ret_data = []
-		rating_list = self.users_rating[uid]
-		stop_index = self.index[uid][curr_mid]
-		for i in range(stop_index - self.window, stop_index):
-			if i < 0:
-				history_feature = torch.zeros(self.args.fm_feature_size, dtype=torch.float32, device=self.device)
-				history_feature[0] = uid
-				history_feature[1] = 9742.0
-			else:
-				mid = rating_list[i][0]
-				mfeature = torch.tensor(self.mid_map_mfeature[mid].astype(np.float32), dtype=torch.float32, device=self.device)
-				# [uid, mfeature]
-				history_feature = torch.cat([torch.tensor([uid], dtype=torch.float32, device=self.device), 
-					mfeature]).to(self.device)
-
-			ret_data.append(history_feature)
-		return torch.stack(ret_data).to(self.device)
-
-
-	def get_next_history(self, curr_history, new_mid, curr_uid):
-		'''
-		这个 state 的转移方式没有考虑 action(即: trasition probability = 1)
-		curr_history: tensor (window, feature size)
-		return: tensor (window, feature size)
-		'''
-		curr_history = curr_history.squeeze()
-		curr_history = curr_history.tolist()
-
-		curr_history.pop(0)
-		mfeature = torch.tensor(self.mid_map_mfeature[new_mid].astype(np.float32), dtype=torch.float32, device=self.device)
-
-		history_feature = torch.cat([torch.tensor([curr_uid], dtype=torch.float32, device=self.device), 
-			mfeature]).to(self.device)
-		curr_history.append(history_feature)
-		ret = torch.tensor(curr_history, device=self.device)
-		return ret.view(1, ret.shape[0], ret.shape[1])
-
-
 def init_log(args):
+	if not os.path.exists(args.base_log_dir):
+		os.makedirs(args.base_log_dir)
+	if not os.path.exists(args.base_pic_dir):
+		os.makedirs(args.base_pic_dir)
 	start = datetime.datetime.now()
 	logging.basicConfig(level = logging.INFO,
 					filename = args.base_log_dir + args.v + '-' + str(time.time()) + '.log',
@@ -250,14 +188,7 @@ def init_log(args):
 
 
 def main(args, device):
-	train_data = np.load(args.base_data_dir + 'train_data.npy').astype(np.float32)
-	valid_data = np.load(args.base_data_dir + 'valid_data.npy').astype(np.float32)
-	test_data = np.load(args.base_data_dir + 'test_data.npy').astype(np.float32)
-	data_list = [train_data] + [valid_data] + [test_data]
-
-	env = HistoryGenerator(args, device)
 	agent = None
-
 	info = f'RL Agent is {args.agent}'
 	print(info)
 	logging.info(info)
@@ -267,16 +198,17 @@ def main(args, device):
 		agent = SAC(args, device)
 
 	predictor_model = None
+	layers = [int(x) for x in args.a_layers.split(',')]
+	actor_output = layers[0]
 	if args.predictor == 'fm':
-		predictor_model = FM(args.u_emb_dim + args.m_emb_dim + args.g_emb_dim + args.actor_output, args.k, args, device)
+		predictor_model = FM(args.m_emb_dim + actor_output, args.k, args, device)
 		print('predictor_model is FM.')
 		logging.info('predictor_model is FM.')
 	elif args.predictor ==  'ncf':
-		predictor_model = NCF(args, args.u_emb_dim + args.actor_output + args.m_emb_dim + args.g_emb_dim, device)
+		predictor_model = NCF(args,args.actor_output + args.m_emb_dim, device)
 		print('predictor_model is NCF.')
 		logging.info('predictor_model is NCF.')
-
-	predictor = Predictor(args, predictor_model, device, env.mid_map_mfeature)
+	predictor = Predictor(args, predictor_model, device)
 
 	# 加载模型
 	if args.load == 'y':
@@ -286,7 +218,7 @@ def main(args, device):
 		print(info)
 		logging.info(info)
 
-	algorithm = Algorithm(args, agent, predictor, env, data_list, device)
+	algorithm = Algorithm(args, agent, predictor, device)
 	algorithm.train()
 
 	# 保存模型
@@ -301,26 +233,25 @@ def main(args, device):
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters for DDPG and Predictor")
 	parser.add_argument('--v', default="v")
-	parser.add_argument('--topk', type=int, default=10)
+	parser.add_argument('--topk', default='5,10,20')
 	parser.add_argument('--num_thread', type=int, default=4)	# 用 GPU 跑时设为 0
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--mode', default='valid')	# valid/test
 
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_pic_dir', default="pic/")
-	parser.add_argument('--base_data_dir', default='../data/ml_1M_row/')
+	parser.add_argument('--base_data_dir', default='../../kaggle-RL4REC/')
 
-	parser.add_argument('--epoch', type=int, default=100)
+	parser.add_argument('--epoch', type=int, default=2000)
 	parser.add_argument('--batch_size', type=int, default=512)
 	parser.add_argument('--start_save', type=int, default=0)
-	parser.add_argument('--save_interval', type=int, default=50)			# 多少个 epoch 保存一次模型
+	parser.add_argument('--save_interval', type=int, default=100)			# 多少个 epoch 保存一次模型
 	parser.add_argument('--start_eval', type=int, default=0)
-	parser.add_argument('--evaluate_interval', type=int, default=50)		# 多少个 epoch 评估一次
+	parser.add_argument('--evaluate_interval', type=int, default=100)		# 多少个 epoch 评估一次
 	parser.add_argument('--shuffle', default='y')
 	# RL setting
 	parser.add_argument('--reset', default='n')
 	parser.add_argument('--memory_size', type=int, default=8000)
-	parser.add_argument('--hw', type=int, default=10)	# history window
 	parser.add_argument('--predictor', default='fm')	# fm/ncf
 	# loss/posscore/dismargin(离散)/conmargin(连续)
 	parser.add_argument('--reward', default='dismargin')
@@ -331,7 +262,7 @@ if __name__ == '__main__':
 	parser.add_argument('--critic_optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)	# sgd 时
 	parser.add_argument('--weight_decay', type=float, default=1e-4)		# regularization
-	parser.add_argument('--norm_layer', default='ln')			# bn/ln/none
+	parser.add_argument('--layer_trick', default='none')			# bn/ln/none
 	parser.add_argument('--dropout', type=float, default=0.0)	# dropout (BN 可以不需要)
 	# save model 的名字为 --v; load model 名字为 --load_version + _ + --load_epoch
 	parser.add_argument('--save', default='y')
@@ -342,23 +273,24 @@ if __name__ == '__main__':
 	# init weight
 	parser.add_argument('--init_std', type=float, default=0.1)
 	# seq model
-	parser.add_argument('--seq_hidden_size', type=int, default=512)
-	parser.add_argument('--seq_layer_num', type=int, default=2)
+	parser.add_argument('--seq_hidden_size', type=int, default=128)
+	parser.add_argument('--seq_layer_num', type=int, default=1)
 	parser.add_argument('--seq_output_size', type=int, default=128)
 	# agent
 	parser.add_argument('--agent', default='sac')
+	parser.add_argument('--gamma', type=float, default=0.99)
+
 	parser.add_argument("--actor_lr", type=float, default=1e-4)
 	parser.add_argument("--critic_lr", type=float, default=1e-3)
-	parser.add_argument('--hidden_size', type=int, default=512)
-	parser.add_argument('--actor_output', type=int, default=64)
-	parser.add_argument('--gamma', type=float, default=0.99)
+	parser.add_argument('--actor_tau', type=float, default=0.1)
+	parser.add_argument('--critic_tau', type=float, default=0.1)
 	parser.add_argument('--a_act', default='relu')
 	parser.add_argument('--c_act', default='relu')
-	parser.add_argument('--critic_tau', type=float, default=0.1)
-	# ddpg
-	parser.add_argument('--actor_tau', type=float, default=0.1)
-	# sac
 	parser.add_argument('--v_act', default='relu')
+	parser.add_argument('--a_layers', default='128,64')	# seq_output_size, ...
+	parser.add_argument('--c_layers', default='192,1')	# seq_output_size + actor_output, ...
+	parser.add_argument('--v_layers', default='128,1')
+	# sac
 	parser.add_argument('--mean_lambda', type=float, default=1e-3)
 	parser.add_argument('--std_lambda', type=float, default=1e-3)
 	parser.add_argument('--z_lambda', type=float, default=0.0)
@@ -368,11 +300,8 @@ if __name__ == '__main__':
 	# predictor
 	parser.add_argument("--predictor_lr", type=float, default=1e-3)
 	# embedding
-	parser.add_argument('--max_uid', type=int, default=610)		# 1~610
-	parser.add_argument('--u_emb_dim', type=int, default=64)
-	parser.add_argument('--max_mid', type=int, default=9741)	# 0~9741
+	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
 	parser.add_argument('--m_emb_dim', type=int, default=128)
-	parser.add_argument('--g_emb_dim', type=int, default=32)	# genres emb dim
 	# FM
 	parser.add_argument('--fm_feature_size', type=int, default=22)	# uid, mid, genres, ...
 	parser.add_argument('--k', type=int, default=64)

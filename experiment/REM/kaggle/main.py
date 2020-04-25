@@ -234,7 +234,7 @@ if __name__ == '__main__':
 	parser.add_argument('--K', type=int, default=2)				# 多少个 agent
 	parser.add_argument('--seq_hidden_size', type=int, default=128)
 	parser.add_argument('--seq_layer_num', type=int, default=1)
-	parser.add_argument('--tau', type=float, default=0.9)
+	parser.add_argument('--tau', type=float, default=0.1)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--layer_trick', default='none')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.0)
