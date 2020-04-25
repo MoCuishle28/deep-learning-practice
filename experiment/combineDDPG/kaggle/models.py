@@ -97,7 +97,7 @@ class Predictor(object):
 		r = 0
 		for x, y in zip(prediction, target):
 			_, rec_list = x.topk(self.args.topk)
-			rec_list = rec_list.view(-1).tolist()
+			rec_list = rec_list.tolist()
 			if self.args.reward == 'ndcg':
 				r = self.get_ndcg(rec_list, y)
 			elif self.args.reward == '':

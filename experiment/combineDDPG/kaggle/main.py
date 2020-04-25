@@ -248,7 +248,7 @@ if __name__ == '__main__':
 	parser.add_argument('--i_emb_dim', type=int, default=128)
 	# MLP
 	parser.add_argument('--mlp_act', default='relu')
-	parser.add_argument('--mlp_layers', default='64,70851')
+	parser.add_argument('--mlp_layers', default='64,70852')
 
 	args = parser.parse_args()
 	init_log(args)
