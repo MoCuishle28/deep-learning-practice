@@ -70,7 +70,7 @@ class Run(object):
 		else:
 			next_q_values = self.rem(next_state_batch)
 
-		rewards = torch.tensor([self.args.reward for _ in range(self.args.batch_size)], dtype=torch.float32, device=self.device)
+		rewards = torch.tensor([self.args.reward for _ in range(q_values.shape[0])], dtype=torch.float32, device=self.device)
 		action_batch = action_batch.view(-1, 1)
 		q_values = torch.gather(q_values, 1, action_batch).squeeze()		# (batch)
 		next_q_values, _ = next_q_values.max(dim=1)
