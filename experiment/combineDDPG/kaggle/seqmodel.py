@@ -10,9 +10,9 @@ class SeqModel(nn.Module):
 		self.hidden_size = args.seq_hidden_size
 		self.seq_layer_num = args.seq_layer_num
 
-		self.m_embedding = nn.Embedding(args.max_iid + 1 + 1, args.m_emb_dim)	# 初始状态 mid=70852
+		self.m_embedding = nn.Embedding(args.max_iid + 1 + 1, args.i_emb_dim)	# 初始状态 mid=70852
 		# batch_first = True 则输入输出的数据格式为 (batch, seq, feature)
-		self.gru = nn.GRU(args.m_emb_dim, self.hidden_size, self.seq_layer_num, batch_first=True, dropout=args.dropout if self.seq_layer_num > 1 else 0.0)
+		self.gru = nn.GRU(args.i_emb_dim, self.hidden_size, self.seq_layer_num, batch_first=True, dropout=args.dropout if self.seq_layer_num > 1 else 0.0)
 		self.ln = None
 		if args.layer_trick == 'bn':
 			self.ln = nn.BatchNorm1d(self.hidden_size, affine=True)
