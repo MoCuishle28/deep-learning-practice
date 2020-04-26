@@ -164,6 +164,7 @@ class Run(object):
 		for i_epoch in range(self.args.epoch):
 			for i_batch, (state, target) in enumerate(self.data_loader):
 				self.model.train()
+				state, target = state.to(self.device), target.to(self.device)
 				prediction = self.model(state)
 				loss = self.loss_func(prediction, target)
 
