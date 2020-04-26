@@ -47,14 +47,15 @@ class REM(nn.Module):
 		if self.args.layer_trick != 'none':
 			out = self.ln(out)
 
-		# (K, batch, item_num)
-		ret = torch.stack([model(out) for model in self.models]).to(self.device)
 		if is_train:
-			rets = torch.zeros(ret.shape[1], ret.shape[2]).to(self.device)
-			for x, k in zip(ret, torch.softmax(self.alpha, dim=0)):
-				# x->(batch, item_num), k->(1)
-				rets += x*k
+			rets = 0
+			for i, model in enumerate(self.models):
+				k = self.alpha[i]
+				ret = model(out)
+				rets += (ret * k)
 			ret = rets
 		else:
+			# (K, batch, item_num)
+			ret = torch.stack([model(out) for model in self.models]).to(self.device)
 			ret = ret.mean(dim=0)
 		return ret
