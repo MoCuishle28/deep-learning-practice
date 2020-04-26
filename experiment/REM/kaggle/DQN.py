@@ -55,7 +55,9 @@ class REM(nn.Module):
 				rets += (ret * k)
 			ret = rets
 		else:
-			# (K, batch, item_num)
-			ret = torch.stack([model(out) for model in self.models]).to(self.device)
-			ret = ret.mean(dim=0)
+			rets = 0
+			for model in self.models:
+				ret = model(out)
+				rets += ret
+			ret = rets / len(self.models)
 		return ret

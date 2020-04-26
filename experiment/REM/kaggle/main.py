@@ -62,6 +62,7 @@ class Run(object):
 	def update_parameters(self, data):
 		# (batch, 10), (batch, 10), (batch)
 		state_batch, next_state_batch, action_batch = data
+		state_batch, next_state_batch, action_batch = state_batch.to(self.device), next_state_batch.to(self.device), action_batch.to(self.device)
 		q_values = self.rem(state_batch)
 		if self.args.target == 'y':
 			self.target_rem.eval()
@@ -225,7 +226,7 @@ if __name__ == '__main__':
 	parser.add_argument('--optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
-	parser.add_argument('--lr', type=float, default=1e-3)
+	parser.add_argument('--lr', type=float, default=1e-4)
 	parser.add_argument('--lr_decay', type=float, default=0.5)
 	# embedding
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
