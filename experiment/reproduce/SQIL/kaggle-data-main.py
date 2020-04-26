@@ -255,7 +255,7 @@ class Run(object):
 					no_improve_times += 1
 					if no_improve_times == 2:	# 降低 lr
 						self.scheduler.step()
-						info = f'LR decay:{self.args.lr_decay}, Optim:{self.optim.lr}'
+						info = f'LR decay:{self.args.lr_decay}, Optim:{self.optim}'
 						print(info)
 						logging.info(info)
 						no_improve_times = 0
