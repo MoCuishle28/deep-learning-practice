@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from baselines import GRU
+
 
 class Evaluation(object):
 	def __init__(self, args, device, agent):
@@ -115,56 +117,20 @@ class Evaluation(object):
 		plt.ylabel('LOSS')
 		plt.plot(ndcg_list)
 
-		plt.savefig(self.args.base_pic_dir + self.args.v + '.png')
+		plt.savefig(self.args.base_log_dir + self.args.v + '.png')
 		if self.args.show == 'y':
 			plt.show()
 
 
-class SoftQ(nn.Module):
-	def __init__(self, args, device):
-		super(SoftQ, self).__init__()
-		self.args = args
-		self.device = device
-		self.seq_input_size = args.m_emb_dim
-		self.hidden_size = args.seq_hidden_size
-		self.seq_layer_num = args.seq_layer_num
-
-		self.m_embedding = nn.Embedding(args.max_iid + 1 + 1, args.m_emb_dim)	# 初始状态 mid=70852
-
-		dropout = args.dropout if self.seq_layer_num > 1 else 0.0
-		# batch_first = True 则输入输出的数据格式为 (batch, seq, feature)
-		self.gru = nn.GRU(self.seq_input_size, self.hidden_size, self.seq_layer_num, batch_first=True, dropout=dropout)
-		self.ln = None
-		if args.layer_trick == 'bn':
-			self.ln = nn.BatchNorm1d(self.hidden_size, affine=True)
-		elif args.layer_trick == 'ln':
-			self.ln = nn.LayerNorm(self.hidden_size, elementwise_affine=True)		
-		self.fc = nn.Linear(self.hidden_size, args.max_iid + 1)
-
-
-	def forward(self, x):
-		# input x:(1, 10, 1)/(batch, 10), output x->(1, 10, 1, 128)/(batch, 10, 128)
-		x = self.m_embedding(x.long().to(self.device))
-		x = x.view(x.shape[0], x.shape[1], -1)
-		# 需要 requires_grad=True 吗？
-		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size, device=self.device)
-
-		out, _ = self.gru(x, h0)  	# out: tensor of shape (batch_size, seq_length, hidden_size)
-		out = out[:, -1, :]			# 最后时刻的 seq 作为输出
-		if self.args.layer_trick != 'none':
-			out = self.ln(out)
-		out = self.fc(out)
-		return out
-
-
-def soft_update(target, source, tau):
-	for target_param, param in zip(target.parameters(), source.parameters()):
-		target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
-
-
-def hard_update(target, source):
-	for target_param, param in zip(target.parameters(), source.parameters()):
-		target_param.data.copy_(param.data)
+def get_optim(key, agent, lr, args):
+	optim = None
+	if key == 'adam':
+		optim = torch.optim.Adam(agent.parameters(), lr=lr, weight_decay=args.weight_decay)
+	elif key == 'sgd':
+		optim = torch.optim.SGD(agent.parameters(), lr=lr, momentum=args.momentum, weight_decay=args.weight_decay)
+	elif key == 'rms':
+		optim = torch.optim.RMSprop(agent.parameters(), lr=lr, weight_decay=args.weight_decay)
+	return optim
 
 
 class Run(object):
@@ -172,58 +138,23 @@ class Run(object):
 		super(Run, self).__init__()
 		self.args = args
 		self.device = device
-		self.q = SoftQ(args, device).to(device)
-		if args.target == 'y':
-			self.target_q = SoftQ(args, device).to(device)
-			hard_update(self.target_q, self.q)
 
-		self.optim = None
-		if args.optim == 'sgd':
-			self.optim = torch.optim.SGD(self.q.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-		elif args.optim == 'rmsprop':
-			self.optim = torch.optim.RMSprop(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+		if args.model == 'gru':
+			self.model = GRU(args, device)
 		else:
-			self.optim = torch.optim.Adam(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-		# 每次调用 self.scheduler.step(),都降低 lr
+			pass
+
+		self.optim = get_optim(args.optim, self.model, args.lr, args)
 		self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optim, args.lr_decay)
-
-		self.evaluate = Evaluation(args, device, self.q)
-		self.EPS = 1e-10
+		self.loss_func = nn.CrossEntropyLoss()
+		self.evaluate = Evaluation(args, device, self.model)
 		self.build_data_loder()
-		self.samp_replay = deque(maxlen=args.maxlen)
-
 
 	def build_data_loder(self):
 		state_list = torch.tensor(np.load(self.args.base_data_dir + 'state.npy'), dtype=torch.float32, device=self.device)
-		next_state_list = torch.tensor(np.load(self.args.base_data_dir + 'next_state.npy'), dtype=torch.float32, device=self.device)
-		action_list = torch.tensor(np.load(self.args.base_data_dir + 'action.npy'), device=self.device)
-		self.args.maxlen = state_list.shape[0]
-		self.demo_replay = deque(maxlen=self.args.maxlen)
-		self.fill_expert_replay(state_list, next_state_list, action_list)
-
-		dataset = Data.TensorDataset(state_list, next_state_list, action_list)
-		shuffle = True if self.args.shuffle == 'y' else False
-		print('shuffle train data...{}'.format(shuffle))
-		self.data_loader = Data.DataLoader(dataset=dataset, batch_size=self.args.batch_size, shuffle=shuffle)
-
-
-	def fill_expert_replay(self, state_list, next_state_list, action_list):
-		print(f'fill expert replay, maxlen:{self.args.maxlen}...')
-		for state, next_state, action in zip(state_list, next_state_list, action_list):
-			# fill demo_replay
-			self.demo_replay.append((state, action, next_state))
-
-
-	def fill_replay(self, data):
-		# 收集训练数据
-		for state, next_state, action in zip(data[0].tolist(), data[1].tolist(), data[2].tolist()):
-			state = torch.tensor(state, dtype=torch.float32, device=self.device).view(-1, 1)
-			next_state = torch.tensor(next_state, dtype=torch.float32, device=self.device).view(-1, 1)
-
-			samp_action = self.get_action(state)
-			# 如果输出的 action 是 expert action 则 state 转移, 否则不转移
-			next_state = next_state if samp_action == action else state
-			self.samp_replay.append((state, samp_action, next_state))
+		action_list = torch.tensor(np.load(self.args.base_data_dir + 'action.npy'), dtype=torch.long, device=self.device)
+		dataset = Data.TensorDataset(state_list, action_list)
+		self.data_loader = Data.DataLoader(dataset=dataset, batch_size=self.args.batch_size, shuffle=True if self.args.shuffle == 'y' else False)
 
 
 	def run(self):
@@ -231,18 +162,23 @@ class Run(object):
 		hr_list, ndcg_list, precs_list = [], [], []
 		no_improve_times = 0
 		for i_epoch in range(self.args.epoch):
-			for i_batch, data in enumerate(self.data_loader):
-				self.fill_replay(data)
-				self.train()
-				soft_q_loss, demo_error, samp_error = self.update_parameters()
+			for i_batch, (state, target) in enumerate(self.data_loader):
+				self.model.train()
+				prediction = self.model(state)
+				loss = self.loss_func(prediction, target)
+
+				self.optim.zero_grad()
+				loss.backward()
+				self.optim.step()
+
 				if i_batch % 200 == 0:
-					soft_q_loss, demo_error, samp_error = round(soft_q_loss, 5), round(demo_error, 5), round(samp_error, 5)
-					info = f'{i_epoch + 1}/{self.args.epoch}, i_batch:{i_batch}, Soft Q Loss:{soft_q_loss}, Demo Error:{demo_error}, Samp Error:{samp_error}'
+					loss = round(loss.item(), 5)
+					info = f'{i_epoch + 1}/{self.args.epoch}, batch:{i_batch}, LOSS:{loss}'
 					print(info)
 					logging.info(info)
 
 			if ((i_epoch + 1) >= self.args.start_eval) and ((i_epoch + 1) % self.args.eval_interval == 0):
-				self.eval()
+				self.model.eval()
 				t1 = time.time()
 				with torch.no_grad():
 					hr, ndcg, precs = self.evaluate.eval()
@@ -274,68 +210,6 @@ class Run(object):
 		self.evaluate.plot_result(precs_list, hr_list, ndcg_list)
 
 
-	def update_parameters(self):
-		# demo replay
-		state, action, next_state = self.sample_data(self.demo_replay)
-		demo_error = self.soft_bellman_error(state, action, next_state)
-		# samp replay
-		state, action, next_state = self.sample_data(self.samp_replay)
-		samp_error = self.soft_bellman_error(state, action, next_state, reward=0.0)
-
-		loss = demo_error + self.args.lammbda_samp * samp_error
-		self.optim.zero_grad()
-		loss.backward()
-		self.optim.step()
-
-		if self.args.target == 'y':
-			soft_update(self.target_q, self.q, self.args.tau)
-		return loss.item(), demo_error.item(), samp_error.item()
-
-
-	def soft_bellman_error(self, state, action, next_state, reward=1.0):
-		'''
-		return: (tensor) -> Soft Ballman Error
-		'''
-		current_q_values = self.q(state)
-		if self.args.target == 'y':
-			self.target_q.eval()
-			with torch.no_grad():
-				next_q_values = self.target_q(next_state)
-				next_q_values.detach_()
-		else:
-			next_q_values = self.q(next_state)
-
-		action = action.view(-1, 1)		# (batch, 1), dtype=int64
-		current_q_values = torch.gather(current_q_values, 1, action).squeeze()		# (batch)
-		exp_next_q_values = torch.sum(torch.exp(next_q_values), dim=-1)				# (batch)
-		error = (current_q_values - (reward + self.args.gamma * torch.log(exp_next_q_values + self.EPS)))**2
-		error = error.mean()
-		return error
-
-
-	def sample_data(self, replay):
-		'''
-		return: (tensor) -> state, action, next_state
-		'''
-		batch_state, batch_action, batch_next_state = zip(
-			*random.sample(replay, self.args.batch_size))
-		batch_action = torch.tensor(batch_action, dtype=torch.long, device=self.device)	# (512), int64
-		batch_state = torch.stack(batch_state).to(self.device)				# (512, 10)
-		batch_next_state = torch.stack(batch_next_state).to(self.device)	# (512, 10)
-		return batch_state, batch_action, batch_next_state
-
-
-	def get_action(self, state):
-		state = state.view(1, state.shape[0], state.shape[1])
-		q_values = self.q(state)
-
-		if self.args.action_method == 'argmax':
-			action = q_values.argmax().item()	# mid
-		else:
-			dist = Categorical(torch.tensor(torch.softmax(q_values, dim=-1), device=self.device))
-			action = dist.sample().item()
-		return action
-
 	def save_model(self, version, epoch):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
@@ -344,22 +218,12 @@ class Run(object):
 
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
-		torch.save(self.q.state_dict(), based_dir + 'softQ_' + tail)
+		torch.save(self.model.state_dict(), f'{based_dir}{self.args.model}_{tail}')
 
 	def load_model(self, version, epoch):
 		based_dir = 'models/' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
-		self.q.load_state_dict(torch.load(based_dir + 'softQ_' + tail))
-		if self.args.target == 'y':
-			hard_update(self.target_q, self.q)
-
-	def eval(self):
-		self.q.eval()
-		if self.args.target == 'y':
-			self.target_q.eval()
-
-	def train(self):
-		self.q.train()
+		self.model.load_state_dict(torch.load(f'{based_dir}{self.args.model}_{tail}'))
 
 
 def main(args, device):
@@ -384,8 +248,6 @@ def main(args, device):
 def init_log(args):
 	if not os.path.exists(args.base_log_dir):
 		os.makedirs(args.base_log_dir)
-	if not os.path.exists(args.base_pic_dir):
-		os.makedirs(args.base_pic_dir)
 	start = datetime.datetime.now()
 	logging.basicConfig(level = logging.INFO,
 					filename = args.base_log_dir + args.v + '-' + str(time.time()) + '.log',
@@ -402,8 +264,8 @@ if __name__ == '__main__':
 	base_data_dir = '../../data/'
 	parser = argparse.ArgumentParser(description="Hyperparameters")
 	parser.add_argument('--v', default="v")
-	parser.add_argument('--base_log_dir', default="log/")
-	parser.add_argument('--base_pic_dir', default="pic/")
+	parser.add_argument('--model', default="gru")
+	parser.add_argument('--base_log_dir', default="log-baseline/")
 	parser.add_argument('--base_data_dir', default=base_data_dir + 'kaggle-RL4REC/')
 	parser.add_argument('--shuffle', default='y')
 	parser.add_argument('--show', default='n')
@@ -432,14 +294,9 @@ if __name__ == '__main__':
 	# embedding
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
 	parser.add_argument('--m_emb_dim', type=int, default=128)
-	# Soft Q
 	parser.add_argument('--seq_hidden_size', type=int, default=128)
 	parser.add_argument('--seq_layer_num', type=int, default=1)
-	parser.add_argument('--tau', type=float, default=0.1)
-	parser.add_argument('--gamma', type=float, default=0.99)
-	parser.add_argument('--lammbda_samp', type=float, default=1.0)
 	parser.add_argument('--action_method', default='argmax')	# argmax/sample
-	parser.add_argument('--maxlen', type=int, default=80000)
 	parser.add_argument('--layer_trick', default='none')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.0)
 
