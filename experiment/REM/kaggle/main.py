@@ -250,5 +250,5 @@ if __name__ == '__main__':
 	if torch.cuda.is_available():
 		torch.cuda.manual_seed(args.seed)
 
-	init_log(args)	# DEBUG
+	init_log(args)
 	main(args, device)

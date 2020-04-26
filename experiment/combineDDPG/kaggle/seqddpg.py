@@ -73,7 +73,7 @@ def hard_update(target, source):
 		target_param.data.copy_(param.data)
 
 
-def parse_layers(layers, activative_func, layer_trick, p):
+def parse_layers(layers, activative_func, layer_trick, p, output_size):
 	params = []
 	layers = [int(x) for x in layers.split(',')]
 	for i, num in enumerate(layers[:-1]):
@@ -82,6 +82,7 @@ def parse_layers(layers, activative_func, layer_trick, p):
 			params.append(layer_trick(layers[i + 1]))
 		params.append(activative_func)
 		params.append(nn.Dropout(p=p))
+	params.append(nn.Linear(layers[-1], output_size))
 	return params
 
 
@@ -103,7 +104,7 @@ class Actor(nn.Module):
 			layer_trick = nn.BatchNorm1d
 		elif self.args.layer_trick == 'ln':
 			layer_trick = nn.LayerNorm
-		params = parse_layers(args.a_layers, self.activative_func, layer_trick, args.dropout)
+		params = parse_layers(args.a_layers, self.activative_func, layer_trick, args.dropout, args.actor_output)
 		self.actor = nn.Sequential(*params)
 
 	def forward(self, inputs):
@@ -124,7 +125,7 @@ class Critic(nn.Module):
 			layer_trick = nn.BatchNorm1d
 		elif self.args.layer_trick == 'ln':
 			layer_trick = nn.LayerNorm
-		params = parse_layers(args.c_layers, self.activative_func, layer_trick, args.dropout)
+		params = parse_layers(args.c_layers, self.activative_func, layer_trick, args.dropout, 1)
 		self.critic = nn.Sequential(*params)
 
 	def forward(self, inputs, actions):

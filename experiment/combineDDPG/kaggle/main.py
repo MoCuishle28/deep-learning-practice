@@ -232,9 +232,10 @@ if __name__ == '__main__':
 	parser.add_argument('--a_act', default='relu')
 	parser.add_argument('--c_act', default='relu')
 	parser.add_argument('--v_act', default='relu')
-	parser.add_argument('--a_layers', default='128,64')	# seq_output_size, ...
-	parser.add_argument('--c_layers', default='192,1')	# seq_output_size + actor_output, ...
-	parser.add_argument('--v_layers', default='128,1')
+	parser.add_argument('--a_layers', default='128,128,64')	# seq_output_size, ...
+	parser.add_argument('--actor_output', type=int, default=64)
+	parser.add_argument('--c_layers', default='192,128')	# seq_output_size + actor_output, ...
+	parser.add_argument('--v_layers', default='128,128')
 	# sac
 	parser.add_argument('--mean_lambda', type=float, default=1e-3)
 	parser.add_argument('--std_lambda', type=float, default=1e-3)
@@ -248,7 +249,7 @@ if __name__ == '__main__':
 	parser.add_argument('--i_emb_dim', type=int, default=128)
 	# MLP
 	parser.add_argument('--mlp_act', default='relu')
-	parser.add_argument('--mlp_layers', default='64,70852')
+	parser.add_argument('--mlp_layers', default='64,64')
 
 	args = parser.parse_args()
 	init_log(args)

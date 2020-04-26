@@ -55,7 +55,9 @@ class REM(nn.Module):
 				rets += (ret * k)
 			ret = rets
 		else:
-			rets = 0
+			# K, batch_size, max_iid
+			ret = [model(out) for model in self.models]
+			ret = ret.mean(dim=0)
 			for model in self.models:
 				ret = model(out)
 				rets += ret

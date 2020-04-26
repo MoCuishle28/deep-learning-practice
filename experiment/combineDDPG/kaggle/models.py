@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 
 
-def parse_layers(layers, activative_func, layer_trick, p):
+def parse_layers(layers, activative_func, layer_trick, p, output_size):
 	params = []
 	layers = [int(x) for x in layers.split(',')]
 	for i, num in enumerate(layers[:-1]):
@@ -14,6 +14,7 @@ def parse_layers(layers, activative_func, layer_trick, p):
 			params.append(layer_trick(layers[i + 1]))
 		params.append(activative_func)
 		params.append(nn.Dropout(p=p))
+	params.append(nn.Linear(layers[-1], output_size))
 	return params
 
 def get_activative_func(key):
@@ -38,7 +39,7 @@ class MLP(nn.Module):
 			layer_trick = nn.BatchNorm1d
 		elif self.args.layer_trick == 'ln':
 			layer_trick = nn.LayerNorm
-		params = parse_layers(args.mlp_layers, self.activative_func, layer_trick, args.dropout)
+		params = parse_layers(args.mlp_layers, self.activative_func, layer_trick, args.dropout, args.max_iid + 1)
 		self.mlp = nn.Sequential(*params)
 
 
