@@ -197,33 +197,33 @@ class Run(object):
 		state_list = torch.tensor(np.load(self.args.base_data_dir + 'state.npy'), dtype=torch.float32, device=self.device)
 		next_state_list = torch.tensor(np.load(self.args.base_data_dir + 'next_state.npy'), dtype=torch.float32, device=self.device)
 		action_list = torch.tensor(np.load(self.args.base_data_dir + 'action.npy'), device=self.device)
+		done_list = torch.tensor(np.load(self.args.base_data_dir + 'done.npy'), device=self.device)
 		self.args.maxlen = state_list.shape[0]
 		self.demo_replay = deque(maxlen=self.args.maxlen)
-		self.fill_expert_replay(state_list, next_state_list, action_list)
+		self.fill_expert_replay(state_list, next_state_list, action_list, done_list)
 
-		dataset = Data.TensorDataset(state_list, next_state_list, action_list)
+		dataset = Data.TensorDataset(state_list, next_state_list, action_list, done_list)
 		shuffle = True if self.args.shuffle == 'y' else False
 		print('shuffle train data...{}'.format(shuffle))
 		self.data_loader = Data.DataLoader(dataset=dataset, batch_size=self.args.batch_size, shuffle=shuffle)
 
 
-	def fill_expert_replay(self, state_list, next_state_list, action_list):
+	def fill_expert_replay(self, state_list, next_state_list, action_list, done_list):
 		print(f'fill expert replay, maxlen:{self.args.maxlen}...')
-		for state, next_state, action in zip(state_list, next_state_list, action_list):
-			# fill demo_replay
-			self.demo_replay.append((state, action, next_state))
+		for state, next_state, action, done in zip(state_list, next_state_list, action_list, done_list):
+			self.demo_replay.append((state, action, next_state, done))
 
 
 	def fill_replay(self, data):
 		# 收集训练数据
-		for state, next_state, action in zip(data[0].tolist(), data[1].tolist(), data[2].tolist()):
+		for state, next_state, action, done in zip(data[0].tolist(), data[1].tolist(), data[2].tolist(), data[3].tolist()):
 			state = torch.tensor(state, dtype=torch.float32, device=self.device).view(-1, 1)
 			next_state = torch.tensor(next_state, dtype=torch.float32, device=self.device).view(-1, 1)
 
 			samp_action = self.get_action(state)
 			# 如果输出的 action 是 expert action 则 state 转移, 否则不转移
 			next_state = next_state if samp_action == action else state
-			self.samp_replay.append((state, samp_action, next_state))
+			self.samp_replay.append((state, samp_action, next_state, done))
 
 
 	def run(self):
@@ -276,11 +276,11 @@ class Run(object):
 
 	def update_parameters(self):
 		# demo replay
-		state, action, next_state = self.sample_data(self.demo_replay)
-		demo_error = self.soft_bellman_error(state, action, next_state)
+		state, action, next_state, done = self.sample_data(self.demo_replay)
+		demo_error = self.soft_bellman_error(state, action, next_state, done)
 		# samp replay
-		state, action, next_state = self.sample_data(self.samp_replay)
-		samp_error = self.soft_bellman_error(state, action, next_state, reward=0.0)
+		state, action, next_state, done = self.sample_data(self.samp_replay)
+		samp_error = self.soft_bellman_error(state, action, next_state, done, reward=0.0)
 
 		loss = demo_error + self.args.lammbda_samp * samp_error
 		self.optim.zero_grad()
@@ -292,7 +292,7 @@ class Run(object):
 		return loss.item(), demo_error.item(), samp_error.item()
 
 
-	def soft_bellman_error(self, state, action, next_state, reward=1.0):
+	def soft_bellman_error(self, state, action, next_state, done, reward=1.0):
 		'''
 		return: (tensor) -> Soft Ballman Error
 		'''
@@ -308,7 +308,7 @@ class Run(object):
 		action = action.view(-1, 1)		# (batch, 1), dtype=int64
 		current_q_values = torch.gather(current_q_values, 1, action).squeeze()		# (batch)
 		exp_next_q_values = torch.sum(torch.exp(next_q_values), dim=-1)				# (batch)
-		error = (current_q_values - (reward + self.args.gamma * torch.log(exp_next_q_values + self.EPS)))**2
+		error = (current_q_values - (reward + (1 - done) * self.args.gamma * torch.log(exp_next_q_values + self.EPS)))**2
 		error = error.mean()
 		return error
 
@@ -317,12 +317,13 @@ class Run(object):
 		'''
 		return: (tensor) -> state, action, next_state
 		'''
-		batch_state, batch_action, batch_next_state = zip(
+		batch_state, batch_action, batch_next_state, batch_done = zip(
 			*random.sample(replay, self.args.batch_size))
-		batch_action = torch.tensor(batch_action, dtype=torch.long, device=self.device)	# (512), int64
+		batch_action = torch.tensor(batch_action, dtype=torch.long, device=self.device)	 # (512), int64
+		batch_done = torch.tensor(batch_done, dtype=torch.float32, device=self.device) # (512)
 		batch_state = torch.stack(batch_state).to(self.device)				# (512, 10)
 		batch_next_state = torch.stack(batch_next_state).to(self.device)	# (512, 10)
-		return batch_state, batch_action, batch_next_state
+		return batch_state, batch_action, batch_next_state, batch_done
 
 
 	def get_action(self, state):

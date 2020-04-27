@@ -140,7 +140,7 @@ class Run(object):
 		self.device = device
 
 		if args.model == 'gru':
-			self.model = GRU(args, device)
+			self.model = GRU(args, device).to(device)
 		else:
 			pass
 
@@ -164,7 +164,6 @@ class Run(object):
 		for i_epoch in range(self.args.epoch):
 			for i_batch, (state, target) in enumerate(self.data_loader):
 				self.model.train()
-				state, target = state.to(self.device), target.to(self.device)
 				prediction = self.model(state)
 				loss = self.loss_func(prediction, target)
 
@@ -214,15 +213,15 @@ class Run(object):
 	def save_model(self, version, epoch):
 		if not os.path.exists('models/'):
 			os.makedirs('models/')
-		if not os.path.exists('models/' + version + '/'):
-			os.makedirs('models/' + version + '/')
+		if not os.path.exists('models/baselines_' + version + '/'):
+			os.makedirs('models/baselines_' + version + '/')
 
-		based_dir = 'models/' + version + '/'
+		based_dir = 'models/baselines_' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
 		torch.save(self.model.state_dict(), f'{based_dir}{self.args.model}_{tail}')
 
 	def load_model(self, version, epoch):
-		based_dir = 'models/' + version + '/'
+		based_dir = 'models/baselines_' + version + '/'
 		tail = version + '-' + str(epoch) + '.pkl'
 		self.model.load_state_dict(torch.load(f'{based_dir}{self.args.model}_{tail}'))
 
