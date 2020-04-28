@@ -124,7 +124,7 @@ def evaluate(args, trainQ, sess):
 	eval_ids = eval_sessions.session_id.unique()
 	groups = eval_sessions.groupby('session_id')
 
-	batch = 100
+	batch = args.eval_batch
 	evaluated = 0
 	total_clicks, total_purchase = 0.0, 0.0
 	total_reward = [0 for _ in topk]
@@ -155,8 +155,7 @@ def evaluate(args, trainQ, sess):
 				rewards.append(reward)
 				history.append(row['item_id'])
 			evaluated += 1
-		prediction = sess.run(trainQ.output, 
-			feed_dict={trainQ.inputs: states, trainQ.len_state: len_states})
+		prediction = sess.run(trainQ.output, feed_dict={trainQ.inputs: states, trainQ.len_state: len_states})
 		sorted_list = np.argsort(prediction)	# 返回从小到大的索引
 		calculate_hit(sorted_list, topk, actions, rewards, args.reward_click, total_reward, hit_clicks, ndcg_clicks, hit_purchase, ndcg_purchase)
 	info = f'total clicks:{total_clicks}, total purchase:{total_purchase}'
@@ -247,7 +246,7 @@ def main(args):
 					info = f"Step:{total_step}, loss:{loss}"
 					print(info)
 					logging.info(info)
-				if total_step % 2000 == 0:
+				if total_step % args.eval_interval == 0:
 					evaluate(args, trainQ, sess)
 
 
@@ -279,23 +278,15 @@ if __name__ == '__main__':
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--target', default='y')		# n/y -> target net
 	parser.add_argument('--seed', type=int, default=1)
-
-	parser.add_argument('--load', default='n')			# 是否加载模型
-	parser.add_argument('--save', default='y')
-	parser.add_argument('--load_version', default='v')
-	parser.add_argument('--load_epoch', default='final')
-	parser.add_argument('--start_save', type=int, default=100)
-	parser.add_argument('--save_interval', type=int, default=50)
-	parser.add_argument('--start_eval', type=int, default=0)
-	parser.add_argument('--eval_interval', type=int, default=10)
+	parser.add_argument('--eval_interval', type=int, default=2000)
+	parser.add_argument('--eval_batch', type=int, default=30)
 
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--topk', default='5,10,20')
-	parser.add_argument('--batch_size', type=int, default=10)	# DEBUG
+	parser.add_argument('--batch_size', type=int, default=256)
 
 	parser.add_argument('--optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
-	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	parser.add_argument('--lr', type=float, default=1e-3)
 	# embedding
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
@@ -311,7 +302,6 @@ if __name__ == '__main__':
 	parser.add_argument('--tau', type=float, default=0.1)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--lammbda_samp', type=float, default=1.0)
-	parser.add_argument('--action_method', default='argmax')		# argmax/sample
 	parser.add_argument('--layer_trick', default='none')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.0)
 	args = parser.parse_args()
