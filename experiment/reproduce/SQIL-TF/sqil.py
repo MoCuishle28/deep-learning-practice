@@ -10,6 +10,7 @@ import trfl
 from trfl import indexing_ops
 import numpy as np
 import pandas as pd
+import torch
 
 
 class SoftQ(object):
@@ -102,21 +103,23 @@ def pad_history(itemlist, length, pad_item):
 
 def calculate_hit(sorted_list, topk, true_items, rewards, r_click, total_reward, hit_click, ndcg_click, hit_purchase, ndcg_purchase):
 	for i in range(len(topk)):
-		rec_list = sorted_list[:, -topk[i]:]
+		rec_list = sorted_list[:, :topk[i]]
 		for j in range(len(true_items)):
-			if true_items[j] in rec_list[j]:
-				rank = topk[i] - np.argwhere(rec_list[j] == true_items[j])
-				total_reward[i] += rewards[j]
-				if rewards[j] == r_click:
-					hit_click[i] += 1.0
-					ndcg_click[i] += 1.0 / np.log2(rank + 1)
-				else:
-					hit_purchase[i] += 1.0
-					ndcg_purchase[i] += 1.0 / np.log2(rank + 1)
+			for rank in range(len(rec_list[j])):
+				if rec_list[j][rank].item() == true_items[j]:
+					total_reward[i] += rewards[j]
+					if rewards[j] == r_click:
+						hit_click[i] += 1.0
+						ndcg_click[i] += 1.0 / np.log2(rank + 2.0)
+					else:
+						hit_purchase[i] += 1.0
+						ndcg_purchase[i] += 1.0 / np.log2(rank + 2.0)
 
 
 def evaluate(args, trainQ, sess):
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	topk = [int(x) for x in args.topk.split(',')]
+	max_topk = max(topk)
 	if args.mode == 'valid':
 		eval_sessions = pd.read_pickle(os.path.join(args.base_data_dir, 'sampled_val.df'))
 	elif args.mode == 'test':
@@ -156,7 +159,9 @@ def evaluate(args, trainQ, sess):
 				history.append(row['item_id'])
 			evaluated += 1
 		prediction = sess.run(trainQ.output, feed_dict={trainQ.inputs: states, trainQ.len_state: len_states})
-		sorted_list = np.argsort(prediction)	# 返回从小到大的索引
+		prediction = torch.tensor(prediction, device=device)
+		_, sorted_list = prediction.topk(max_topk)
+		del prediction
 		calculate_hit(sorted_list, topk, actions, rewards, args.reward_click, total_reward, hit_clicks, ndcg_clicks, hit_purchase, ndcg_purchase)
 	info = f'total clicks:{total_clicks}, total purchase:{total_purchase}'
 	print(info)
@@ -168,17 +173,15 @@ def evaluate(args, trainQ, sess):
 		ng_click = ndcg_clicks[i] / total_clicks
 		ng_purchase = ndcg_purchase[i] / total_purchase
 
-		hr_click, hr_purchase = round(hr_click, 5), round(hr_purchase)
-		ng_click, ng_purchase = round(ng_click, 5), round(ng_purchase, 5)
 		print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-		loggin.info('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
+		logging.info('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 		info = f'cumulative reward @ {topk[i]}: {total_reward[i]}'
 		print(info)
 		logging.info(info)
-		info = f'clicks hr ndcg @ {topk[i]} : {hr_click}, {ng_click}'
+		info = f'clicks @ {topk[i]} : HR:{hr_click}, NDCG:{ng_click}'
 		print(info)
 		logging.info(info)
-		info = f'purchase hr and ndcg @{topk[i]} : {hr_purchase}, {ng_purchase}'
+		info = f'purchase @ {topk[i]} : HR:{hr_purchase}, NDCG:{ng_purchase}'
 		print(info)
 		logging.info(info)
 
@@ -240,14 +243,18 @@ def main(args):
 											  trainQ.samp_actions: samp_actions,
 											  trainQ.demo_targetQ: demo_target,
 											  trainQ.samp_targetQ: samp_target})
+				sess.run(target_network_update_ops)		# update target net
 				total_step += 1
 				if total_step % 200 == 0:
 					loss = round(loss.item(), 5)
-					info = f"Step:{total_step}, loss:{loss}"
+					info = f"epoch:{i} Step:{total_step}, loss:{loss}"
 					print(info)
 					logging.info(info)
 				if total_step % args.eval_interval == 0:
+					t1 = time.time()
 					evaluate(args, trainQ, sess)
+					t2 = time.time()
+					print(f'Time:{t2 - t1}')
 
 
 def init_log(args):
