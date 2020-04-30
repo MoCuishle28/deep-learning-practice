@@ -116,7 +116,7 @@ def calculate_hit(sorted_list, topk, true_items, rewards, r_click, total_reward,
 						ndcg_purchase[i] += 1.0 / np.log2(rank + 2.0)
 
 
-def evaluate(args, trainQ, sess):
+def evaluate(args, trainQ, sess, max_ndcg_and_epoch, total_step):
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	topk = [int(x) for x in args.topk.split(',')]
 	max_topk = max(topk)
@@ -167,23 +167,55 @@ def evaluate(args, trainQ, sess):
 	print(info)
 	logging.info(info)
 	total_reward = [round(x, 5) for x in total_reward]
+	hr_click_list, hr_purchase_list, ng_click_list, ng_purchase_list = [], [], [], []
 	for i in range(len(topk)):
 		hr_click = hit_clicks[i] / total_clicks
 		hr_purchase = hit_purchase[i] / total_purchase
 		ng_click = ndcg_clicks[i] / total_clicks
 		ng_purchase = ndcg_purchase[i] / total_purchase
 
+		hr_click, hr_purchase = round(hr_click, 6), round(hr_purchase, 6)
+		ng_click, ng_purchase = round(ng_click.item(), 6), round(ng_purchase.item(), 6)
+
+		tup = max_ndcg_and_epoch[i]		# (ng_click, ng_purchase, step)
+		if ng_click > tup[0]:
+			max_ndcg_and_epoch[i][0] = ng_click
+			max_ndcg_and_epoch[i][1] = ng_purchase
+			max_ndcg_and_epoch[i][2] = total_step
+
 		print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 		logging.info('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 		info = f'cumulative reward @ {topk[i]}: {total_reward[i]}'
 		print(info)
 		logging.info(info)
-		info = f'clicks @ {topk[i]} : HR:{hr_click}, NDCG:{ng_click}'
+		info = f'clicks @ {topk[i]} : HR: {hr_click}, NDCG: {ng_click}'
 		print(info)
 		logging.info(info)
-		info = f'purchase @ {topk[i]} : HR:{hr_purchase}, NDCG:{ng_purchase}'
+		info = f'purchase @ {topk[i]} : HR: {hr_purchase}, NDCG: {ng_purchase}'
 		print(info)
 		logging.info(info)
+		info = f'Current Max click NDCG:{max_ndcg_and_epoch[i][0]}, the purchase NDCG is {max_ndcg_and_epoch[i][1]}. (step:{max_ndcg_and_epoch[i][2]})'
+		print(info)
+		logging.info(info)
+
+
+def get_samp_data(sess, batch, trainQ):
+	samp_state = list(batch['state'].values())
+	samp_len_state = list(batch['len_state'].values())
+	samp_tartget_actions = list(batch['action'].values())
+	samp_target_next_state = list(batch['next_state'].values())
+	samp_target_next_state_len = list(batch['len_next_states'].values())
+
+	samp_q = sess.run(trainQ.output, feed_dict={trainQ.inputs: samp_state, trainQ.len_state:samp_len_state})
+	samp_actions = np.argmax(samp_q, 1)
+
+	samp_next_states = []
+	samp_next_states_len = []
+	for i in range(len(samp_tartget_actions)):
+		action, demo_action = samp_actions[i], samp_tartget_actions[i]
+		samp_next_states.append(samp_target_next_state[i] if action == demo_action else samp_state[i])
+		samp_next_states_len.append(samp_target_next_state_len[i] if action == demo_action else samp_len_state[i])
+	return samp_next_states, samp_next_states_len, samp_actions
 
 
 def main(args):
@@ -197,6 +229,7 @@ def main(args):
 	replay_buffer = pd.read_pickle(os.path.join(args.base_data_dir, 'replay_buffer.df'))
 	num_rows = replay_buffer.shape[0]
 	num_batches = int(num_rows / args.batch_size)
+	max_ndcg_and_epoch = [[0, 0, 0] for _ in args.topk.split(',')]	# (ng_click, ng_purchase, step)
 	total_step = 0
 
 	with tf.Session() as sess:
@@ -212,17 +245,11 @@ def main(args):
 				demo_actions = list(batch['action'].values())
 				discount = [args.gamma] * len(demo_actions)
 				demo_reward = [1.0] * len(demo_actions)
-				samp_reward = [0.0] * len(demo_actions)
 
-				samp_q = sess.run(trainQ.output, feed_dict={trainQ.inputs: state, trainQ.len_state:len_state})
-				samp_actions = np.argmax(samp_q, 1)
-
-				samp_next_states = []
-				samp_next_states_len = []
-				for i in range(len(demo_actions)):
-					action, demo_action = samp_actions[i], demo_actions[i]
-					samp_next_states.append(next_state[i] if action == demo_action else state[i])
-					samp_next_states_len.append(len_next_states[i] if action == demo_action else len_state[i])
+				# sample samp_data
+				batch = replay_buffer.sample(n=args.batch_size).to_dict()
+				samp_next_states, samp_next_states_len, samp_actions = get_samp_data(sess, batch, trainQ)
+				samp_reward = [0.0] * len(samp_actions)
 
 				if args.target == 'y':
 					demo_target = sess.run(targetQ.output, feed_dict={targetQ.inputs: next_state,
@@ -254,16 +281,17 @@ def main(args):
 				if args.target == 'y':
 					sess.run(target_network_update_ops)		# update target net
 				total_step += 1
-				if total_step % 200 == 0:
+				if (total_step == 1) or (total_step % 200 == 0):
 					loss = round(loss.item(), 5)
 					info = f"epoch:{i_epoch} Step:{total_step}, loss:{loss}"
 					print(info)
 					logging.info(info)
 				if total_step % args.eval_interval == 0:
 					t1 = time.time()
-					evaluate(args, trainQ, sess)
+					evaluate(args, trainQ, sess, max_ndcg_and_epoch, total_step)
 					t2 = time.time()
 					print(f'Time:{t2 - t1}')
+					logging.info(f'Time:{t2 - t1}')
 
 
 def init_log(args):
@@ -294,8 +322,8 @@ if __name__ == '__main__':
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--target', default='y')		# n/y -> target net
 	parser.add_argument('--seed', type=int, default=1)
-	parser.add_argument('--eval_interval', type=int, default=2000)
-	parser.add_argument('--eval_batch', type=int, default=30)
+	parser.add_argument('--eval_interval', type=int, default=6000)
+	parser.add_argument('--eval_batch', type=int, default=10)
 
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--topk', default='5,10,20')
@@ -315,7 +343,7 @@ if __name__ == '__main__':
 	parser.add_argument('--seq_layer_num', type=int, default=1)
 
 	parser.add_argument('--lambda_samp', type=float, default=1.0)
-	parser.add_argument('--tau', type=float, default=0.1)
+	parser.add_argument('--tau', type=float, default=0.01)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--lammbda_samp', type=float, default=1.0)
 	parser.add_argument('--layer_trick', default='none')			# ln/bn/none
