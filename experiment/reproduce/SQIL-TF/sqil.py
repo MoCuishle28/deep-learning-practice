@@ -19,12 +19,12 @@ class SoftQ(object):
 		self.args = args
 		self.item_num = args.max_iid + 1
 		self.hw = 10		# history window(过去多少次交互记录作为输入)
-		self.is_training = tf.placeholder(tf.bool, shape=())
+		# self.is_training = tf.placeholder(tf.bool, shape=())
 		self.name = name
 		with tf.variable_scope(self.name):
-			self.discount = tf.constant(args.gamma, shape=[args.batch_size], dtype=tf.float32, name="discount")
-			self.demo_reward = tf.constant(1.0, dtype=tf.float32, shape=[args.batch_size], name='demo_reward')
-			self.samp_reward = tf.constant(0.0, dtype=tf.float32, shape=[args.batch_size], name='samp_reward')
+			self.discount = tf.placeholder(tf.float32, [None] , name="discount")
+			self.demo_reward = tf.placeholder(tf.float32, [None], name='demo_reward')
+			self.samp_reward = tf.placeholder(tf.float32, [None], name='samp_reward')
 
 			self.inputs = tf.placeholder(tf.int32, [None, self.hw], name='inputs')
 			self.len_state = tf.placeholder(tf.int32, [None], name='len_state')
@@ -48,8 +48,8 @@ class SoftQ(object):
 			self.samp_targetQ = tf.placeholder(tf.float32, [None, self.item_num], name='samp_target')
 
 			# target
-			demo_target = tf.log(tf.reduce_sum(tf.exp(self.demo_targetQ), 1))		# (batch)
-			samp_target = tf.log(tf.reduce_sum(tf.exp(self.samp_targetQ), 1))		# (batch)
+			demo_target = tf.math.log(tf.reduce_sum(tf.exp(self.demo_targetQ), 1))		# (batch)
+			samp_target = tf.math.log(tf.reduce_sum(tf.exp(self.samp_targetQ), 1))		# (batch)
 
 			demo_current_q = indexing_ops.batched_index(self.output, self.demo_actions)
 			samp_current_q = indexing_ops.batched_index(self.output, self.samp_actions)
@@ -159,7 +159,7 @@ def evaluate(args, trainQ, sess):
 				history.append(row['item_id'])
 			evaluated += 1
 		prediction = sess.run(trainQ.output, feed_dict={trainQ.inputs: states, trainQ.len_state: len_states})
-		prediction = torch.tensor(prediction, device=device)
+		prediction = torch.tensor(prediction)
 		_, sorted_list = prediction.topk(max_topk)
 		del prediction
 		calculate_hit(sorted_list, topk, actions, rewards, args.reward_click, total_reward, hit_clicks, ndcg_clicks, hit_purchase, ndcg_purchase)
@@ -187,6 +187,7 @@ def evaluate(args, trainQ, sess):
 
 
 def main(args):
+	tf.reset_default_graph()
 	trainQ = SoftQ(args, name='trainQ')
 	if args.target == 'y':
 		targetQ = SoftQ(args, name='targetQ')
@@ -197,9 +198,11 @@ def main(args):
 	num_rows = replay_buffer.shape[0]
 	num_batches = int(num_rows / args.batch_size)
 	total_step = 0
+
 	with tf.Session() as sess:
 		sess.run(tf.global_variables_initializer())
-		for i in range(args.epoch):
+		sess.graph.finalize()
+		for i_epoch in range(args.epoch):
 			for j in range(num_batches):
 				batch = replay_buffer.sample(n=args.batch_size).to_dict()
 				state = list(batch['state'].values())
@@ -207,10 +210,12 @@ def main(args):
 				next_state = list(batch['next_state'].values())
 				len_next_states = list(batch['len_next_states'].values())
 				demo_actions = list(batch['action'].values())
+				discount = [args.gamma] * len(demo_actions)
+				demo_reward = [1.0] * len(demo_actions)
+				samp_reward = [0.0] * len(demo_actions)
 
-				samp_q = sess.run(trainQ.output, feed_dict={trainQ.inputs: state, 
-					trainQ.len_state:len_state})
-				samp_actions = tf.argmax(samp_q, 1).eval()
+				samp_q = sess.run(trainQ.output, feed_dict={trainQ.inputs: state, trainQ.len_state:len_state})
+				samp_actions = np.argmax(samp_q, 1)
 
 				samp_next_states = []
 				samp_next_states_len = []
@@ -242,12 +247,16 @@ def main(args):
 											  trainQ.demo_actions: demo_actions,
 											  trainQ.samp_actions: samp_actions,
 											  trainQ.demo_targetQ: demo_target,
-											  trainQ.samp_targetQ: samp_target})
-				sess.run(target_network_update_ops)		# update target net
+											  trainQ.samp_targetQ: samp_target,
+											  trainQ.discount: discount,
+											  trainQ.demo_reward: demo_reward,
+											  trainQ.samp_reward: samp_reward})
+				if args.target == 'y':
+					sess.run(target_network_update_ops)		# update target net
 				total_step += 1
 				if total_step % 200 == 0:
 					loss = round(loss.item(), 5)
-					info = f"epoch:{i} Step:{total_step}, loss:{loss}"
+					info = f"epoch:{i_epoch} Step:{total_step}, loss:{loss}"
 					print(info)
 					logging.info(info)
 				if total_step % args.eval_interval == 0:
