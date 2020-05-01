@@ -4,42 +4,42 @@ import pandas as pd
 import os
 import argparse
 import trfl
+import logging
+import time
+import datetime
+import torch
+
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Run supervised GRU.")
-	parser.add_argument('--epoch', type=int, default=30)
+	parser.add_argument('--v', default="v")
+	parser.add_argument('--base_log_dir', default="baseline-log/")
 	parser.add_argument('--data', default='../../data/kaggle-RL4REC')
+
+	parser.add_argument('--epoch', type=int, default=100)
+	parser.add_argument('--eval_interval', type=int, default=2000)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--hidden_factor', type=int, default=64)
 	parser.add_argument('--r_click', type=float, default=0.2)
 	parser.add_argument('--r_buy', type=float, default=1.0)
 	parser.add_argument('--lr', type=float, default=0.01)
+	parser.add_argument('--seed', type=int, default=1)
 	return parser.parse_args()
 
 
-def pad_history(itemlist, length, pad_item):
-	if len(itemlist)>=length:
-		return itemlist[-length:]
-	if len(itemlist)<length:
-		temp = [pad_item] * (length-len(itemlist))
-		itemlist.extend(temp)
-		return itemlist
-
-
-def calculate_hit(sorted_list,topk,true_items,rewards,r_click,total_reward,hit_click,ndcg_click,hit_purchase,ndcg_purchase):
-	for i in range(len(topk)):
-		rec_list = sorted_list[:, -topk[i]:]
-		for j in range(len(true_items)):
-			if true_items[j] in rec_list[j]:
-				rank = topk[i] - np.argwhere(rec_list[j] == true_items[j])
-				total_reward[i] += rewards[j]
-				if rewards[j] == r_click:
-					hit_click[i] += 1.0
-					ndcg_click[i] += 1.0 / np.log2(rank + 1)
-				else:
-					hit_purchase[i] += 1.0
-					ndcg_purchase[i] += 1.0 / np.log2(rank + 1)
-
+def init_log(args):
+	if not os.path.exists(args.base_log_dir):
+		os.makedirs(args.base_log_dir)
+	start = datetime.datetime.now()
+	logging.basicConfig(level = logging.INFO,
+					filename = args.base_log_dir + args.v + '-' + str(time.time()) + '.log',
+					filemode = 'a',
+					)
+	print('start! '+str(start))
+	logging.info('start! '+str(start))
+	logging.info('Parameter:')
+	logging.info(str(args))
+	logging.info('\n-------------------------------------------------------------\n')
 
 class GRUnetwork:
 	def __init__(self, hidden_size, learning_rate, item_num, state_size):
@@ -77,11 +77,33 @@ class GRUnetwork:
 		all_embeddings['state_embeddings']=state_embeddings
 		return all_embeddings
 
+def pad_history(itemlist, length, pad_item):
+	if len(itemlist)>=length:
+		return itemlist[-length:]
+	if len(itemlist)<length:
+		temp = [pad_item] * (length-len(itemlist))
+		itemlist.extend(temp)
+		return itemlist
+
+def calculate_hit(sorted_list,topk,true_items,rewards,r_click,total_reward,hit_click,ndcg_click,hit_purchase,ndcg_purchase):
+	for i in range(len(topk)):
+		rec_list = sorted_list[:, -topk[i]:]
+		for j in range(len(true_items)):
+			if true_items[j] in rec_list[j]:
+				rank = topk[i] - np.argwhere(rec_list[j] == true_items[j])
+				total_reward[i] += rewards[j]
+				if rewards[j] == r_click:
+					hit_click[i] += 1.0
+					ndcg_click[i] += 1.0 / np.log2(rank + 1)
+				else:
+					hit_purchase[i] += 1.0
+					ndcg_purchase[i] += 1.0 / np.log2(rank + 1)
+
 def evaluate(sess):
 	eval_sessions=pd.read_pickle(os.path.join(data_directory, 'sampled_val.df'))
 	eval_ids = eval_sessions.session_id.unique()
 	groups = eval_sessions.groupby('session_id')
-	batch = 100
+	batch = 10
 	evaluated=0
 	total_clicks=0.0
 	total_purchase = 0.0
@@ -115,7 +137,9 @@ def evaluate(sess):
 				history.append(row['item_id'])
 			evaluated+=1
 		prediction=sess.run(GRUnet.output, feed_dict={GRUnet.inputs: states,GRUnet.len_state:len_states})
-		sorted_list=np.argsort(prediction)
+		# sorted_list=np.argsort(prediction)
+		_, sorted_list = torch.topk(torch.tensor(prediction), max(topk), largest=False)
+		sorted_list = sorted_list.numpy()
 		calculate_hit(sorted_list,topk,actions,rewards,reward_click,total_reward,hit_clicks,ndcg_clicks,hit_purchase,ndcg_purchase)
 	print('#############################################################')
 	print('total clicks: %d, total purchase:%d' % (total_clicks, total_purchase))
@@ -125,16 +149,26 @@ def evaluate(sess):
 		ng_click=ndcg_clicks[i]/total_clicks
 		ng_purchase=ndcg_purchase[i]/total_purchase
 		print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
+		logging.info('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 		print('cumulative reward @ %d: %f' % (topk[i],total_reward[i]))
+		logging.info('cumulative reward @ %d: %f' % (topk[i],total_reward[i]))
+
 		print('clicks hr ndcg @ %d : %f, %f' % (topk[i],hr_click,ng_click))
+		logging.info('clicks hr ndcg @ %d : %f, %f' % (topk[i],hr_click,ng_click))
+
 		print('purchase hr and ndcg @%d : %f, %f' % (topk[i], hr_purchase, ng_purchase))
+		logging.info('purchase hr and ndcg @%d : %f, %f' % (topk[i], hr_purchase, ng_purchase))
 	print('#############################################################')
+	logging.info('#############################################################')
 
 
 
 if __name__ == '__main__':
 	# Network parameters
 	args = parse_args()
+	np.random.seed(args.seed)
+	tf.set_random_seed(args.seed)
+	init_log(args)
 
 	data_directory = args.data
 	data_statis = pd.read_pickle(
@@ -171,8 +205,14 @@ if __name__ == '__main__':
 											  GRUnet.len_state: len_state,
 											  GRUnet.target: target})
 				total_step+=1
-				if total_step % 200 == 0:
+				if (total_step == 1) or (total_step % 200 == 0):
 					print("the loss in %dth batch is: %f" % (total_step, loss))
-				if total_step % 2000 == 0:
+					logging.info("the loss in %dth batch is: %f" % (total_step, loss))
+				if total_step % args.eval_interval == 0:
+					t1 = time.time()
 					evaluate(sess)
+					t2 = time.time()
+					print(f'Time:{t2 - t1}')
+					logging.info(f'Time:{t2 - t1}')
+					break
 		# saver.save(sess, save_file)
