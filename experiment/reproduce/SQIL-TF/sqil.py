@@ -11,6 +11,7 @@ from trfl import indexing_ops
 import numpy as np
 import pandas as pd
 import torch
+import matplotlib.pyplot as plt
 
 
 class SoftQ(object):
@@ -39,7 +40,8 @@ class SoftQ(object):
 			)
 			# self.output = tf.layers.Dense(self.states_hidden, self.item_num)
 			self.output = tf.contrib.layers.fully_connected(self.states_hidden, self.item_num, 
-				activation_fn=None)
+				activation_fn=None, 
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			self.demo_actions = tf.placeholder(tf.int32, [None], name='demo_actions')
 			self.samp_actions = tf.placeholder(tf.int32, [None], name='samp_actions')
@@ -205,6 +207,7 @@ def get_samp_data(sess, batch, trainQ):
 	samp_tartget_actions = list(batch['action'].values())
 	samp_target_next_state = list(batch['next_state'].values())
 	samp_target_next_state_len = list(batch['len_next_states'].values())
+	samp_is_done = list(batch['is_done'].values())
 
 	samp_q = sess.run(trainQ.output, feed_dict={trainQ.inputs: samp_state, trainQ.len_state:samp_len_state})
 	samp_actions = np.argmax(samp_q, 1)
@@ -215,26 +218,29 @@ def get_samp_data(sess, batch, trainQ):
 		action, demo_action = samp_actions[i], samp_tartget_actions[i]
 		samp_next_states.append(samp_target_next_state[i] if action == demo_action else samp_state[i])
 		samp_next_states_len.append(samp_target_next_state_len[i] if action == demo_action else samp_len_state[i])
-	return samp_next_states, samp_next_states_len, samp_actions
+	return samp_next_states, samp_next_states_len, samp_actions, samp_is_done
 
 
 def main(args):
 	tf.reset_default_graph()
 	trainQ = SoftQ(args, name='trainQ')
-	if args.target == 'y':
-		targetQ = SoftQ(args, name='targetQ')
-		target_network_update_ops = trfl.update_target_variables(targetQ.get_qnetwork_variables(), 
-			trainQ.get_qnetwork_variables(), tau=args.tau)
+	targetQ = SoftQ(args, name='targetQ')
+	target_network_update_ops = trfl.update_target_variables(targetQ.get_qnetwork_variables(), 
+		trainQ.get_qnetwork_variables(), tau=args.tau)
 
 	replay_buffer = pd.read_pickle(os.path.join(args.base_data_dir, 'replay_buffer.df'))
 	num_rows = replay_buffer.shape[0]
 	num_batches = int(num_rows / args.batch_size)
 	max_ndcg_and_epoch = [[0, 0, 0] for _ in args.topk.split(',')]	# (ng_click, ng_purchase, step)
 	total_step = 0
+	loss_list = []
 
 	with tf.Session() as sess:
 		sess.run(tf.global_variables_initializer())
 		sess.graph.finalize()
+		discount = [args.gamma] * args.batch_size
+		demo_reward = [1.0] * args.batch_size
+		samp_reward = [0.0] * args.batch_size
 		for i_epoch in range(args.epoch):
 			for j in range(num_batches):
 				batch = replay_buffer.sample(n=args.batch_size).to_dict()
@@ -243,29 +249,21 @@ def main(args):
 				next_state = list(batch['next_state'].values())
 				len_next_states = list(batch['len_next_states'].values())
 				demo_actions = list(batch['action'].values())
-				discount = [args.gamma] * len(demo_actions)
-				demo_reward = [1.0] * len(demo_actions)
+				is_done = list(batch['is_done'].values())
 
 				# sample samp_data
 				batch = replay_buffer.sample(n=args.batch_size).to_dict()
-				samp_next_states, samp_next_states_len, samp_actions = get_samp_data(sess, batch, trainQ)
-				samp_reward = [0.0] * len(samp_actions)
+				samp_next_states, samp_next_states_len, samp_actions, samp_is_done = get_samp_data(sess, batch, trainQ)
 
-				if args.target == 'y':
-					demo_target = sess.run(targetQ.output, feed_dict={targetQ.inputs: next_state,
-						targetQ.len_state:len_next_states})
-					samp_target = sess.run(targetQ.output, feed_dict={targetQ.inputs: samp_next_states,
-						targetQ.len_state:samp_next_states_len})
-				else:
-					demo_target = sess.run(trainQ.output, feed_dict={trainQ.inputs: next_state,
-						trainQ.len_state:len_next_states})
-					samp_target = sess.run(trainQ.output, feed_dict={trainQ.inputs: samp_next_states,
-						trainQ.len_state:samp_next_states_len})
+				demo_target = sess.run(targetQ.output, feed_dict={targetQ.inputs: next_state,
+					targetQ.len_state:len_next_states})
+				samp_target = sess.run(targetQ.output, feed_dict={targetQ.inputs: samp_next_states,
+					targetQ.len_state:samp_next_states_len})
 
-				is_done = list(batch['is_done'].values())
-				for index in range(demo_target.shape[0]):
+				for index in range(args.batch_size):
 					if is_done[index]:
 						demo_target[index] = np.zeros([trainQ.item_num])
+					if samp_is_done[index]:
 						samp_target[index] = np.zeros([trainQ.item_num])
 
 				loss, _ = sess.run([trainQ.loss, trainQ.optim],
@@ -278,20 +276,27 @@ def main(args):
 											  trainQ.discount: discount,
 											  trainQ.demo_reward: demo_reward,
 											  trainQ.samp_reward: samp_reward})
-				if args.target == 'y':
-					sess.run(target_network_update_ops)		# update target net
+				sess.run(target_network_update_ops)		# update target net
 				total_step += 1
 				if (total_step == 1) or (total_step % 200 == 0):
 					loss = round(loss.item(), 5)
 					info = f"epoch:{i_epoch} Step:{total_step}, loss:{loss}"
 					print(info)
 					logging.info(info)
+					loss_list.append(loss)
 				if total_step % args.eval_interval == 0:
 					t1 = time.time()
 					evaluate(args, trainQ, sess, max_ndcg_and_epoch, total_step)
 					t2 = time.time()
 					print(f'Time:{t2 - t1}')
 					logging.info(f'Time:{t2 - t1}')
+
+	plt.figure(figsize=(8, 8))
+	plt.title('Loss')
+	plt.xlabel('Step')
+	plt.ylabel('Precision')
+	plt.plot(loss_list)
+	plt.savefig(args.base_pic_dir + args.v + '.png')
 
 
 def init_log(args):
@@ -320,7 +325,6 @@ if __name__ == '__main__':
 	parser.add_argument('--base_data_dir', default=base_data_dir + 'kaggle-RL4REC')
 	parser.add_argument('--show', default='n')
 	parser.add_argument('--mode', default='valid')		# test/valid
-	parser.add_argument('--target', default='y')		# n/y -> target net
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--eval_interval', type=int, default=6000)
 	parser.add_argument('--eval_batch', type=int, default=10)
@@ -332,6 +336,7 @@ if __name__ == '__main__':
 	parser.add_argument('--optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--lr', type=float, default=1e-3)
+	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	# embedding
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
 	parser.add_argument('--i_emb_dim', type=int, default=64)
@@ -344,7 +349,7 @@ if __name__ == '__main__':
 
 	parser.add_argument('--lambda_samp', type=float, default=1.0)
 	parser.add_argument('--tau', type=float, default=0.01)
-	parser.add_argument('--gamma', type=float, default=0.99)
+	parser.add_argument('--gamma', type=float, default=0.6)
 	parser.add_argument('--lammbda_samp', type=float, default=1.0)
 	parser.add_argument('--layer_trick', default='none')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.0)
