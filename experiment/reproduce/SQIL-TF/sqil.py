@@ -114,10 +114,10 @@ def calculate_hit(sorted_list, topk, true_items, rewards, r_click, total_reward,
 					total_reward[i] += rewards[j]
 					if rewards[j] == r_click:
 						hit_click[i] += 1.0
-						ndcg_click[i] += 1.0 / np.log2(rank + 2.0)
+						ndcg_click[i] += 1.0 / np.log2(rank + 2.0).item()
 					else:
 						hit_purchase[i] += 1.0
-						ndcg_purchase[i] += 1.0 / np.log2(rank + 2.0)
+						ndcg_purchase[i] += 1.0 / np.log2(rank + 2.0).item()
 
 
 def evaluate(args, trainQ, sess, max_ndcg_and_epoch, total_step):
@@ -179,7 +179,7 @@ def evaluate(args, trainQ, sess, max_ndcg_and_epoch, total_step):
 		ng_purchase = ndcg_purchase[i] / total_purchase
 
 		hr_click, hr_purchase = round(hr_click, 6), round(hr_purchase, 6)
-		ng_click, ng_purchase = round(ng_click.item(), 6), round(ng_purchase.item(), 6)
+		ng_click, ng_purchase = round(ng_click, 6), round(ng_purchase, 6)
 
 		tup = max_ndcg_and_epoch[i]		# (ng_click, ng_purchase, step)
 		if ng_click > tup[0]:
@@ -353,7 +353,6 @@ if __name__ == '__main__':
 	parser.add_argument('--lambda_samp', type=float, default=1.0)
 	parser.add_argument('--tau', type=float, default=0.01)
 	parser.add_argument('--gamma', type=float, default=0.6)
-	parser.add_argument('--lammbda_samp', type=float, default=1.0)
 	parser.add_argument('--layer_trick', default='none')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.0)
 	args = parser.parse_args()
