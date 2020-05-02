@@ -54,7 +54,9 @@ class SoftQ(object):
 			samp_target = tf.math.log(tf.reduce_sum(tf.exp(self.samp_targetQ), 1))		# (batch)
 
 			demo_current_q = indexing_ops.batched_index(self.output, self.demo_actions)
-			samp_current_q = indexing_ops.batched_index(self.output, self.samp_actions)
+
+			self.samp_output = tf.placeholder(tf.float32, [None, self.item_num], name='samp_output')
+			samp_current_q = indexing_ops.batched_index(self.samp_output, self.samp_actions)
 
 			'''
 			TRFL td_learning: (v_tm1 [B], r_t [B], pcon_t [B], v_t [B])
@@ -218,7 +220,7 @@ def get_samp_data(sess, batch, trainQ):
 		action, demo_action = samp_actions[i], samp_tartget_actions[i]
 		samp_next_states.append(samp_target_next_state[i] if action == demo_action else samp_state[i])
 		samp_next_states_len.append(samp_target_next_state_len[i] if action == demo_action else samp_len_state[i])
-	return samp_next_states, samp_next_states_len, samp_actions, samp_is_done
+	return samp_q, samp_next_states, samp_next_states_len, samp_actions, samp_is_done
 
 
 def main(args):
@@ -253,7 +255,7 @@ def main(args):
 
 				# sample samp_data
 				batch = replay_buffer.sample(n=args.batch_size).to_dict()
-				samp_next_states, samp_next_states_len, samp_actions, samp_is_done = get_samp_data(sess, batch, trainQ)
+				samp_q, samp_next_states, samp_next_states_len, samp_actions, samp_is_done = get_samp_data(sess, batch, trainQ)
 
 				demo_target = sess.run(targetQ.output, feed_dict={targetQ.inputs: next_state,
 					targetQ.len_state:len_next_states})
@@ -269,6 +271,7 @@ def main(args):
 				loss, _ = sess.run([trainQ.loss, trainQ.optim],
 								   feed_dict={trainQ.inputs: state,
 											  trainQ.len_state: len_state,
+											  trainQ.samp_output: samp_q,
 											  trainQ.demo_actions: demo_actions,
 											  trainQ.samp_actions: samp_actions,
 											  trainQ.demo_targetQ: demo_target,
