@@ -178,6 +178,7 @@ if __name__ == '__main__':
 	reward_click = args.r_click
 	reward_buy = args.r_buy
 	topk=[5,10,15,20]
+	max_ndcg_and_epoch = [[0, 0, 0] for _ in args.topk.split(',')]	# (ng_click, ng_purchase, step)
 	# save_file = 'pretrain-GRU/%d' % (hidden_size)
 
 	tf.reset_default_graph()
@@ -214,5 +215,4 @@ if __name__ == '__main__':
 					t2 = time.time()
 					print(f'Time:{t2 - t1}')
 					logging.info(f'Time:{t2 - t1}')
-					break
 		# saver.save(sess, save_file)

@@ -149,8 +149,12 @@ class SoftQ(nn.Module):
 		# 需要 requires_grad=True 吗？
 		h0 = torch.zeros(self.seq_layer_num, x.size(0), self.hidden_size, device=self.device)
 
-		out, _ = self.gru(x, h0)  	# out: tensor of shape (batch_size, seq_length, hidden_size)
-		out = out[:, -1, :]			# 最后时刻的 seq 作为输出
+		out, state = self.gru(x, h0)  	# out: tensor of shape (batch_size, seq_length, hidden_size)
+		if self.args.state == 'last':
+			out = out[:, -1, :]			# 最后时刻的 seq 作为输出
+		else:
+			out = state.squeeze()
+
 		if self.args.layer_trick != 'none':
 			out = self.ln(out)
 		out = self.fc(out)
@@ -410,14 +414,15 @@ if __name__ == '__main__':
 	parser.add_argument('--show', default='n')
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--target', default='n')		# n/y -> target net
+	parser.add_argument('--state', default='last')
 	parser.add_argument('--seed', type=int, default=1)
 
 	parser.add_argument('--load', default='n')			# 是否加载模型
 	parser.add_argument('--save', default='n')
 	parser.add_argument('--load_version', default='v')
 	parser.add_argument('--load_epoch', default='final')
-	parser.add_argument('--start_save', type=int, default=0)
-	parser.add_argument('--save_interval', type=int, default=10)
+	parser.add_argument('--start_save', type=int, default=99999)
+	parser.add_argument('--save_interval', type=int, default=100)
 	parser.add_argument('--start_eval', type=int, default=0)
 	parser.add_argument('--eval_interval', type=int, default=10)
 
