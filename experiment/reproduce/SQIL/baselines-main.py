@@ -270,11 +270,10 @@ if __name__ == '__main__':
 	parser.add_argument('--shuffle', default='y')
 	parser.add_argument('--show', default='n')
 	parser.add_argument('--mode', default='valid')		# test/valid
-	parser.add_argument('--target', default='n')		# n/y -> target net
 	parser.add_argument('--seed', type=int, default=1)
 
 	parser.add_argument('--load', default='n')			# 是否加载模型
-	parser.add_argument('--save', default='y')
+	parser.add_argument('--save', default='n')
 	parser.add_argument('--load_version', default='v')
 	parser.add_argument('--load_epoch', default='final')
 	parser.add_argument('--start_save', type=int, default=0)
@@ -289,12 +288,12 @@ if __name__ == '__main__':
 	parser.add_argument('--optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
-	parser.add_argument('--lr', type=float, default=1e-4)
+	parser.add_argument('--lr', type=float, default=1e-3)
 	parser.add_argument('--lr_decay', type=float, default=0.5)
 	# embedding
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
-	parser.add_argument('--m_emb_dim', type=int, default=128)
-	parser.add_argument('--seq_hidden_size', type=int, default=128)
+	parser.add_argument('--m_emb_dim', type=int, default=64)
+	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--seq_layer_num', type=int, default=1)
 	parser.add_argument('--action_method', default='argmax')	# argmax/sample
 	parser.add_argument('--layer_trick', default='none')			# ln/bn/none

@@ -220,6 +220,7 @@ class Run(object):
 
 	def fill_replay(self, data):
 		# 收集训练数据
+		self.eval()
 		for state, next_state, action, done in zip(data[0].tolist(), data[1].tolist(), data[2].tolist(), data[3].tolist()):
 			state = torch.tensor(state, dtype=torch.float32, device=self.device).view(-1, 1)
 			next_state = torch.tensor(next_state, dtype=torch.float32, device=self.device).view(-1, 1)
@@ -433,7 +434,7 @@ if __name__ == '__main__':
 	parser.add_argument('--optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
-	parser.add_argument('--lr', type=float, default=1e-4)
+	parser.add_argument('--lr', type=float, default=1e-3)
 	parser.add_argument('--lr_decay', type=float, default=0.5)
 	# embedding
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
