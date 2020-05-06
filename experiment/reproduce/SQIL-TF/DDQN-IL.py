@@ -349,7 +349,7 @@ if __name__ == '__main__':
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--seq_layer_num', type=int, default=1)
 
-	parser.add_argument('--tau', type=float, default=0.01)
+	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.6)
 	parser.add_argument('--layer_trick', default='none')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.0)

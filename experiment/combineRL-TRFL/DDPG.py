@@ -156,8 +156,9 @@ class Run(object):
 
 					total_step += 1
 					if (total_step == 1) or (total_step % 200 == 0):
+						aver_reward = round(np.array(rewards).mean().item(), 5)
 						ranking_model_loss, actor_loss, critic_loss = round(ranking_model_loss.item(), 5), round(actor_loss.item(), 5), round(critic_loss.item(), 5)
-						info = f"epoch:{i_epoch} Step:{total_step}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
+						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
 						logging.info(info)
 					if total_step % args.eval_interval == 0:
@@ -206,14 +207,12 @@ if __name__ == '__main__':
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--eval_interval', type=int, default=6000)
 	parser.add_argument('--eval_batch', type=int, default=10)
-
 	parser.add_argument('--epoch', type=int, default=100)
-	parser.add_argument('--topk', default='5,10,20')
 	parser.add_argument('--batch_size', type=int, default=256)
+	parser.add_argument('--topk', default='5,10,20')
 
 	parser.add_argument('--optim', default='adam')
 	parser.add_argument('--momentum', type=float, default=0.8)
-	parser.add_argument('--lr', type=float, default=1e-3)
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	# embedding
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
