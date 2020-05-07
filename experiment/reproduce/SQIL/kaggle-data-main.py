@@ -184,7 +184,7 @@ class Run(object):
 		self.optim = None
 		if args.optim == 'sgd':
 			self.optim = torch.optim.SGD(self.q.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-		elif args.optim == 'rmsprop':
+		elif args.optim == 'rms':
 			self.optim = torch.optim.RMSprop(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 		else:
 			self.optim = torch.optim.Adam(self.q.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -195,6 +195,7 @@ class Run(object):
 		self.EPS = 1e-10
 		self.build_data_loder()
 		self.samp_replay = deque(maxlen=args.maxlen)
+		self.mse = nn.MSELoss()
 
 
 	def build_data_loder(self):
@@ -209,7 +210,7 @@ class Run(object):
 		dataset = Data.TensorDataset(state_list, next_state_list, action_list, done_list)
 		shuffle = True if self.args.shuffle == 'y' else False
 		print('shuffle train data...{}'.format(shuffle))
-		self.data_loader = Data.DataLoader(dataset=dataset, batch_size=self.args.batch_size, shuffle=shuffle)
+		self.data_loader = Data.DataLoader(dataset=dataset, batch_size=self.args.batch_size, shuffle=shuffle, num_workers=self.args.worker)
 
 
 	def fill_expert_replay(self, state_list, next_state_list, action_list, done_list):
@@ -313,8 +314,11 @@ class Run(object):
 		action = action.view(-1, 1)		# (batch, 1), dtype=int64
 		current_q_values = torch.gather(current_q_values, 1, action).squeeze()		# (batch)
 		exp_next_q_values = torch.sum(torch.exp(next_q_values), dim=-1)				# (batch)
-		error = (current_q_values - (reward + (1 - done) * self.args.gamma * torch.log(exp_next_q_values + self.EPS)))**2
-		error = error.mean()
+
+		# error = (current_q_values - (reward + (1 - done) * self.args.gamma * torch.log(exp_next_q_values + self.EPS)))**2
+		# error = error.mean()
+		target = (reward + (1 - done) * self.args.gamma * torch.log(exp_next_q_values + self.EPS))
+		error = self.mse(current_q_values, target)
 		return error
 
 
@@ -416,7 +420,8 @@ if __name__ == '__main__':
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--target', default='n')		# n/y -> target net
 	parser.add_argument('--state', default='last')
-	parser.add_argument('--seed', type=int, default=1)
+	parser.add_argument('--seed', type=int, default=31)
+	parser.add_argument('--worker', type=int, default=1)
 
 	parser.add_argument('--load', default='n')			# 是否加载模型
 	parser.add_argument('--save', default='n')
@@ -425,7 +430,7 @@ if __name__ == '__main__':
 	parser.add_argument('--start_save', type=int, default=99999)
 	parser.add_argument('--save_interval', type=int, default=100)
 	parser.add_argument('--start_eval', type=int, default=0)
-	parser.add_argument('--eval_interval', type=int, default=10)
+	parser.add_argument('--eval_interval', type=int, default=1)
 
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--topk', type=int, default=10)
@@ -442,18 +447,17 @@ if __name__ == '__main__':
 	# Soft Q
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--seq_layer_num', type=int, default=1)
-	parser.add_argument('--tau', type=float, default=0.01)
+	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.99)
 	parser.add_argument('--lammbda_samp', type=float, default=1.0)
 	parser.add_argument('--action_method', default='argmax')	# argmax/sample
 	parser.add_argument('--maxlen', type=int, default=80000)
-	parser.add_argument('--layer_trick', default='none')			# ln/bn/none
+	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.0)
 
 	args = parser.parse_args()
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-	
-	# 保持可复现
+
 	random.seed(args.seed)
 	np.random.seed(args.seed)
 	torch.manual_seed(args.seed)
