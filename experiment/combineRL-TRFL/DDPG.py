@@ -40,6 +40,8 @@ class DDPG(object):
 				dtype = tf.float32,
 				sequence_length = self.len_state,
 			)
+			if args.layer_trick == 'ln':
+				self.states_hidden = tf.contrib.layers.layer_norm(self.states_hidden)
 
 			self.actor_output = tf.contrib.layers.fully_connected(self.states_hidden, args.action_size, 
 				activation_fn=tf.nn.tanh, 
@@ -81,6 +83,9 @@ class Run(object):
 		self.target_agent = target_agent
 		self.target_network_update_ops = trfl.update_target_variables(target_agent.get_qnetwork_variables(), 
 			main_agent.get_qnetwork_variables(), tau=args.tau)
+		self.copy_weight = trfl.update_target_variables(target_agent.get_qnetwork_variables(), 
+			main_agent.get_qnetwork_variables(), tau=1.0)
+
 		self.ranking_model = ranking_model
 		self.topk = [int(x) for x in args.topk.split(',')]
 		self.replay_buffer = pd.read_pickle(os.path.join(args.base_data_dir, 'replay_buffer.df'))
@@ -119,6 +124,7 @@ class Run(object):
 		with tf.Session() as sess:
 			sess.run(tf.global_variables_initializer())
 			sess.graph.finalize()
+			sess.run(self.copy_weight)		# copy weights
 			discount = [args.gamma] * args.batch_size
 			for i_epoch in range(args.epoch):
 				for j in range(num_batches):

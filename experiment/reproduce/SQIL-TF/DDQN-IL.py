@@ -38,6 +38,9 @@ class DQN(object):
 				dtype = tf.float32,
 				sequence_length = self.len_state,
 			)
+			if args.layer_trick == 'ln':
+				self.states_hidden = tf.contrib.layers.layer_norm(self.states_hidden)
+
 			# self.output = tf.layers.Dense(self.states_hidden, self.item_num)
 			self.output = tf.contrib.layers.fully_connected(self.states_hidden, self.item_num, 
 				activation_fn=None, 
@@ -219,6 +222,8 @@ def main(args):
 	targetQ = DQN(args, name='targetQ')
 	target_network_update_ops = trfl.update_target_variables(targetQ.get_qnetwork_variables(), 
 		trainQ.get_qnetwork_variables(), tau=args.tau)
+	copy_weight = trfl.update_target_variables(targetQ.get_qnetwork_variables(), 
+		trainQ.get_qnetwork_variables(), tau=1.0)
 
 	replay_buffer = pd.read_pickle(os.path.join(args.base_data_dir, 'replay_buffer.df'))
 	num_rows = replay_buffer.shape[0]
@@ -230,6 +235,7 @@ def main(args):
 	with tf.Session() as sess:
 		sess.run(tf.global_variables_initializer())
 		sess.graph.finalize()
+		sess.run(copy_weight)		# copy weights
 		discount = [args.gamma] * args.batch_size
 		demo_reward = [1.0] * args.batch_size
 		samp_reward = [0.0] * args.batch_size

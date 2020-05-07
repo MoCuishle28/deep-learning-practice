@@ -38,6 +38,9 @@ class SoftQ(object):
 				dtype = tf.float32,
 				sequence_length = self.len_state,
 			)
+			if args.layer_trick == 'ln':
+				self.states_hidden = tf.contrib.layers.layer_norm(self.states_hidden)
+
 			# self.output = tf.layers.Dense(self.states_hidden, self.item_num)
 			self.output = tf.contrib.layers.fully_connected(self.states_hidden, self.item_num, 
 				activation_fn=None, 
@@ -232,7 +235,6 @@ def main(args):
 	copy_weight = trfl.update_target_variables(targetQ.get_qnetwork_variables(), 
 		trainQ.get_qnetwork_variables(), tau=1.0)
 
-
 	replay_buffer = pd.read_pickle(os.path.join(args.base_data_dir, 'replay_buffer.df'))
 	num_rows = replay_buffer.shape[0]
 	num_batches = int(num_rows / args.batch_size)
@@ -357,7 +359,7 @@ if __name__ == '__main__':
 	parser.add_argument('--lambda_samp', type=float, default=1.0)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.6)
-	parser.add_argument('--layer_trick', default='none')			# ln/bn/none
+	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.0)
 	args = parser.parse_args()
 
