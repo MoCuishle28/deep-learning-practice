@@ -210,7 +210,7 @@ class Run(object):
 		dataset = Data.TensorDataset(state_list, next_state_list, action_list, done_list)
 		shuffle = True if self.args.shuffle == 'y' else False
 		print('shuffle train data...{}'.format(shuffle))
-		self.data_loader = Data.DataLoader(dataset=dataset, batch_size=self.args.batch_size, shuffle=shuffle, num_workers=self.args.worker)
+		self.data_loader = Data.DataLoader(dataset=dataset, batch_size=self.args.batch_size, shuffle=shuffle)
 
 
 	def fill_expert_replay(self, state_list, next_state_list, action_list, done_list):
