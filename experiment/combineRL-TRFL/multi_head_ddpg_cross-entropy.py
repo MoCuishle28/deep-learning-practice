@@ -143,7 +143,8 @@ class Run(object):
 					state, len_state, next_state, len_next_states, target_items, is_done = self.sample_data()
 					actions = sess.run(self.main_agent.actor_out_, feed_dict={
 						self.main_agent.inputs: state, self.main_agent.len_state: len_state})
-					# TODO add noise
+					# add noise (clip in action's range)
+					actions = (actions + np.random.normal(0, self.args.noise_var, size=args.action_size)).clip(-1, 1)
 
 					logits, ranking_model_loss, _ = sess.run([self.main_agent.logits, 
 						self.main_agent.ranking_model_loss, self.main_agent.model_optim], 
@@ -246,6 +247,7 @@ if __name__ == '__main__':
 	parser.add_argument('--action_size', type=int, default=64)
 	parser.add_argument('--mlr', type=float, default=1e-3)
 
+	parser.add_argument('--noise_var', type=float, default=0.1)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--alr', type=float, default=1e-4)
 	parser.add_argument('--clr', type=float, default=1e-3)
