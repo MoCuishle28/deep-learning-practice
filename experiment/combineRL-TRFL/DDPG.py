@@ -109,7 +109,7 @@ class Run(object):
 		for target_iid, rec_list in zip(target_items, rankings):
 			ndcg = 0.0
 			for i, iid in enumerate(rec_list):
-				if iid == target_items:
+				if iid == target_iid:
 					ndcg = 1.0 / np.log2(i + 2.0).item()
 					break
 			rewards.append(ndcg)
