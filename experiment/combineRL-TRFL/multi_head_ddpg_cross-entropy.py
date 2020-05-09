@@ -67,7 +67,8 @@ class Agent(object):
 			self.actions = tf.placeholder(tf.float32, [None, args.action_size], name='actions')
 			self.target_items = tf.placeholder(tf.int32, [None], name='target_items')
 
-			self.ranking_model_input = tf.concat([self.actions, self.states_hidden], axis=1)
+			# self.ranking_model_input = tf.concat([self.actions, self.states_hidden], axis=1)
+			self.ranking_model_input = self.actions + self.states_hidden
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, 
 				args.max_iid + 1, 
 				activation_fn=None, 
