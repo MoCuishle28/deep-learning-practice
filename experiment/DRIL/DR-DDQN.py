@@ -220,7 +220,6 @@ class Run(object):
 					t2 = time.time()
 					print(f'Time:{t2 - t1}')
 					logging.info(f'Time:{t2 - t1}')
-					break # debug
 
 
 	def train_ensemble(self):
@@ -250,7 +249,6 @@ class Run(object):
 					info = f"[Ensemble] epoch:{i_epoch} Step:{total_step}, loss_0:{loss_0}, loss_1:{loss_1}"
 					print(info)
 					logging.info(info)
-					break # debug
 
 
 def main(args):
