@@ -40,6 +40,7 @@ class Ensemble(object):
 				self.states_hidden = tf.contrib.layers.layer_norm(self.states_hidden)
 
 			# ensemble models
+			# 1
 			self.out0 = tf.contrib.layers.fully_connected(self.states_hidden, self.item_num, 
 				activation_fn=None, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
@@ -48,6 +49,7 @@ class Ensemble(object):
 			self.out0_loss = tf.reduce_mean(self.out0_loss)
 			self.out0_opt = tf.train.AdamOptimizer(self.args.lr).minimize(self.out0_loss)
 
+			# 2
 			self.out1 = tf.contrib.layers.fully_connected(self.states_hidden, self.item_num, 
 				activation_fn=None, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
@@ -56,15 +58,23 @@ class Ensemble(object):
 			self.out1_loss = tf.reduce_mean(self.out1_loss)
 			self.out1_opt = tf.train.AdamOptimizer(self.args.lr).minimize(self.out1_loss)
 
+			# 3
+			self.out2 = tf.contrib.layers.fully_connected(self.states_hidden, self.item_num, 
+				activation_fn=None, 
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			self.out2_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.actions, 
+				logits=self.out2)
+			self.out2_loss = tf.reduce_mean(self.out2_loss)
+			self.out2_opt = tf.train.AdamOptimizer(self.args.lr).minimize(self.out2_loss)
+
 			# get var logits
 			logits_0 = indexing_ops.batched_index(self.out0, self.actions)	# (batch, 1/0 ?)
 			logits_1 = indexing_ops.batched_index(self.out1, self.actions)
-			# logits_0 = tf.reshape(logits_0, shape=(logits_0.shape[0], -1))
-			# logits_1 = tf.reshape(logits_1, shape=(logits_1.shape[0], -1))
-			logits_matrix = tf.stack([logits_0, logits_1], axis=1)		# (batch, ensemble num:2)
+			logits_2 = indexing_ops.batched_index(self.out2, self.actions)
+			logits_matrix = tf.stack([logits_0, logits_1, logits_2], axis=1) # (batch, ensemble num:3)
 			_, self.var_logits = tf.nn.moments(logits_matrix, axes=1)
 			# 在拿到后再计算 rewards
-			# self.var_rewards = [1 if x <= args.q else -1 for x in var_logits.tolist()]
+			# self.var_rewards = [1 if x <= args.q else -1 for x in self.var_logits.tolist()]
 
 	def initialize_embeddings(self):
 		all_embeddings = dict()
@@ -72,7 +82,6 @@ class Ensemble(object):
 			0.0, 0.01), name='item_embeddings')
 		all_embeddings['item_embeddings'] = item_embeddings
 		return all_embeddings
-
 
 
 class DQN(object):
@@ -159,11 +168,11 @@ class Run(object):
 		is_done = list(batch['is_done'].values())
 		return state, len_state, next_state, len_next_states, target_items, is_done
 
-	def get_var_rewards(self, state, len_state, target_items):
+	def get_var_rewards(self, state, len_state, current_actions):
 		var_logits = self.sess.run(self.ensemble.var_logits,
 		   feed_dict={self.ensemble.inputs: state,
 					  self.ensemble.len_state: len_state,
-					  self.ensemble.actions: target_items})
+					  self.ensemble.actions: current_actions})
 		var_rewards = [1 if x <= self.args.q else -1 for x in var_logits.tolist()]
 		return var_rewards
 
@@ -197,11 +206,12 @@ class Run(object):
 					   feed_dict={self.mainQ.inputs: state,
 								  self.mainQ.len_state: len_state,
 								  self.mainQ.actions: target_items})
+
 				rewards = self.get_var_rewards(state, len_state, current_actions)
 				rl_loss, _ = self.sess.run([self.mainQ.rl_loss, self.mainQ.rl_optim],
 								   feed_dict={self.mainQ.inputs: state,
 											  self.mainQ.len_state: len_state,
-											  self.mainQ.actions: target_items,
+											  self.mainQ.actions: current_actions,
 											  self.mainQ.targetQ: target,
 											  self.mainQ.targetQ_selector: targetQ_selector,
 											  self.mainQ.discount: discount,
@@ -210,8 +220,9 @@ class Run(object):
 				self.sess.run(self.target_network_update_ops)		# update target net
 				total_step += 1
 				if (total_step == 1) or (total_step % 200 == 0):
-					rl_loss, bc_loss = round(rl_loss.item(), 5), round(bc_loss.item(), 5)
-					info = f"[Agent] epoch:{i_epoch} Step:{total_step}, BC loss:{bc_loss}, RL loss:{rl_loss}"
+					mean_r = round(np.array(rewards).mean().item(), 3)
+					rl_loss, bc_loss = round(rl_loss.item(), 3), round(bc_loss.item(), 3)
+					info = f"[Agent] epoch:{i_epoch} Step:{total_step}, mean reward:{mean_r}, BC loss:{bc_loss}, RL loss:{rl_loss}"
 					print(info)
 					logging.info(info)
 				if total_step % args.eval_interval == 0:
@@ -238,15 +249,18 @@ class Run(object):
 					   feed_dict={self.ensemble.inputs: state,
 								  self.ensemble.len_state: len_state,
 								  self.ensemble.actions: target_items})
-
 				loss_1, _ = self.sess.run([self.ensemble.out1_loss, self.ensemble.out1_opt],
 					   feed_dict={self.ensemble.inputs: state,
 								  self.ensemble.len_state: len_state,
 								  self.ensemble.actions: target_items})
+				loss_2, _ = self.sess.run([self.ensemble.out2_loss, self.ensemble.out2_opt],
+					   feed_dict={self.ensemble.inputs: state,
+								  self.ensemble.len_state: len_state,
+								  self.ensemble.actions: target_items})
 				total_step += 1
-				if (total_step == 1) or (total_step % 200 == 0):
-					loss_0, loss_1 = round(loss_0.item(), 4), round(loss_1.item(), 4)
-					info = f"[Ensemble] epoch:{i_epoch} Step:{total_step}, loss_0:{loss_0}, loss_1:{loss_1}"
+				if (total_step == 1) or (total_step % 500 == 0):
+					loss_0, loss_1, loss_2 = round(loss_0.item(), 3), round(loss_1.item(), 3), round(loss_2.item(), 3)
+					info = f"[Ensemble] epoch:{i_epoch} Step:{total_step}, loss_0: {loss_0}, loss_1: {loss_1}, loss_2: {loss_2}"
 					print(info)
 					logging.info(info)
 
@@ -301,13 +315,11 @@ if __name__ == '__main__':
 	parser.add_argument('--eval_interval', type=int, default=6000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 
-	parser.add_argument('--e_epoch', type=int, default=100)
+	parser.add_argument('--e_epoch', type=int, default=5)
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--topk', default='5,10,20')
 	parser.add_argument('--batch_size', type=int, default=256)
 
-	parser.add_argument('--optim', default='adam')
-	parser.add_argument('--momentum', type=float, default=0.8)
 	parser.add_argument('--lr', type=float, default=1e-3)
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	# embedding
