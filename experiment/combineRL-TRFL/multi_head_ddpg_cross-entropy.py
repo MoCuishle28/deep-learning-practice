@@ -116,7 +116,7 @@ class Run(object):
 
 	def cal_rewards(self, logits, target_items):
 		logits = torch.tensor(logits)
-		_, rankings = logits.topk(max(self.topk))
+		_, rankings = logits.topk(self.args.reward_top)
 		rankings = rankings.tolist()	# (batch, topk)
 		rewards = []
 		for target_iid, rec_list in zip(target_items, rankings):
@@ -227,7 +227,7 @@ if __name__ == '__main__':
 	parser.add_argument('--show', default='n')
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--seed', type=int, default=1)
-	parser.add_argument('--eval_interval', type=int, default=6000)
+	parser.add_argument('--eval_interval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=256)
@@ -242,6 +242,7 @@ if __name__ == '__main__':
 
 	parser.add_argument('--reward_buy', type=float, default=1.0)
 	parser.add_argument('--reward_click', type=float, default=0.5)
+	parser.add_argument('--reward_top', type=int, default=5)
 
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--seq_layer_num', type=int, default=1)
@@ -252,7 +253,7 @@ if __name__ == '__main__':
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--alr', type=float, default=1e-4)
 	parser.add_argument('--clr', type=float, default=1e-3)
-	parser.add_argument('--gamma', type=float, default=0.99)
+	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=0.0)
 	args = parser.parse_args()

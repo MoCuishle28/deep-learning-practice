@@ -116,7 +116,7 @@ class Run(object):
 
 	def cal_rewards(self, logits, target_items):
 		logits = torch.tensor(logits)
-		_, rankings = logits.topk(max(self.topk))
+		_, rankings = logits.topk(self.args.reward_top)
 		rankings = rankings.tolist()	# (batch, topk)
 		rewards = []
 		for target_iid, rec_list in zip(target_items, rankings):
@@ -228,7 +228,7 @@ if __name__ == '__main__':
 	parser.add_argument('--show', default='n')
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--seed', type=int, default=1)
-	parser.add_argument('--eval_interval', type=int, default=6000)
+	parser.add_argument('--eval_interval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=256)
@@ -243,6 +243,7 @@ if __name__ == '__main__':
 
 	parser.add_argument('--reward_buy', type=float, default=1.0)
 	parser.add_argument('--reward_click', type=float, default=0.5)
+	parser.add_argument('--reward_top', type=int, default=5)		# 取 top 多少计算 reward
 
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--seq_layer_num', type=int, default=1)
