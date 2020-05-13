@@ -247,7 +247,7 @@ if __name__ == '__main__':
 
 	parser.add_argument('--reward_buy', type=float, default=1.0)
 	parser.add_argument('--reward_click', type=float, default=0.5)
-	parser.add_argument('--reward_top', type=int, default=5)		# 取 top 多少计算 reward
+	parser.add_argument('--reward_top', type=int, default=20)		# 取 top 多少计算 reward
 
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--action_size', type=int, default=64)
