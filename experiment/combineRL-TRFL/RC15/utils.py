@@ -74,7 +74,7 @@ def calculate_hit(sorted_list, topk, true_items, rewards, r_click, total_reward,
 						ndcg_purchase[i] += 1.0 / np.log2(rank + 2.0).item()
 
 
-def evaluate(args, agent, ranking_model, sess, max_ndcg_and_epoch, total_step, logging):
+def evaluate(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging):
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	topk = [int(x) for x in args.topk.split(',')]
 	max_topk = max(topk)
@@ -102,8 +102,8 @@ def evaluate(args, agent, ranking_model, sess, max_ndcg_and_epoch, total_step, l
 			history = []
 			for index, row in group.iterrows():
 				state = list(history)
-				len_states.append(agent.hw if len(state) >= agent.hw else 1 if len(state) == 0 else len(state))
-				state = pad_history(state, agent.hw, agent.item_num)
+				len_states.append(ranking_model.hw if len(state) >= ranking_model.hw else 1 if len(state) == 0 else len(state))
+				state = pad_history(state, ranking_model.hw, ranking_model.item_num)
 				states.append(state)
 				target_item = row['item_id']
 				is_buy = row['is_buy']
@@ -117,8 +117,8 @@ def evaluate(args, agent, ranking_model, sess, max_ndcg_and_epoch, total_step, l
 				history.append(row['item_id'])
 			evaluated += 1
 
-		actions = sess.run(agent.actor_out_, feed_dict={agent.inputs: states, agent.len_state: len_states})
-		prediction = sess.run(ranking_model.logits, feed_dict={ranking_model.inputs:actions})
+		prediction = sess.run(ranking_model.output, feed_dict={ranking_model.inputs: states,
+											  ranking_model.is_training: False})
 		prediction = torch.tensor(prediction)
 		_, sorted_list = prediction.topk(max_topk)
 		del prediction
@@ -226,8 +226,8 @@ def evaluate_multi_head(args, agent, sess, max_ndcg_and_epoch, total_step, loggi
 		ng_click = ndcg_clicks[i] / total_clicks
 		ng_purchase = ndcg_purchase[i] / total_purchase
 
-		hr_click, hr_purchase = round(hr_click, 5), round(hr_purchase, 5)
-		ng_click, ng_purchase = round(ng_click, 5), round(ng_purchase, 5)
+		hr_click, hr_purchase = round(hr_click, 4), round(hr_purchase, 4)
+		ng_click, ng_purchase = round(ng_click, 4), round(ng_purchase, 4)
 
 		tup = max_ndcg_and_epoch[i]		# (ng_click, ng_purchase, step)
 		if ng_click > tup[0]:

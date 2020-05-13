@@ -75,6 +75,7 @@ class Agent:
 			# Combine all the pooled features
 			num_filters_total = num_filters * len(filter_sizes)
 			self.h_pool = tf.concat(pooled_outputs, 3)
+			# (batch, 48)
 			self.h_pool_flat = tf.reshape(self.h_pool, [-1, num_filters_total])  # shape=[batch_size, 384]
 			# design the veritcal cnn
 			with tf.name_scope("conv-verical"):
@@ -88,6 +89,7 @@ class Agent:
 					padding="VALID",
 					name="conv")
 				h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+			# (batch, 64)
 			self.vcnn_flat = tf.reshape(h, [-1, self.hidden_size])
 			self.final = tf.concat([self.h_pool_flat, self.vcnn_flat], 1)  # shape=[batch_size, 384+100]
 
