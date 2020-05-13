@@ -157,7 +157,9 @@ def evaluate_multi_head(args, agent, sess, max_ndcg_and_epoch, total_step, loggi
 				history.append(row['item_id'])
 			evaluated += 1
 
-		actions = sess.run(agent.actor_out_, feed_dict={agent.inputs: states, agent.len_state: len_states})
+		actions = sess.run(agent.actor_out_, feed_dict={agent.inputs: states, 
+			agent.len_state: len_states,
+			agent.is_training: False})
 		prediction = sess.run(agent.logits, 
 						feed_dict={
 						agent.inputs: states, 
