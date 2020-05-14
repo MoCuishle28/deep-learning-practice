@@ -59,20 +59,7 @@ class Agent:
 				dilate_output *= mask
 
 			self.state_hidden = extract_axis_1(dilate_output, self.len_state - 1)
-
-			# NextItNet
 			self.action_size = int(self.state_hidden.shape[-1])
-			self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			self.ranking_model_input = self.actions + self.state_hidden
-
-			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
-				activation_fn=None,
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-
-			self.ranking_model_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
-				logits=self.logits)
-			self.ranking_model_loss = tf.reduce_mean(self.ranking_model_loss)
-			self.model_optim = tf.train.AdamOptimizer(args.mlr).minimize(self.ranking_model_loss)
 
 			# ddpg
 			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
@@ -95,6 +82,20 @@ class Agent:
 				self.discount, self.target)
 			self.critic_loss = tf.reduce_mean(self.td_return.loss)
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
+
+			# NextItNet
+			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
+			# self.ranking_model_input = self.actions + self.state_hidden
+			self.ranking_model_input = self.actor_out_ + self.state_hidden
+
+			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
+				activation_fn=None,
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+
+			self.ranking_model_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
+				logits=self.logits)
+			self.ranking_model_loss = tf.reduce_mean(self.ranking_model_loss)
+			self.model_optim = tf.train.AdamOptimizer(args.mlr).minimize(self.ranking_model_loss)
 
 	def initialize_embeddings(self):
 		all_embeddings = dict()
@@ -171,7 +172,7 @@ class Run(object):
 						feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
-						self.main_agent.actions: actions,
+						self.main_agent.actor_out_: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
 					rewards = self.cal_rewards(logits, target_items)

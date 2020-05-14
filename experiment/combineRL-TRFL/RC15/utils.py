@@ -209,7 +209,8 @@ def evaluate_multi_head(args, agent, sess, max_ndcg_and_epoch, total_step, loggi
 						feed_dict={
 						agent.inputs: states, 
 						agent.len_state: len_states,
-						agent.actions: actions})
+						agent.actor_out_: actions,
+						agent.is_training: False})
 
 		prediction = torch.tensor(prediction)
 		_, sorted_list = prediction.topk(max_topk)
