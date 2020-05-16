@@ -14,7 +14,7 @@ import torch
 import matplotlib.pyplot as plt
 
 from utils import *
-from NextItNetModules import *
+from SASRecModules import *
 
 
 class Agent:
@@ -24,44 +24,56 @@ class Agent:
 		self.hw = 10
 		self.hidden_size = args.hidden_factor
 		self.item_num = args.max_iid + 1
-		self.is_training = tf.placeholder(tf.bool, shape=())
 
 		with tf.variable_scope(self.name):
-			self.all_embeddings = self.initialize_embeddings()
+			self.is_training = tf.placeholder(tf.bool, shape=())
+
+			all_embeddings = self.initialize_embeddings()
 
 			self.inputs = tf.placeholder(tf.int32, [None, self.hw],name='inputs')
 			self.len_state = tf.placeholder(tf.int32, [None],name='len_state')
+			self.target_items = tf.placeholder(tf.int32, [None], name='target_items')
+
 			self.discount = tf.placeholder(tf.float32, [None] , name="discount")
 			self.reward = tf.placeholder(tf.float32, [None], name='reward')
 			self.target = tf.placeholder(tf.float32, [None],name='target')
 
-			# ranking model
-			self.target_items = tf.placeholder(tf.int32, [None], name='target_items')
+			self.input_emb = tf.nn.embedding_lookup(all_embeddings['state_embeddings'],self.inputs)
+			# Positional Encoding
+			pos_emb = tf.nn.embedding_lookup(all_embeddings['pos_embeddings'],tf.tile(tf.expand_dims(tf.range(tf.shape(self.inputs)[1]), 0), [tf.shape(self.inputs)[0], 1]))
+			self.seq = self.input_emb+pos_emb
 
 			mask = tf.expand_dims(tf.to_float(tf.not_equal(self.inputs, self.item_num)), -1)
+			#Dropout
+			self.seq = tf.layers.dropout(self.seq,
+										 rate=args.dropout_rate,
+										 training=tf.convert_to_tensor(self.is_training))
+			self.seq *= mask
 
-			# self.input_emb=tf.nn.embedding_lookup(all_embeddings['state_embeddings'],self.inputs)
-			self.model_para = {
-				'dilated_channels': 64,  # larger is better until 512 or 1024
-				'dilations': [1, 2, 1, 2, 1, 2, ],  # YOU should tune this hyper-parameter, refer to the paper.
-				'kernel_size': 3,
-			}
+			# Build blocks
+			for i in range(args.num_blocks):
+				with tf.variable_scope("num_blocks_%d" % i):
+					# Self-attention
+					self.seq = multihead_attention(queries=normalize(self.seq),
+												   keys=self.seq,
+												   num_units=self.hidden_size,
+												   num_heads=args.num_heads,
+												   dropout_rate=args.dropout_rate,
+												   is_training=self.is_training,
+												   causality=True,
+												   scope="self_attention")
 
-			context_embedding = tf.nn.embedding_lookup(self.all_embeddings['state_embeddings'],
-													   self.inputs)
-			context_embedding *= mask
+					# Feed forward
+					self.seq = feedforward(normalize(self.seq), num_units=[self.hidden_size, self.hidden_size],
+										   dropout_rate=args.dropout_rate,
+										   is_training=self.is_training)
+					self.seq *= mask
 
-			dilate_output = context_embedding
-			for layer_id, dilation in enumerate(self.model_para['dilations']):
-				dilate_output = nextitnet_residual_block(dilate_output, dilation,
-														layer_id, self.model_para['dilated_channels'],
-														self.model_para['kernel_size'], causal=True, train=self.is_training)
-				dilate_output *= mask
-
-			self.state_hidden = extract_axis_1(dilate_output, self.len_state - 1)
+			self.seq = normalize(self.seq)
+			self.state_hidden = extract_axis_1(self.seq, self.len_state - 1)
 			self.action_size = int(self.state_hidden.shape[-1])
 
-			# ddpg
+			# DDPG
 			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
 					activation_fn=tf.nn.tanh, 
 					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
@@ -83,25 +95,25 @@ class Agent:
 			self.critic_loss = tf.reduce_mean(self.td_return.loss)
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
-			# NextItNet
-			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			# self.ranking_model_input = self.actions + self.state_hidden
+			# SASRec
 			self.ranking_model_input = self.actor_out_ + self.state_hidden
-
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
-				activation_fn=None,
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+				activation_fn=None)
 
 			self.ranking_model_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
 				logits=self.logits)
 			self.ranking_model_loss = tf.reduce_mean(self.ranking_model_loss)
 			self.model_optim = tf.train.AdamOptimizer(args.mlr).minimize(self.ranking_model_loss)
 
+
 	def initialize_embeddings(self):
 		all_embeddings = dict()
 		state_embeddings= tf.Variable(tf.random_normal([self.item_num+1, self.hidden_size], 0.0, 0.01),
 			name='state_embeddings')
+		pos_embeddings=tf.Variable(tf.random_normal([self.hw, self.hidden_size], 0.0, 0.01),
+			name='pos_embeddings')
 		all_embeddings['state_embeddings']=state_embeddings
+		all_embeddings['pos_embeddings']=pos_embeddings
 		return all_embeddings
 
 	def get_qnetwork_variables(self):
@@ -173,7 +185,6 @@ class Run(object):
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.actor_out_: actions,
-						# self.main_agent.actions: actions,		# debug
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
 					rewards = self.cal_rewards(logits, target_items)
@@ -211,8 +222,6 @@ class Run(object):
 						logging.info(info)
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
-						# debug
-						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
@@ -230,17 +239,17 @@ def main(args):
 
 def parse_args():
 	base_data_dir = '../../data/'
-	parser = argparse.ArgumentParser(description="NextItNet DDPG")
+	parser = argparse.ArgumentParser(description="SASRec DDPG.")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_pic_dir', default="pic/")
-	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC15')
+	parser.add_argument('--base_data_dir', default=base_data_dir + 'kaggle-RL4REC')
 	parser.add_argument('--topk', default='5,10,20')
 
 	parser.add_argument('--epoch', type=int, default=30)
-	parser.add_argument('--eval_interval', type=int, default=2000)
+	parser.add_argument('--eval_interval', type=int, default=1000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--mlr', type=float, default=1e-3)
@@ -251,18 +260,20 @@ def parse_args():
 	parser.add_argument('--reward_click', type=float, default=0.5)
 	parser.add_argument('--reward_top', type=int, default=20)
 
-	parser.add_argument('--max_iid', type=int, default=26702)	# 0~26702
-
+	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
 	parser.add_argument('--hidden_factor', type=int, default=64)
 
-	parser.add_argument('--dropout_rate', default=0.5, type=float)
+	parser.add_argument('--num_heads', default=1, type=int)
+	parser.add_argument('--num_blocks', default=1, type=int)
+
+	parser.add_argument('--dropout_rate', default=0.1, type=float)
 	parser.add_argument('--weight_decay', default=1e-4, type=float)
 
 	parser.add_argument('--noise_var', type=float, default=0.1)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
-
 	return parser.parse_args()
+
 
 def init_log(args):
 	if not os.path.exists(args.base_log_dir):
