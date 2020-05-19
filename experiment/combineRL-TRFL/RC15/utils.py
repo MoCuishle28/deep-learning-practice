@@ -74,7 +74,7 @@ def calculate_hit(sorted_list, topk, true_items, rewards, r_click, total_reward,
 						ndcg_purchase[i] += 1.0 / np.log2(rank + 2.0).item()
 
 
-def evaluate(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging):
+def evaluate(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging, pre_train=False):
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	topk = [int(x) for x in args.topk.split(',')]
 	max_topk = max(topk)
@@ -116,9 +116,17 @@ def evaluate(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging)
 				rewards.append(reward)
 				history.append(row['item_id'])
 			evaluated += 1
+		if pre_train:
+			actions = [[0] * ranking_model.action_size] * len(states)
+			prediction = sess.run(ranking_model.logits, feed_dict={ranking_model.inputs: states,
+				ranking_model.len_state: len_states, 
+				ranking_model.is_training: False, 
+				ranking_model.actions: actions})
+		else:
+			prediction = sess.run(ranking_model.output, feed_dict={ranking_model.inputs: states, 
+				ranking_model.len_state: len_states, 
+				ranking_model.is_training: False})
 
-		prediction = sess.run(ranking_model.output, feed_dict={ranking_model.inputs: states,
-											  ranking_model.is_training: False})
 		prediction = torch.tensor(prediction)
 		_, sorted_list = prediction.topk(max_topk)
 		del prediction
