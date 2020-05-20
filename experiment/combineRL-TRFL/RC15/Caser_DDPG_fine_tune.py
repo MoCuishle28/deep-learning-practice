@@ -204,9 +204,10 @@ class Run(object):
 				# add noise (clip in action's range)
 				actions = (actions + np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size)).clip(-1, 1)
 
-				logits, ranking_model_loss = self.sess.run([ 
+				logits, ranking_model_loss, _ = self.sess.run([ 
 					self.main_agent.logits, 
-					self.main_agent.ranking_model_loss], 
+					self.main_agent.ranking_model_loss,
+					self.main_agent.model_optim], 
 					feed_dict={
 					self.main_agent.inputs: state, 
 					self.main_agent.len_state: len_state,
