@@ -257,7 +257,7 @@ def parse_args():
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--mlr', type=float, default=5e-3)
-	parser.add_argument('--alr', type=float, default=1e-4)
+	parser.add_argument('--alr', type=float, default=1e-3)
 	parser.add_argument('--clr', type=float, default=1e-3)
 
 	parser.add_argument('--reward_buy', type=float, default=1.0)
