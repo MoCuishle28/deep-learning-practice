@@ -49,41 +49,48 @@ base_data_dir = '../../data/kaggle-RL4REC/'
 # print(type(replay_buffer))	# <class 'pandas.core.frame.DataFrame'>
 # print(replay_buffer.shape)	# (988719, 7)
 
-# i = 0
-# state_list, next_state_list, action_list = [], [], []
-# for idx, row in replay_buffer.iterrows():
-# 	if row['len_state'] == 1:
-# 		continue
-# 	i += 1
-# 	state_list.append(row['state'])
-# 	next_state_list.append(row['next_state'])
-# 	action_list.append(row['action'])
+replay_buffer = pd.read_pickle(base_data_dir + 'replay_buffer.df')
+i = 0
+state_list, next_state_list, action_list, done_list = [], [], [], []
+for idx, row in replay_buffer.iterrows():
+	if row['len_state'] == 1 and row['state'][0] == 70852:
+		if sum(row['state']) != 708520:
+			print(row)
+			assert 0 > 1
+		continue
+	i += 1
+	state_list.append(row['state'])
+	next_state_list.append(row['next_state'])
+	action_list.append(row['action'])
+	done_list.append(row['is_done'])
 
-# state_list, next_state_list, action_list = np.array(state_list), np.array(next_state_list), np.array(action_list)
-# print(state_list.shape)	# (680109, 10)
-# print(i)	# 680109
+state_list, next_state_list, action_list, done_list = np.array(state_list), np.array(next_state_list), np.array(action_list), np.array(done_list)
+# (832300, 10), (832300, 10), (832300), (832300)
+print(state_list.shape, next_state_list.shape, action_list.shape, done_list.shape)
+print(i)	# 832300
 
 # np.save(base_data_dir + 'state.npy', state_list)
 # np.save(base_data_dir + 'next_state.npy', next_state_list)
 # np.save(base_data_dir + 'action.npy', action_list)
+# np.save(base_data_dir + 'done.npy', done_list)
 
-# state = np.load(base_data_dir + 'state.npy')
-# print(state.shape, state.dtype)
-# print(state)
+state = np.load(base_data_dir + 'state.npy')
+print(state.shape, state.dtype)
+print(state)
 
-eval_sessions = pd.read_pickle(base_data_dir + 'sampled_val.df')
-print(eval_sessions)
-'''
- 				timestamp  session_id  item_id  is_buy
-1361687  	1442004589439           0    43511       0
-'''
+# eval_sessions = pd.read_pickle(base_data_dir + 'sampled_val.df')
+# print(eval_sessions)
+# '''
+#  				timestamp  session_id  item_id  is_buy
+# 1361687  	1442004589439           0    43511       0
+# '''
 
-eval_ids = eval_sessions.session_id.unique()
-print(eval_ids)		# [所有 sess id]
-groups = eval_sessions.groupby('session_id')
-for sid in eval_ids:
-	group = groups.get_group(sid)
-	history = []
-	for index, row in group.iterrows():
-		state = list(history)
-		state = pad_history(state, 10, 70852)
+# eval_ids = eval_sessions.session_id.unique()
+# print(eval_ids)		# [所有 sess id]
+# groups = eval_sessions.groupby('session_id')
+# for sid in eval_ids:
+# 	group = groups.get_group(sid)
+# 	history = []
+# 	for index, row in group.iterrows():
+# 		state = list(history)
+# 		state = pad_history(state, 10, 70852)

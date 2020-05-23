@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 
 from utils import *
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
 
 class Agent:
 	def __init__(self, args, name='Agent', dqda_clipping=None, clip_norm=False, max_action=1.0):
@@ -106,7 +108,8 @@ class Agent:
 			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
 					activation_fn=tf.nn.tanh, 
 					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			self.actor_out_ = self.actor_output * max_action
+			self.actor_out_ = tf.nn.softmax(self.actor_output * max_action)	# add softmax
+			# self.actor_out_ = self.actor_output * max_action
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
 			self.critic_output = tf.contrib.layers.fully_connected(self.critic_input, 1, 
@@ -126,8 +129,8 @@ class Agent:
 
 			# caser
 			self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			self.ranking_model_input = self.actions + self.state_hidden
-			# self.ranking_model_input = self.actor_out_ + self.state_hidden
+			self.ranking_model_input = self.actions * self.state_hidden
+			# self.ranking_model_input = tf.nn.softmax(self.actor_out_) * self.state_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,
@@ -206,11 +209,12 @@ class Run(object):
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
-					# add noise (clip in action's range)
-					actions = (actions + np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size)).clip(-1, 1)
+					
+					# add noise
+					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
+					actions = (actions + noise).clip(-1, 1)
 
-					logits, ranking_model_loss, _ = sess.run([ 
-						self.main_agent.logits, 
+					ranking_model_loss, _ = sess.run([
 						self.main_agent.ranking_model_loss, 
 						self.main_agent.model_optim], 
 						feed_dict={
@@ -220,6 +224,15 @@ class Run(object):
 						self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
+
+					# target logits
+					logits = sess.run(self.target_agent.logits,
+						feed_dict={
+						self.target_agent.inputs: state, 
+						self.target_agent.len_state: len_state,
+						# self.target_agent.actor_out_: actions,
+						self.target_agent.actions: actions,
+						self.target_agent.is_training: False})
 					rewards = self.cal_rewards(logits, target_items)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
@@ -256,6 +269,7 @@ class Run(object):
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
 						# change
+						# evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
@@ -286,7 +300,7 @@ def parse_args():
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--mlr', type=float, default=1e-3)
-	parser.add_argument('--alr', type=float, default=1e-4)
+	parser.add_argument('--alr', type=float, default=1e-3)
 	parser.add_argument('--clr', type=float, default=1e-3)
 
 	parser.add_argument('--reward_buy', type=float, default=1.0)
@@ -305,6 +319,7 @@ def parse_args():
 	parser.add_argument('--weight_decay', default=1e-4, type=float)
 
 	parser.add_argument('--noise_var', type=float, default=0.1)
+	parser.add_argument('--noise_clip', type=float, default=0.5)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--mem_ratio', type=float, default=0.2)

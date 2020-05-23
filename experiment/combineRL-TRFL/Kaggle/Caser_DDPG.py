@@ -193,7 +193,8 @@ class Run(object):
 		max_ndcg_and_epoch = [[0, 0, 0] for _ in self.args.topk.split(',')]	# (ng_click, ng_purchase, step)
 		total_step = 0
 
-		with tf.Session() as sess:
+		gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.args.mem_ratio)
+		with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 			sess.run(tf.global_variables_initializer())
 			sess.graph.finalize()
 			sess.run(self.copy_weight)		# copy weights
@@ -208,8 +209,7 @@ class Run(object):
 					# add noise (clip in action's range)
 					actions = (actions + np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size)).clip(-1, 1)
 
-					logits, ranking_model_loss, _ = sess.run([ 
-						self.main_agent.logits, 
+					ranking_model_loss, _ = sess.run([
 						self.main_agent.ranking_model_loss, 
 						self.main_agent.model_optim], 
 						feed_dict={
@@ -219,6 +219,15 @@ class Run(object):
 						self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
+
+					# target logits
+					logits = sess.run(self.target_agent.logits,
+						feed_dict={
+						self.target_agent.inputs: state, 
+						self.target_agent.len_state: len_state,
+						# self.target_agent.actor_out_: actions,
+						self.target_agent.actions: actions,
+						self.target_agent.is_training: False})
 					rewards = self.cal_rewards(logits, target_items)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
@@ -306,6 +315,7 @@ def parse_args():
 	parser.add_argument('--noise_var', type=float, default=0.1)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
+	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	return parser.parse_args()
 
 def init_log(args):

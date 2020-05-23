@@ -23,6 +23,7 @@ class Agent:
 		self.hw = 10
 		self.hidden_size = args.hidden_factor
 		self.item_num = args.max_iid + 1
+		l2_regularizer = tf.contrib.layers.l2_regularizer(args.weight_decay)
 		with tf.variable_scope(self.name):
 			self.is_training = tf.placeholder(tf.bool, shape=())
 			all_embeddings = self.initialize_embeddings()
@@ -105,23 +106,35 @@ class Agent:
 			# ddpg
 			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
 					activation_fn=tf.nn.tanh, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+					weights_regularizer=l2_regularizer)
 			self.actor_out_ = self.actor_output * max_action
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
-			self.critic_output = tf.contrib.layers.fully_connected(self.critic_input, 1, 
+			self.q1 = tf.contrib.layers.fully_connected(self.critic_input, 1, 
 				activation_fn=None, 
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+				weights_regularizer=l2_regularizer)
+			self.q2 = tf.contrib.layers.fully_connected(self.critic_input, 1, 
+				activation_fn=None, 
+				weights_regularizer=l2_regularizer)
+			self.critic_output = tf.minimum(self.q1, self.q2)
 
-			self.dpg_return = trfl.dpg(self.critic_output, self.actor_out_, 
+			# policy max q1
+			self.dpg_return = trfl.dpg(self.q1, self.actor_out_, 
 				dqda_clipping=dqda_clipping, clip_norm=clip_norm)
 
 			self.actor_loss = tf.reduce_mean(self.dpg_return.loss)
 			self.actor_optim = tf.train.AdamOptimizer(args.alr).minimize(self.actor_loss)
 
-			self.td_return = trfl.td_learning(tf.squeeze(self.critic_output), self.reward, 
+			# q1
+			q1_td_return = trfl.td_learning(tf.squeeze(self.q1), self.reward, 
 				self.discount, self.target)
-			self.critic_loss = tf.reduce_mean(self.td_return.loss)
+			self.q1_loss = tf.reduce_mean(q1_td_return.loss)
+			# q2
+			q2_td_return = trfl.td_learning(tf.squeeze(self.q2), self.reward, 
+				self.discount, self.target)
+			self.q2_loss = tf.reduce_mean(q2_td_return.loss)
+			# critic loss
+			self.critic_loss = self.q1_loss + self.q2_loss
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
 			# caser
@@ -131,7 +144,7 @@ class Agent:
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+				weights_regularizer=l2_regularizer)
 
 			self.ranking_model_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
 				logits=self.logits)
@@ -201,16 +214,18 @@ class Run(object):
 			discount = [self.args.gamma] * self.args.batch_size
 			for i_epoch in range(self.args.epoch):
 				for j in range(num_batches):
+					total_step += 1
 					state, len_state, next_state, len_next_states, target_items, is_done = self.sample_data()
 					actions = sess.run(self.main_agent.actor_out_, feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
-					# add noise (clip in action's range)
-					actions = (actions + np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size)).clip(-1, 1)
 
-					logits, ranking_model_loss, _ = sess.run([ 
-						self.main_agent.logits, 
+					# add noise
+					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
+					actions = (actions + noise).clip(-1, 1)
+					
+					ranking_model_loss, _ = sess.run([
 						self.main_agent.ranking_model_loss, 
 						self.main_agent.model_optim], 
 						feed_dict={
@@ -220,6 +235,15 @@ class Run(object):
 						self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
+
+					# target logits
+					logits = sess.run(self.target_agent.logits,
+						feed_dict={
+						self.target_agent.inputs: state, 
+						self.target_agent.len_state: len_state,
+						# self.target_agent.actor_out_: actions,
+						self.target_agent.actions: actions,
+						self.target_agent.is_training: False})
 					rewards = self.cal_rewards(logits, target_items)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
@@ -240,22 +264,26 @@ class Run(object):
 						self.main_agent.discount: discount,
 						self.main_agent.target: target_v,
 						self.main_agent.is_training: True})
-					actor_loss, _ = sess.run([self.main_agent.actor_loss, self.main_agent.actor_optim],
-						feed_dict={self.main_agent.inputs: state, 
-						self.main_agent.len_state: len_state,
-						self.main_agent.is_training: True})
-					sess.run(self.target_network_update_ops)		# update target net
 
-					total_step += 1
+					actor_loss = None
+					if total_step % self.args.policy_freq == 0:
+						actor_loss, _ = sess.run([self.main_agent.actor_loss, self.main_agent.actor_optim],
+							feed_dict={self.main_agent.inputs: state, 
+							self.main_agent.len_state: len_state,
+							self.main_agent.is_training: True})
+						sess.run(self.target_network_update_ops)		# update target net
+
 					if (total_step == 1) or (total_step % 200 == 0):
 						aver_reward = round(np.array(rewards).mean().item(), 5)
-						ranking_model_loss, actor_loss, critic_loss = round(ranking_model_loss.item(), 5), round(actor_loss.item(), 5), round(critic_loss.item(), 5)
+						actor_loss = round(actor_loss.item(), 5) if actor_loss != None else actor_loss
+						ranking_model_loss, critic_loss = round(ranking_model_loss.item(), 5), round(critic_loss.item(), 5)
 						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
 						logging.info(info)
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
 						# change
+						# evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
@@ -305,6 +333,8 @@ def parse_args():
 	parser.add_argument('--weight_decay', default=1e-4, type=float)
 
 	parser.add_argument('--noise_var', type=float, default=0.1)
+	parser.add_argument('--noise_clip', type=float, default=0.5)
+	parser.add_argument('--policy_freq', type=int, default=2)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--mem_ratio', type=float, default=0.2)

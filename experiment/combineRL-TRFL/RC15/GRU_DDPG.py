@@ -136,7 +136,8 @@ class Run(object):
 		max_ndcg_and_epoch = [[0, 0, 0] for _ in self.args.topk.split(',')]	# (ng_click, ng_purchase, step)
 		total_step = 0
 
-		with tf.Session() as sess:
+		gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.args.mem_ratio)
+		with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 			sess.run(tf.global_variables_initializer())
 			sess.graph.finalize()
 			sess.run(self.copy_weight)		# copy weights
@@ -261,6 +262,7 @@ if __name__ == '__main__':
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=1.0)
+	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	args = parser.parse_args()
 
 	random.seed(args.seed)

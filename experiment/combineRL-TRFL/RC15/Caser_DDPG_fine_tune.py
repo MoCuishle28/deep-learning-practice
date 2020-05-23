@@ -301,7 +301,8 @@ def main(args):
 	copy_weight = trfl.update_target_variables(target_agent.get_qnetwork_variables(), 
 			main_agent.get_qnetwork_variables(), tau=1.0)
 
-	with tf.Session() as sess:
+	gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.args.mem_ratio)
+	with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 		sess.run(tf.global_variables_initializer())
 		sess.graph.finalize()
 		run = Run(args, main_agent, target_agent, sess, target_network_update_ops, copy_weight)
@@ -346,6 +347,7 @@ def parse_args():
 	parser.add_argument('--noise_var', type=float, default=0.1)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
+	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	return parser.parse_args()
 
 def init_log(args):

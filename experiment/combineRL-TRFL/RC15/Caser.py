@@ -37,7 +37,7 @@ def parse_args():
 	parser.add_argument('--filter_sizes', nargs='?', default='[2,3,4]',
 						help='Specify the filter_size')
 	parser.add_argument('--dropout_rate', default=0.1, type=float)
-
+	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	return parser.parse_args()
 
 
@@ -167,7 +167,8 @@ if __name__ == '__main__':
 
 	total_step=0
 	max_ndcg_and_epoch = [[0, 0, 0] for _ in args.topk.split(',')]	# (ng_click, ng_purchase, step)
-	with tf.Session() as sess:
+	gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.args.mem_ratio)
+	with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 		# Initialize variables
 		sess.run(tf.global_variables_initializer())
 		# evaluate(sess)

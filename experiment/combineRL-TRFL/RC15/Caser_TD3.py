@@ -206,7 +206,8 @@ class Run(object):
 		max_ndcg_and_epoch = [[0, 0, 0] for _ in self.args.topk.split(',')]	# (ng_click, ng_purchase, step)
 		total_step = 0
 
-		with tf.Session() as sess:
+		gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.args.mem_ratio)
+		with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 			sess.run(tf.global_variables_initializer())
 			sess.graph.finalize()
 			sess.run(self.copy_weight)		# copy weights
@@ -266,7 +267,7 @@ class Run(object):
 
 					if (total_step == 1) or (total_step % 200 == 0):
 						aver_reward = round(np.array(rewards).mean().item(), 5)
-						actor_loss = round(actor_loss.item()) if actor_loss != None else actor_loss
+						actor_loss = round(actor_loss.item(), 5) if actor_loss != None else actor_loss
 						ranking_model_loss, critic_loss = round(ranking_model_loss.item(), 5), round(critic_loss.item(), 5)
 						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
@@ -274,6 +275,7 @@ class Run(object):
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
 						# change
+						# evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
@@ -327,6 +329,7 @@ def parse_args():
 	parser.add_argument('--policy_freq', type=int, default=2)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
+	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	return parser.parse_args()
 
 def init_log(args):
