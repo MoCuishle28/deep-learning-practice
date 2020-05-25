@@ -14,8 +14,7 @@ import torch
 import matplotlib.pyplot as plt
 
 from utils import *
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+from NextItNetModules import *
 
 
 class Agent:
@@ -25,90 +24,47 @@ class Agent:
 		self.hw = 10
 		self.hidden_size = args.hidden_factor
 		self.item_num = args.max_iid + 1
+		self.is_training = tf.placeholder(tf.bool, shape=())
+
 		with tf.variable_scope(self.name):
-			self.is_training = tf.placeholder(tf.bool, shape=())
-			all_embeddings = self.initialize_embeddings()
+			self.all_embeddings = self.initialize_embeddings()
 
 			self.inputs = tf.placeholder(tf.int32, [None, self.hw],name='inputs')
 			self.len_state = tf.placeholder(tf.int32, [None],name='len_state')
-
 			self.discount = tf.placeholder(tf.float32, [None] , name="discount")
 			self.reward = tf.placeholder(tf.float32, [None], name='reward')
 			self.target = tf.placeholder(tf.float32, [None],name='target')
+
 			# ranking model
 			self.target_items = tf.placeholder(tf.int32, [None], name='target_items')
 
 			mask = tf.expand_dims(tf.to_float(tf.not_equal(self.inputs, self.item_num)), -1)
 
-			self.input_emb = tf.nn.embedding_lookup(all_embeddings['state_embeddings'],self.inputs)
-			self.input_emb *= mask
-			self.embedded_chars_expanded = tf.expand_dims(self.input_emb, -1)	# (batch, 10, 64, 1)
-			# (B, height, width, channels)
+			# self.input_emb=tf.nn.embedding_lookup(all_embeddings['state_embeddings'],self.inputs)
+			self.model_para = {
+				'dilated_channels': 64,  # larger is better until 512 or 1024
+				'dilations': [1, 2, 1, 2, 1, 2, ],  # YOU should tune this hyper-parameter, refer to the paper.
+				'kernel_size': 3,
+			}
 
-			# Create a convolution + maxpool layer for each filter size
-			pooled_outputs = []
-			num_filters = args.num_filters
-			filter_sizes = eval(args.filter_sizes)
-			for i, filter_size in enumerate(filter_sizes):
-				with tf.name_scope("conv-maxpool-%s" % filter_size):
-					# Convolution Layer
-					# (filter_height, filter_width, in_channels, out_channels)
-					filter_shape = [filter_size, self.hidden_size, 1, num_filters]
-					W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
-					b = tf.Variable(tf.constant(0.1, shape=[num_filters]), name="b")
+			context_embedding = tf.nn.embedding_lookup(self.all_embeddings['state_embeddings'],
+													   self.inputs)
+			context_embedding *= mask
 
-					conv = tf.nn.conv2d(
-						self.embedded_chars_expanded,
-						W,
-						strides=[1, 1, 1, 1],
-						padding="VALID",
-						name="conv")
-					h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
-					# Maxpooling over the outputs
-					# new shape after max_pool[?, 1, 1, num_filters]
-					# be carefyul, the  new_sequence_length has changed because of wholesession[:, 0:-1]
-					pooled = tf.nn.max_pool(
-						h,
-						ksize=[1, self.hw - filter_size + 1, 1, 1],		# 窗口大小 [1, x, y, 1]
-						strides=[1, 1, 1, 1],
-						padding='VALID',
-						name="pool")
-					pooled_outputs.append(pooled)
+			dilate_output = context_embedding
+			for layer_id, dilation in enumerate(self.model_para['dilations']):
+				dilate_output = nextitnet_residual_block(dilate_output, dilation,
+														layer_id, self.model_para['dilated_channels'],
+														self.model_para['kernel_size'], causal=True, train=self.is_training)
+				dilate_output *= mask
 
-			# Combine all the pooled features
-			num_filters_total = num_filters * len(filter_sizes)
-			self.h_pool = tf.concat(pooled_outputs, 3)
-			# (batch, 48)
-			self.h_pool_flat = tf.reshape(self.h_pool, [-1, num_filters_total])  # shape=[batch_size, 384]
-			# design the veritcal cnn
-			with tf.name_scope("conv-verical"):
-				filter_shape = [self.hw, 1, 1, 1]
-				W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
-				b = tf.Variable(tf.constant(0.1, shape=[1]), name="b")
-				conv = tf.nn.conv2d(
-					self.embedded_chars_expanded,
-					W,
-					strides=[1, 1, 1, 1],
-					padding="VALID",
-					name="conv")
-				h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
-			# (batch, 64)
-			self.vcnn_flat = tf.reshape(h, [-1, self.hidden_size])
-			self.final = tf.concat([self.h_pool_flat, self.vcnn_flat], 1)  # shape=[batch_size, 384+100]
-
-			# Add dropout
-			with tf.name_scope("dropout"):
-				self.state_hidden = tf.layers.dropout(self.final,
-										 rate=args.dropout_rate,
-										 training=tf.convert_to_tensor(self.is_training))
-			self.state_hidden = self.final
+			self.state_hidden = extract_axis_1(dilate_output, self.len_state - 1)
 			self.action_size = int(self.state_hidden.shape[-1])
 
 			# ddpg
 			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
 					activation_fn=tf.nn.tanh, 
 					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			# self.actor_out_ = tf.nn.softmax(self.actor_output * max_action)	# add softmax
 			self.actor_out_ = self.actor_output * max_action
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
@@ -127,12 +83,22 @@ class Agent:
 			self.critic_loss = tf.reduce_mean(self.td_return.loss)
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
-			# caser
+			# attention
 			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			# self.ranking_model_input = self.actions * self.state_hidden
-			self.ranking_model_input = tf.nn.softmax(self.actor_out_) * self.state_hidden
+			# atten_input = tf.concat([self.actions, self.state_hidden], axis=1)
+			atten_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
 
-			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
+			# 只有两个 atten
+			attention = tf.contrib.layers.fully_connected(atten_input, args.atten_num, 
+				activation_fn=None, 
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			attention = tf.nn.softmax(attention)
+
+			# self.ranking_model_input = self.actions * tf.expand_dims(attention[:, 0], -1) + self.state_hidden * tf.expand_dims(attention[:, 1], -1)
+			self.ranking_model_input = self.actor_out_ * tf.expand_dims(attention[:, 0], -1) + self.state_hidden * tf.expand_dims(attention[:, 1], -1)
+
+			# NextItNet
+			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
 				activation_fn=None,
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
@@ -145,7 +111,7 @@ class Agent:
 		all_embeddings = dict()
 		state_embeddings= tf.Variable(tf.random_normal([self.item_num+1, self.hidden_size], 0.0, 0.01),
 			name='state_embeddings')
-		all_embeddings['state_embeddings'] = state_embeddings
+		all_embeddings['state_embeddings']=state_embeddings
 		return all_embeddings
 
 	def get_qnetwork_variables(self):
@@ -209,7 +175,7 @@ class Run(object):
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
-					
+
 					# add noise
 					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
 					actions = (actions + noise).clip(-1, 1)
@@ -268,9 +234,9 @@ class Run(object):
 						logging.info(info)
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
-						# change
-						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						# debug
 						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
@@ -284,38 +250,35 @@ def main(args):
 	run = Run(args, main_agent, target_agent)
 	run.train()
 
+
 def parse_args():
 	base_data_dir = '../../data/'
-	parser = argparse.ArgumentParser(description="Run Caser DDPG.")
+	parser = argparse.ArgumentParser(description="NextItNet DDPG")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_pic_dir', default="pic/")
-	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC15')
+	parser.add_argument('--base_data_dir', default=base_data_dir + 'kaggle-RL4REC')
 	parser.add_argument('--topk', default='5,10,20')
 
 	parser.add_argument('--epoch', type=int, default=30)
 	parser.add_argument('--eval_interval', type=int, default=1000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
-	parser.add_argument('--mlr', type=float, default=1e-3)
+	parser.add_argument('--mlr', type=float, default=5e-3)
 	parser.add_argument('--alr', type=float, default=1e-3)
 	parser.add_argument('--clr', type=float, default=1e-3)
 
 	parser.add_argument('--reward_buy', type=float, default=1.0)
 	parser.add_argument('--reward_click', type=float, default=0.5)
-	parser.add_argument('--reward_top', type=int, default=50)
+	parser.add_argument('--reward_top', type=int, default=20)
 
-	parser.add_argument('--max_iid', type=int, default=26702)	# 0~26702
+	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
 
-	parser.add_argument('--num_filters', type=int, default=16,
-						help='Number of filters per filter size (default: 128)')
-	parser.add_argument('--filter_sizes', nargs='?', default='[2,3,4]',
-						help='Specify the filter_size')
 	parser.add_argument('--hidden_factor', type=int, default=64)
 
-	parser.add_argument('--dropout_rate', default=0.1, type=float)
+	parser.add_argument('--dropout_rate', default=0.5, type=float)
 	parser.add_argument('--weight_decay', default=1e-4, type=float)
 
 	parser.add_argument('--noise_var', type=float, default=0.1)
@@ -323,6 +286,8 @@ def parse_args():
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
+	parser.add_argument('--atten_num', type=int, default=2)
+	parser.add_argument('--note', default="None......")
 	return parser.parse_args()
 
 def init_log(args):

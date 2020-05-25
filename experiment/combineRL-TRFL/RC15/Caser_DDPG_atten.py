@@ -108,7 +108,6 @@ class Agent:
 			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
 					activation_fn=tf.nn.tanh, 
 					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			# self.actor_out_ = tf.nn.softmax(self.actor_output * max_action)	# add softmax
 			self.actor_out_ = self.actor_output * max_action
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
@@ -127,11 +126,21 @@ class Agent:
 			self.critic_loss = tf.reduce_mean(self.td_return.loss)
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
-			# caser
+			# attention
 			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			# self.ranking_model_input = self.actions * self.state_hidden
-			self.ranking_model_input = tf.nn.softmax(self.actor_out_) * self.state_hidden
+			# atten_input = tf.concat([self.actions, self.state_hidden], axis=1)
+			atten_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
 
+			# 只有两个 atten
+			attention = tf.contrib.layers.fully_connected(atten_input, args.atten_num, 
+				activation_fn=None, 
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			attention = tf.nn.softmax(attention)
+
+			# self.ranking_model_input = self.actions * tf.expand_dims(attention[:, 0], -1) + self.state_hidden * tf.expand_dims(attention[:, 1], -1)
+			self.ranking_model_input = self.actor_out_ * tf.expand_dims(attention[:, 0], -1) + self.state_hidden * tf.expand_dims(attention[:, 1], -1)
+
+			# caser
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
@@ -323,6 +332,8 @@ def parse_args():
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
+	parser.add_argument('--atten_num', type=int, default=2)
+	parser.add_argument('--note', default="None......")
 	return parser.parse_args()
 
 def init_log(args):
