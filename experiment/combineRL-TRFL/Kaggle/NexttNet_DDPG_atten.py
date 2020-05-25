@@ -98,13 +98,23 @@ class Agent:
 				activation_fn=tf.nn.relu, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
+			# RL/state_hidden 各一个 atten
 			attention = tf.contrib.layers.fully_connected(atten_out1, args.atten_num, 
 				activation_fn=None, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+
+			# 每个 feature 一个 atten
+			# attention = tf.contrib.layers.fully_connected(atten_out1, atten_hidden, 
+			# 	activation_fn=None, 
+			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+
 			attention = tf.nn.softmax(attention)
 
 			# self.ranking_model_input = self.actions * tf.expand_dims(attention[:, 0], -1) + self.state_hidden * tf.expand_dims(attention[:, 1], -1)
 			self.ranking_model_input = self.actor_out_ * tf.expand_dims(attention[:, 0], -1) + self.state_hidden * tf.expand_dims(attention[:, 1], -1)
+
+			# self.ranking_model_input = self.actions * attention[:, :self.action_size] + self.state_hidden * attention[:, self.action_size:]
+			# self.ranking_model_input = self.actor_out_ * attention[:, :self.action_size] + self.state_hidden * attention[:, self.action_size:]
 
 			# NextItNet
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
