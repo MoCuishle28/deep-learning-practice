@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 from utils import *
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 class Agent:
@@ -132,7 +132,16 @@ class Agent:
 			atten_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
 
 			# 只有两个 atten
-			attention = tf.contrib.layers.fully_connected(atten_input, args.atten_num, 
+			atten_hidden = int(atten_input.shape[-1])
+			atten_out0 = tf.contrib.layers.fully_connected(atten_input, atten_hidden, 
+				activation_fn=tf.nn.relu, 
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+
+			atten_out1 = tf.contrib.layers.fully_connected(atten_out0, atten_hidden, 
+				activation_fn=tf.nn.relu, 
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+
+			attention = tf.contrib.layers.fully_connected(atten_out1, args.atten_num, 
 				activation_fn=None, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			attention = tf.nn.softmax(attention)
