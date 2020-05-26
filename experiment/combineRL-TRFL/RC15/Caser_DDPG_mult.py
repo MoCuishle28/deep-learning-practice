@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 from utils import *
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 class Agent:
@@ -130,7 +130,8 @@ class Agent:
 			# caser
 			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
 			# self.ranking_model_input = self.actions * self.state_hidden
-			self.ranking_model_input = tf.nn.softmax(self.actor_out_) * self.state_hidden
+			atten = self.action_size * tf.nn.softmax(self.actor_out_)
+			self.ranking_model_input = atten * self.state_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,
@@ -183,11 +184,14 @@ class Run(object):
 		rewards = []
 		for target_iid, rec_list in zip(target_items, rankings):
 			ndcg = 0.0
+			hit = 0.0
 			for i, iid in enumerate(rec_list):
 				if iid == target_iid:
 					ndcg = 1.0 / np.log2(i + 2.0).item()
+					hit = 1.0
 					break
-			rewards.append(ndcg)
+			r = hit * self.args.w1 + ndcg * self.args.w2
+			rewards.append(r)
 		return rewards
 
 	def train(self):
@@ -323,6 +327,10 @@ def parse_args():
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
+	parser.add_argument('--note', default="None......")
+
+	parser.add_argument('--w1', type=float, default=1.0, help='HR weight')
+	parser.add_argument('--w2', type=float, default=1.0, help='NDCG weight')
 	return parser.parse_args()
 
 def init_log(args):

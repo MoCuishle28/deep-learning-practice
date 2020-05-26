@@ -214,11 +214,14 @@ class Run(object):
 		rewards = []
 		for target_iid, rec_list in zip(target_items, rankings):
 			ndcg = 0.0
+			hit = 0.0
 			for i, iid in enumerate(rec_list):
 				if iid == target_iid:
 					ndcg = 1.0 / np.log2(i + 2.0).item()
+					hit = 1.0
 					break
-			rewards.append(ndcg)
+			r = hit * self.args.w1 + ndcg * self.args.w2
+			rewards.append(r)
 		return rewards
 
 	def train(self):
@@ -356,6 +359,9 @@ def parse_args():
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--atten_num', type=int, default=2)
 	parser.add_argument('--note', default="None......")
+
+	parser.add_argument('--w1', type=float, default=1.0, help='HR weight')
+	parser.add_argument('--w2', type=float, default=1.0, help='NDCG weight')
 	return parser.parse_args()
 
 def init_log(args):
