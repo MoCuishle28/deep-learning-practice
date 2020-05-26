@@ -108,11 +108,14 @@ class Agent:
 			# 	activation_fn=None, 
 			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
-			attention = tf.nn.softmax(attention)
+			attention = args.atten_num * tf.nn.softmax(attention)	# 要乘以 h
+			# attention = atten_hidden * tf.nn.softmax(attention)	# 要乘以 h
 
+			# atten 1
 			# self.ranking_model_input = self.actions * tf.expand_dims(attention[:, 0], -1) + self.state_hidden * tf.expand_dims(attention[:, 1], -1)
 			self.ranking_model_input = self.actor_out_ * tf.expand_dims(attention[:, 0], -1) + self.state_hidden * tf.expand_dims(attention[:, 1], -1)
 
+			# atten 2
 			# self.ranking_model_input = self.actions * attention[:, :self.action_size] + self.state_hidden * attention[:, self.action_size:]
 			# self.ranking_model_input = self.actor_out_ * attention[:, :self.action_size] + self.state_hidden * attention[:, self.action_size:]
 
