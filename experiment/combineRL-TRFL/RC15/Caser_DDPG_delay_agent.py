@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 
 from utils import *
 
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
 
 class Agent:
 	def __init__(self, args, name='Agent', dqda_clipping=None, clip_norm=False, max_action=1.0):
@@ -124,11 +126,44 @@ class Agent:
 			self.critic_loss = tf.reduce_mean(self.td_return.loss)
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
-			# caser
-			self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			self.ranking_model_input = self.actions + self.state_hidden
-			# self.ranking_model_input = self.actor_out_ + self.state_hidden
+			# attention
+			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
+			# atten_input = tf.concat([self.actions, self.state_hidden], axis=1)
+			atten_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
 
+			# 只有两个 atten
+			atten_hidden = int(atten_input.shape[-1])
+			# atten_out0 = tf.contrib.layers.fully_connected(atten_input, atten_hidden, 
+			# 	activation_fn=tf.nn.relu, 
+			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+
+			# atten_out1 = tf.contrib.layers.fully_connected(atten_out0, atten_hidden, 
+			# 	activation_fn=tf.nn.relu, 
+			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+
+			# RL/state_hidden 各一个 atten
+			attention = tf.contrib.layers.fully_connected(atten_input, args.atten_num, 
+				activation_fn=None, 
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+
+			# 每个 feature 一个 atten
+			# attention = tf.contrib.layers.fully_connected(atten_out1, atten_hidden, 
+			# 	activation_fn=None, 
+			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+
+			attention = tf.nn.softmax(attention)					# 不乘 h
+			# attention = args.atten_num * tf.nn.softmax(attention)	# 要乘以 h
+			# attention = atten_hidden * tf.nn.softmax(attention)	# 要乘以 h
+
+			# atten 1
+			# self.ranking_model_input = self.actions * tf.expand_dims(attention[:, 0], -1) + self.state_hidden * tf.expand_dims(attention[:, 1], -1)
+			self.ranking_model_input = self.actor_out_ * tf.expand_dims(attention[:, 0], -1) + self.state_hidden * tf.expand_dims(attention[:, 1], -1)
+
+			# atten 2
+			# self.ranking_model_input = self.actions * attention[:, :self.action_size] + self.state_hidden * attention[:, self.action_size:]
+			# self.ranking_model_input = self.actor_out_ * attention[:, :self.action_size] + self.state_hidden * attention[:, self.action_size:]
+
+			# caser
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
@@ -209,7 +244,7 @@ class Run(object):
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
-
+					
 					# add noise
 					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
 					actions = (actions + noise).clip(-1, 1)
@@ -220,8 +255,8 @@ class Run(object):
 						feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
-						# self.main_agent.actor_out_: actions,
-						self.main_agent.actions: actions,
+						self.main_agent.actor_out_: actions,
+						# self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
 
@@ -230,8 +265,8 @@ class Run(object):
 						feed_dict={
 						self.target_agent.inputs: state, 
 						self.target_agent.len_state: len_state,
-						# self.target_agent.actor_out_: actions,
-						self.target_agent.actions: actions,
+						self.target_agent.actor_out_: actions,
+						# self.target_agent.actions: actions,
 						self.target_agent.is_training: False})
 					rewards = self.cal_rewards(logits, target_items)
 
@@ -244,33 +279,36 @@ class Run(object):
 						if is_done[index]:
 							target_v[index] = 0.0
 
-					critic_loss, _ = sess.run([self.main_agent.critic_loss, 
-						self.main_agent.critic_optim], 
-						feed_dict={self.main_agent.inputs:state, 
-						self.main_agent.len_state:len_state,
-						self.main_agent.actor_out_: actions, 
-						self.main_agent.reward: rewards,
-						self.main_agent.discount: discount,
-						self.main_agent.target: target_v,
-						self.main_agent.is_training: True})
-					actor_loss, _ = sess.run([self.main_agent.actor_loss, self.main_agent.actor_optim],
-						feed_dict={self.main_agent.inputs: state, 
-						self.main_agent.len_state: len_state,
-						self.main_agent.is_training: True})
+					total_step += 1
+					critic_loss, actor_loss = None, None
+					if total_step % self.args.update_freq == 0:
+						critic_loss, _ = sess.run([self.main_agent.critic_loss, 
+							self.main_agent.critic_optim], 
+							feed_dict={self.main_agent.inputs:state, 
+							self.main_agent.len_state:len_state,
+							self.main_agent.actor_out_: actions, 
+							self.main_agent.reward: rewards,
+							self.main_agent.discount: discount,
+							self.main_agent.target: target_v,
+							self.main_agent.is_training: True})
+						actor_loss, _ = sess.run([self.main_agent.actor_loss, self.main_agent.actor_optim],
+							feed_dict={self.main_agent.inputs: state, 
+							self.main_agent.len_state: len_state,
+							self.main_agent.is_training: True})
+					# target ranking model 要更新
 					sess.run(self.target_network_update_ops)		# update target net
 
-					total_step += 1
 					if (total_step == 1) or (total_step % 200 == 0):
-						aver_reward = round(np.array(rewards).mean().item(), 5)
-						ranking_model_loss, actor_loss, critic_loss = round(ranking_model_loss.item(), 5), round(actor_loss.item(), 5), round(critic_loss.item(), 5)
+						aver_reward, ranking_model_loss = round(np.array(rewards).mean().item(), 5), round(ranking_model_loss.item(), 5)
+						actor_loss, critic_loss = round(actor_loss.item(), 5) if actor_loss != None else None, round(critic_loss.item(), 5) if critic_loss != None else None
 						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
 						logging.info(info)
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
 						# change
-						# evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
-						evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
@@ -300,7 +338,7 @@ def parse_args():
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--mlr', type=float, default=1e-3)
-	parser.add_argument('--alr', type=float, default=0.005)
+	parser.add_argument('--alr', type=float, default=1e-3)
 	parser.add_argument('--clr', type=float, default=1e-3)
 
 	parser.add_argument('--reward_buy', type=float, default=1.0)
@@ -323,10 +361,12 @@ def parse_args():
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
+	parser.add_argument('--atten_num', type=int, default=2)
+	parser.add_argument('--note', default="None......")
 
 	parser.add_argument('--w1', type=float, default=1.0, help='HR weight')
 	parser.add_argument('--w2', type=float, default=1.0, help='NDCG weight')
-	parser.add_argument('--note', default="None......")
+	parser.add_argument('--update_freq', type=int, default=2, help='delay update freq')
 	return parser.parse_args()
 
 def init_log(args):

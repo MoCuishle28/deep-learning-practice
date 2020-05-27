@@ -133,16 +133,16 @@ class Agent:
 
 			# 只有两个 atten
 			atten_hidden = int(atten_input.shape[-1])
-			atten_out0 = tf.contrib.layers.fully_connected(atten_input, atten_hidden, 
-				activation_fn=tf.nn.relu, 
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			# atten_out0 = tf.contrib.layers.fully_connected(atten_input, atten_hidden, 
+			# 	activation_fn=tf.nn.relu, 
+			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
-			atten_out1 = tf.contrib.layers.fully_connected(atten_out0, atten_hidden, 
-				activation_fn=tf.nn.relu, 
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			# atten_out1 = tf.contrib.layers.fully_connected(atten_out0, atten_hidden, 
+			# 	activation_fn=tf.nn.relu, 
+			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			# RL/state_hidden 各一个 atten
-			attention = tf.contrib.layers.fully_connected(atten_out1, args.atten_num, 
+			attention = tf.contrib.layers.fully_connected(atten_input, args.atten_num, 
 				activation_fn=None, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
@@ -151,7 +151,8 @@ class Agent:
 			# 	activation_fn=None, 
 			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
-			attention = args.atten_num * tf.nn.softmax(attention)	# 要乘以 h
+			attention = tf.nn.softmax(attention)					# 不乘 h
+			# attention = args.atten_num * tf.nn.softmax(attention)	# 要乘以 h
 			# attention = atten_hidden * tf.nn.softmax(attention)	# 要乘以 h
 
 			# atten 1
