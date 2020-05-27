@@ -111,7 +111,9 @@ class Agent:
 			)
 			if args.layer_trick == 'ln':
 				self.states_hidden_2 = tf.contrib.layers.layer_norm(self.states_hidden_2)
+
 			ddpg_states = tf.concat([self.state_hidden, self.states_hidden_2], axis=1)
+			# ddpg_states = self.state_hidden + self.states_hidden_2
 
 			self.actor_output = tf.contrib.layers.fully_connected(ddpg_states, self.action_size, 
 					activation_fn=tf.nn.tanh, 
