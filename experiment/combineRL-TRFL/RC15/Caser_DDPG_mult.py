@@ -105,46 +105,21 @@ class Agent:
 			self.action_size = int(self.state_hidden.shape[-1])
 
 			# ddpg
-			atten_out0 = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
-					activation_fn=tf.nn.relu, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			atten_out0 = tf.layers.dropout(atten_out0,
-					rate=args.atten_dropout_rate,
-					training=tf.convert_to_tensor(self.is_training))
-
-			atten_out1 = tf.contrib.layers.fully_connected(atten_out0, self.action_size, 
-					activation_fn=tf.nn.relu, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			atten_out1 = tf.layers.dropout(atten_out1,
-					rate=args.atten_dropout_rate,
-					training=tf.convert_to_tensor(self.is_training))
-
-			self.actor_output = tf.contrib.layers.fully_connected(atten_out1, self.action_size, 
-					activation_fn=tf.nn.tanh, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			# self.actor_out_ = tf.nn.softmax(self.actor_output * max_action)	# add softmax
+			actor = eval(args.actor_layers)
+			actor.append(self.action_size)
+			with tf.variable_scope("actor"):
+				self.actor_output = mlp(self.state_hidden, self.is_training, hidden_sizes=actor, 
+					dropout_rate=args.dropout_rate, 
+					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			self.actor_out_ = self.actor_output * max_action
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
-			critic_size = int(self.critic_input.shape[-1])
-
-			c_out0 = tf.contrib.layers.fully_connected(self.critic_input, critic_size, 
-					activation_fn=tf.nn.relu, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			c_out0 = tf.layers.dropout(c_out0,
-					rate=args.atten_dropout_rate,
-					training=tf.convert_to_tensor(self.is_training))
-
-			c_out1 = tf.contrib.layers.fully_connected(c_out0, critic_size, 
-					activation_fn=tf.nn.relu, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			c_out1 = tf.layers.dropout(c_out1,
-					rate=args.atten_dropout_rate,
-					training=tf.convert_to_tensor(self.is_training))
-
-			self.critic_output = tf.contrib.layers.fully_connected(c_out1, 1, 
-				activation_fn=None, 
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			critic = eval(args.critic_layers)
+			critic.append(1)
+			with tf.variable_scope("critic"):
+				self.critic_output = mlp(self.critic_input, self.is_training, hidden_sizes=critic, 
+					output_activation=None, dropout_rate=args.dropout_rate, 
+					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			self.dpg_return = trfl.dpg(self.critic_output, self.actor_out_, 
 				dqda_clipping=dqda_clipping, clip_norm=clip_norm)
@@ -363,6 +338,8 @@ def parse_args():
 	parser.add_argument('--w1', type=float, default=1.0, help='HR weight')
 	parser.add_argument('--w2', type=float, default=1.0, help='NDCG weight')
 	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
+	parser.add_argument('--actor_layers', default="[112,112]")
+	parser.add_argument('--critic_layers', default="[224,224]")
 	return parser.parse_args()
 
 def init_log(args):

@@ -103,43 +103,13 @@ class Agent:
 			self.action_size = int(self.state_hidden.shape[-1])
 
 			# ddpg
-			atten_out0 = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
-					activation_fn=tf.nn.relu, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			atten_out0 = tf.layers.dropout(atten_out0,
-					rate=args.dropout_rate,
-					training=tf.convert_to_tensor(self.is_training))
-
-			atten_out1 = tf.contrib.layers.fully_connected(atten_out0, self.action_size, 
-					activation_fn=tf.nn.relu, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			atten_out1 = tf.layers.dropout(atten_out1,
-					rate=args.dropout_rate,
-					training=tf.convert_to_tensor(self.is_training))
-
-			self.actor_output = tf.contrib.layers.fully_connected(atten_out1, self.action_size, 
+			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
 					activation_fn=tf.nn.tanh, 
 					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			self.actor_out_ = self.actor_output * max_action
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
-			critic_size = int(self.critic_input.shape[-1])
-
-			c_out0 = tf.contrib.layers.fully_connected(self.critic_input, critic_size, 
-					activation_fn=tf.nn.relu, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			c_out0 = tf.layers.dropout(c_out0,
-					rate=args.dropout_rate,
-					training=tf.convert_to_tensor(self.is_training))
-
-			c_out1 = tf.contrib.layers.fully_connected(c_out0, critic_size, 
-					activation_fn=tf.nn.relu, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			c_out1 = tf.layers.dropout(c_out1,
-					rate=args.dropout_rate,
-					training=tf.convert_to_tensor(self.is_training))
-
-			self.critic_output = tf.contrib.layers.fully_connected(c_out1, 1, 
+			self.critic_output = tf.contrib.layers.fully_connected(self.critic_input, 1, 
 				activation_fn=None, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
@@ -338,6 +308,7 @@ def parse_args():
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
+	parser.add_argument('--note', default='None......')
 	return parser.parse_args()
 
 def init_log(args):

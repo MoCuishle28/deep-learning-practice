@@ -7,6 +7,14 @@ import pandas as pd
 import numpy as np
 
 
+def mlp(x, is_training, hidden_sizes=(32,), activation=tf.nn.relu, output_activation=tf.nn.tanh, 
+	dropout_rate=0.1, l2=None):
+	for h in hidden_sizes[:-1]:
+		x = tf.layers.dense(x, units=h, activation=activation, activity_regularizer=l2)
+		x = tf.layers.dropout(x, rate=dropout_rate, training=tf.convert_to_tensor(is_training))
+	return tf.layers.dense(x, units=hidden_sizes[-1], activation=output_activation, activity_regularizer=l2)
+
+
 def extract_axis_1(data, ind):
 	"""
 	Get specified elements along the first axis of tensor.
