@@ -420,8 +420,8 @@ def parse_args():
 	parser.add_argument('--w2', type=float, default=1.0, help='NDCG weight')
 	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
 	parser.add_argument('--atten_layers', default="[224,224,2]")
-	parser.add_argument('--actor_layers', default="[112,112]")
-	parser.add_argument('--critic_layers', default="[224,224]")
+	parser.add_argument('--actor_layers', default="[]")
+	parser.add_argument('--critic_layers', default="[]")
 	return parser.parse_args()
 
 def init_log(args):

@@ -228,6 +228,7 @@ class Run(object):
 			sess.graph.finalize()
 			sess.run(self.copy_weight)		# copy weights
 			discount = [self.args.gamma] * self.args.batch_size
+			critic_loss, actor_loss = None, None
 			for i_epoch in range(self.args.epoch):
 				for j in range(num_batches):
 					state, len_state, next_state, len_next_states, target_items, is_done = self.sample_data()
@@ -271,7 +272,6 @@ class Run(object):
 							target_v[index] = 0.0
 
 					total_step += 1
-					critic_loss, actor_loss = None, None
 					if total_step % self.args.update_freq == 0:
 						critic_loss, _ = sess.run([self.main_agent.critic_loss, 
 							self.main_agent.critic_optim], 
@@ -360,8 +360,8 @@ def parse_args():
 	parser.add_argument('--update_freq', type=int, default=2, help='delay update freq')
 	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
 	parser.add_argument('--atten_layers', default="[224,224,2]")
-	parser.add_argument('--actor_layers', default="[112,112]")
-	parser.add_argument('--critic_layers', default="[224,224]")
+	parser.add_argument('--actor_layers', default="[]")
+	parser.add_argument('--critic_layers', default="[]")
 	return parser.parse_args()
 
 def init_log(args):
