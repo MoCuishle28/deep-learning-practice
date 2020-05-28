@@ -62,13 +62,43 @@ class Agent:
 			self.action_size = int(self.state_hidden.shape[-1])
 
 			# ddpg
-			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
+			act_out0 = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
+					activation_fn=tf.nn.relu, 
+					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			act_out0 = tf.layers.dropout(act_out0,
+					rate=args.dropout_rate,
+					training=tf.convert_to_tensor(self.is_training))
+
+			act_out1 = tf.contrib.layers.fully_connected(act_out0, self.action_size, 
+					activation_fn=tf.nn.relu, 
+					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			act_out1 = tf.layers.dropout(act_out1,
+					rate=args.dropout_rate,
+					training=tf.convert_to_tensor(self.is_training))
+
+			self.actor_output = tf.contrib.layers.fully_connected(act_out1, self.action_size, 
 					activation_fn=tf.nn.tanh, 
 					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			self.actor_out_ = self.actor_output * max_action
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
-			self.critic_output = tf.contrib.layers.fully_connected(self.critic_input, 1, 
+			critic_size = int(self.critic_input.shape[-1])
+
+			c_out0 = tf.contrib.layers.fully_connected(self.critic_input, critic_size, 
+					activation_fn=tf.nn.relu, 
+					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			c_out0 = tf.layers.dropout(c_out0,
+					rate=args.dropout_rate,
+					training=tf.convert_to_tensor(self.is_training))
+
+			c_out1 = tf.contrib.layers.fully_connected(c_out0, critic_size, 
+					activation_fn=tf.nn.relu, 
+					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			c_out1 = tf.layers.dropout(c_out1,
+					rate=args.dropout_rate,
+					training=tf.convert_to_tensor(self.is_training))
+
+			self.critic_output = tf.contrib.layers.fully_connected(c_out1, 1, 
 				activation_fn=None, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 

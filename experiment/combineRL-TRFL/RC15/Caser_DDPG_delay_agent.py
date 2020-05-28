@@ -105,21 +105,21 @@ class Agent:
 			self.action_size = int(self.state_hidden.shape[-1])
 
 			# ddpg
-			atten_out0 = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
+			act_out0 = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
 					activation_fn=tf.nn.relu, 
 					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			atten_out0 = tf.layers.dropout(atten_out0,
+			act_out0 = tf.layers.dropout(act_out0,
 					rate=args.dropout_rate,
 					training=tf.convert_to_tensor(self.is_training))
 
-			atten_out1 = tf.contrib.layers.fully_connected(atten_out0, self.action_size, 
+			act_out1 = tf.contrib.layers.fully_connected(act_out0, self.action_size, 
 					activation_fn=tf.nn.relu, 
 					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			atten_out1 = tf.layers.dropout(atten_out1,
+			act_out1 = tf.layers.dropout(act_out1,
 					rate=args.dropout_rate,
 					training=tf.convert_to_tensor(self.is_training))
 
-			self.actor_output = tf.contrib.layers.fully_connected(atten_out1, self.action_size, 
+			self.actor_output = tf.contrib.layers.fully_connected(act_out1, self.action_size, 
 					activation_fn=tf.nn.tanh, 
 					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			self.actor_out_ = self.actor_output * max_action
