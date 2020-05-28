@@ -105,13 +105,43 @@ class Agent:
 			self.action_size = int(self.state_hidden.shape[-1])
 
 			# ddpg
-			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
+			atten_out0 = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
+					activation_fn=tf.nn.relu, 
+					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			atten_out0 = tf.layers.dropout(atten_out0,
+					rate=args.dropout_rate,
+					training=tf.convert_to_tensor(self.is_training))
+
+			atten_out1 = tf.contrib.layers.fully_connected(atten_out0, self.action_size, 
+					activation_fn=tf.nn.relu, 
+					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			atten_out1 = tf.layers.dropout(atten_out1,
+					rate=args.dropout_rate,
+					training=tf.convert_to_tensor(self.is_training))
+
+			self.actor_output = tf.contrib.layers.fully_connected(atten_out1, self.action_size, 
 					activation_fn=tf.nn.tanh, 
 					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			self.actor_out_ = self.actor_output * max_action
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
-			self.critic_output = tf.contrib.layers.fully_connected(self.critic_input, 1, 
+			critic_size = int(self.critic_input.shape[-1])
+
+			c_out0 = tf.contrib.layers.fully_connected(self.critic_input, critic_size, 
+					activation_fn=tf.nn.relu, 
+					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			c_out0 = tf.layers.dropout(c_out0,
+					rate=args.dropout_rate,
+					training=tf.convert_to_tensor(self.is_training))
+
+			c_out1 = tf.contrib.layers.fully_connected(c_out0, critic_size, 
+					activation_fn=tf.nn.relu, 
+					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			c_out1 = tf.layers.dropout(c_out1,
+					rate=args.dropout_rate,
+					training=tf.convert_to_tensor(self.is_training))
+
+			self.critic_output = tf.contrib.layers.fully_connected(c_out1, 1, 
 				activation_fn=None, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
@@ -130,35 +160,36 @@ class Agent:
 			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
 			# atten_input = tf.concat([self.actions, self.state_hidden], axis=1)
 			atten_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
+			# atten_input = self.actor_out_ + self.state_hidden
 
 			# 只有两个 atten
 			atten_hidden = int(atten_input.shape[-1])
-			# atten_out0 = tf.contrib.layers.fully_connected(atten_input, atten_hidden, 
-			# 	activation_fn=tf.nn.relu, 
-			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			# atten_out0 = tf.layers.dropout(atten_out0,
-			# 			 rate=args.dropout_rate,
-			# 			 training=tf.convert_to_tensor(self.is_training))
+			atten_out0 = tf.contrib.layers.fully_connected(atten_input, atten_hidden, 
+				activation_fn=tf.nn.relu, 
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			atten_out0 = tf.layers.dropout(atten_out0,
+						 rate=args.atten_dropout_rate,
+						 training=tf.convert_to_tensor(self.is_training))
 
-			# atten_out1 = tf.contrib.layers.fully_connected(atten_out0, atten_hidden, 
-			# 	activation_fn=tf.nn.relu, 
-			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			# atten_out1 = tf.layers.dropout(atten_out1,
-			# 		 rate=args.dropout_rate,
-			# 		 training=tf.convert_to_tensor(self.is_training))
+			atten_out1 = tf.contrib.layers.fully_connected(atten_out0, atten_hidden, 
+				activation_fn=tf.nn.relu, 
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			atten_out1 = tf.layers.dropout(atten_out1,
+					 rate=args.atten_dropout_rate,
+					 training=tf.convert_to_tensor(self.is_training))
 
 			# RL/state_hidden 各一个 atten
-			attention = tf.contrib.layers.fully_connected(atten_input, args.atten_num, 
+			attention = tf.contrib.layers.fully_connected(atten_out1, args.atten_num, 
 				activation_fn=None, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			# 每个 feature 一个 atten
-			# attention = tf.contrib.layers.fully_connected(atten_input, atten_hidden, 
+			# attention = tf.contrib.layers.fully_connected(atten_out1, atten_hidden, 
 			# 	activation_fn=None, 
 			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
-			attention = tf.nn.softmax(attention)					# 不乘 h
-			# attention = args.atten_num * tf.nn.softmax(attention)	# 要乘以 h
+			# attention = tf.nn.softmax(attention)					# 不乘 h
+			attention = args.atten_num * tf.nn.softmax(attention)	# 要乘以 h
 			# attention = atten_hidden * tf.nn.softmax(attention)	# 要乘以 h
 
 			# atten 1
@@ -373,6 +404,7 @@ def parse_args():
 	parser.add_argument('--w1', type=float, default=1.0, help='HR weight')
 	parser.add_argument('--w2', type=float, default=1.0, help='NDCG weight')
 	parser.add_argument('--update_freq', type=int, default=2, help='delay update freq')
+	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
 	return parser.parse_args()
 
 def init_log(args):
