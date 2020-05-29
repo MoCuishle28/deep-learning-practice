@@ -59,7 +59,7 @@ class Agent:
 				dilate_output *= mask
 
 			self.state_hidden = extract_axis_1(dilate_output, self.len_state - 1)
-			self.action_size = int(self.state_hidden.shape[-1])
+			self.action_size = int(self.state_hidden.shape[-1])	# 64
 
 			# ddpg
 			actor = eval(args.actor_layers)
@@ -70,7 +70,7 @@ class Agent:
 					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			self.actor_out_ = self.actor_output * max_action
 
-			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
+			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)	# 128
 			critic = eval(args.critic_layers)
 			critic.append(1)
 			with tf.variable_scope("critic"):
@@ -96,7 +96,7 @@ class Agent:
 			# atten_input = self.actor_out_ + self.state_hidden
 
 			# 只有两个 atten
-			atten_hidden = int(atten_input.shape[-1])
+			atten_hidden = int(atten_input.shape[-1])	# 128
 			atten_layers = eval(args.atten_layers)
 			with tf.variable_scope("attention"):
 				# RL/state_hidden 各一个 atten
@@ -306,7 +306,7 @@ def parse_args():
 	parser.add_argument('--w1', type=float, default=1.0, help='HR weight')
 	parser.add_argument('--w2', type=float, default=1.0, help='NDCG weight')
 	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
-	parser.add_argument('--atten_layers', default="[224,224,2]")
+	parser.add_argument('--atten_layers', default="[128,64,2]")
 	parser.add_argument('--actor_layers', default="[]")
 	parser.add_argument('--critic_layers', default="[]")
 	return parser.parse_args()

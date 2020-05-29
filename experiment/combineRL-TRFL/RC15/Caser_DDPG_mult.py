@@ -109,7 +109,7 @@ class Agent:
 			actor.append(self.action_size)
 			with tf.variable_scope("actor"):
 				self.actor_output = mlp(self.state_hidden, self.is_training, hidden_sizes=actor, 
-					dropout_rate=args.dropout_rate, 
+					dropout_rate=args.atten_dropout_rate, 
 					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			self.actor_out_ = self.actor_output * max_action
 
@@ -118,7 +118,7 @@ class Agent:
 			critic.append(1)
 			with tf.variable_scope("critic"):
 				self.critic_output = mlp(self.critic_input, self.is_training, hidden_sizes=critic, 
-					output_activation=None, dropout_rate=args.dropout_rate, 
+					output_activation=None, dropout_rate=args.atten_dropout_rate, 
 					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			self.dpg_return = trfl.dpg(self.critic_output, self.actor_out_, 
