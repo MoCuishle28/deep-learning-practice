@@ -135,7 +135,7 @@ class Agent:
 			# caser
 			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
 			# self.ranking_model_input = self.actions * self.state_hidden
-			atten = self.action_size * tf.nn.softmax(self.actor_out_)
+			atten = tf.nn.softmax(self.actor_out_)
 			# atten = self.actor_out_
 			self.ranking_model_input = atten * self.state_hidden
 
