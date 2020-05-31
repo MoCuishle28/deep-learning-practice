@@ -146,7 +146,11 @@ def evaluate(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging)
 		ng_click, ng_purchase = round(ng_click, 5), round(ng_purchase, 5)
 
 		tup = max_ndcg_and_epoch[i]		# (ng_click, ng_purchase, step)
-		if ng_click > tup[0]:
+		# if ng_click > tup[0]:
+		# 	max_ndcg_and_epoch[i][0] = ng_click
+		# 	max_ndcg_and_epoch[i][1] = ng_purchase
+		# 	max_ndcg_and_epoch[i][2] = total_step
+		if ng_purchase > tup[1]:
 			max_ndcg_and_epoch[i][0] = ng_click
 			max_ndcg_and_epoch[i][1] = ng_purchase
 			max_ndcg_and_epoch[i][2] = total_step
@@ -238,7 +242,11 @@ def evaluate_multi_head(args, agent, sess, max_ndcg_and_epoch, total_step, loggi
 		ng_click, ng_purchase = round(ng_click, 4), round(ng_purchase, 4)
 
 		tup = max_ndcg_and_epoch[i]		# (ng_click, ng_purchase, step)
-		if ng_click > tup[0]:
+		# if ng_click > tup[0]:
+		# 	max_ndcg_and_epoch[i][0] = ng_click
+		# 	max_ndcg_and_epoch[i][1] = ng_purchase
+		# 	max_ndcg_and_epoch[i][2] = total_step
+		if ng_purchase > tup[1]:
 			max_ndcg_and_epoch[i][0] = ng_click
 			max_ndcg_and_epoch[i][1] = ng_purchase
 			max_ndcg_and_epoch[i][2] = total_step
@@ -332,7 +340,11 @@ def evaluate_with_actions(args, agent, sess, max_ndcg_and_epoch, total_step, log
 		ng_click, ng_purchase = round(ng_click, 4), round(ng_purchase, 4)
 
 		tup = max_ndcg_and_epoch[i]		# (ng_click, ng_purchase, step)
-		if ng_click > tup[0]:
+		# if ng_click > tup[0]:
+		# 	max_ndcg_and_epoch[i][0] = ng_click
+		# 	max_ndcg_and_epoch[i][1] = ng_purchase
+		# 	max_ndcg_and_epoch[i][2] = total_step
+		if ng_purchase > tup[1]:
 			max_ndcg_and_epoch[i][0] = ng_click
 			max_ndcg_and_epoch[i][1] = ng_purchase
 			max_ndcg_and_epoch[i][2] = total_step

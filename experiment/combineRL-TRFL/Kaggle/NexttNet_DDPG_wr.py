@@ -134,6 +134,7 @@ class Run(object):
 		len_next_states = list(batch['len_next_states'].values())
 		target_items = list(batch['action'].values())
 		is_done = list(batch['is_done'].values())
+		is_buy = list(batch['is_buy'].values())
 		return state, len_state, next_state, len_next_states, target_items, is_done, is_buy
 
 	def cal_rewards(self, logits, target_items, is_buy):
@@ -181,8 +182,8 @@ class Run(object):
 						feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
-						# self.main_agent.actor_out_: actions,
-						self.main_agent.actions: actions,
+						self.main_agent.actor_out_: actions,
+						# self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
 
@@ -191,10 +192,10 @@ class Run(object):
 						feed_dict={
 						self.target_agent.inputs: state, 
 						self.target_agent.len_state: len_state,
-						# self.target_agent.actor_out_: actions,
-						self.target_agent.actions: actions,
+						self.target_agent.actor_out_: actions,
+						# self.target_agent.actions: actions,
 						self.target_agent.is_training: False})
-					rewards = self.cal_rewards(logits, target_items)
+					rewards = self.cal_rewards(logits, target_items, is_buy)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
 						self.target_agent.inputs: next_state,
@@ -230,8 +231,8 @@ class Run(object):
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
 						# debug
-						evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
-						# evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')

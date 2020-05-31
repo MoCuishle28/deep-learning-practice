@@ -16,6 +16,8 @@ import matplotlib.pyplot as plt
 from utils import *
 from NextItNetModules import *
 
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
 
 class Agent:
 	def __init__(self, args, name='Agent', dqda_clipping=None, clip_norm=False, max_action=1.0):
