@@ -180,15 +180,14 @@ class Run(object):
 		len_next_states = list(batch['len_next_states'].values())
 		target_items = list(batch['action'].values())
 		is_done = list(batch['is_done'].values())
-		is_buy = list(batch['is_buy'].values())
-		return state, len_state, next_state, len_next_states, target_items, is_done, is_buy
+		return state, len_state, next_state, len_next_states, target_items, is_done
 
-	def cal_rewards(self, logits, target_items, is_buy):
+	def cal_rewards(self, logits, target_items):
 		logits = torch.tensor(logits)
 		_, rankings = logits.topk(self.args.reward_top)
 		rankings = rankings.tolist()	# (batch, topk)
 		rewards = []
-		for target_iid, rec_list, buy in zip(target_items, rankings, is_buy):
+		for target_iid, rec_list in zip(target_items, rankings):
 			ndcg = 0.0
 			hit = 0.0
 			for i, iid in enumerate(rec_list):
@@ -196,14 +195,13 @@ class Run(object):
 					ndcg = 1.0 / np.log2(i + 2.0).item()
 					hit = 1.0
 					break
-			r = ndcg * self.args.w if buy == 1 else ndcg
-			rewards.append(r)
+			rewards.append(ndcg)
 		return rewards
 
 	def train(self):
 		num_rows = self.replay_buffer.shape[0]
 		num_batches = int(num_rows / self.args.batch_size)
-		max_ndcg_and_epoch = [[0, 0, 0] for _ in self.args.topk.split(',')]	# (ng_click, ng_purchase, step)
+		max_ndcg_and_epoch = [[0, 0] for _ in args.topk.split(',')]	# (ng_inter, step)
 		total_step = 0
 
 		gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.args.mem_ratio)
@@ -214,7 +212,7 @@ class Run(object):
 			discount = [self.args.gamma] * self.args.batch_size
 			for i_epoch in range(self.args.epoch):
 				for j in range(num_batches):
-					state, len_state, next_state, len_next_states, target_items, is_done, is_buy = self.sample_data()
+					state, len_state, next_state, len_next_states, target_items, is_done = self.sample_data()
 					actions = sess.run(self.main_agent.actor_out_, feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
@@ -243,7 +241,7 @@ class Run(object):
 						self.target_agent.actor_out_: actions,
 						# self.target_agent.actions: actions,
 						self.target_agent.is_training: False})
-					rewards = self.cal_rewards(logits, target_items, is_buy)
+					rewards = self.cal_rewards(logits, target_items)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
 						self.target_agent.inputs: next_state,
@@ -295,13 +293,12 @@ def main(args):
 	run.train()
 
 def parse_args():
-	base_data_dir = '../../data/'
+	base_data_dir = '../../../data/'
 	parser = argparse.ArgumentParser(description="Run Caser DDPG.")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--base_log_dir', default="log/")
-	parser.add_argument('--base_pic_dir', default="pic/")
 	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC15')
 	parser.add_argument('--topk', default='5,10,20')
 
@@ -335,7 +332,6 @@ def parse_args():
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--note', default="None......")
 
-	parser.add_argument('--w', type=float, default=5.0, help='Buy NDCG weight')  # 5/1
 	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
 	parser.add_argument('--actor_layers', default="[]")
 	parser.add_argument('--critic_layers', default="[]")
@@ -345,8 +341,6 @@ def parse_args():
 def init_log(args):
 	if not os.path.exists(args.base_log_dir):
 		os.makedirs(args.base_log_dir)
-	if not os.path.exists(args.base_pic_dir):
-		os.makedirs(args.base_pic_dir)
 	start = datetime.datetime.now()
 	logging.basicConfig(level = logging.INFO,
 					filename = args.base_log_dir + args.v + '-' + str(time.time()) + '.log',
