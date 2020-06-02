@@ -206,8 +206,10 @@ class Run(object):
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
-					# add noise (clip in action's range)
-					actions = (actions + np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size)).clip(-1, 1)
+					
+					# add noise
+					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
+					actions = (actions + noise).clip(-1, 1)
 
 					ranking_model_loss, _ = sess.run([
 						self.main_agent.ranking_model_loss, 
@@ -312,9 +314,13 @@ def parse_args():
 	parser.add_argument('--weight_decay', default=1e-4, type=float)
 
 	parser.add_argument('--noise_var', type=float, default=0.1)
+	parser.add_argument('--noise_clip', type=float, default=0.5)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
+
+	parser.add_argument('--note', default='None......')
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
+	parser.add_argument('--cuda'm default='0')
 	return parser.parse_args()
 
 def init_log(args):
@@ -333,6 +339,8 @@ def init_log(args):
 
 if __name__ == '__main__':
 	args = parse_args()
+	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
+
 	random.seed(args.seed)
 	np.random.seed(args.seed)
 	tf.set_random_seed(args.seed)

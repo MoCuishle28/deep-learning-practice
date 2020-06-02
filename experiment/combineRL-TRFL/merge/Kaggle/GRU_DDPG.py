@@ -149,17 +149,30 @@ class Run(object):
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
-					# add noise (clip in action's range)
-					actions = (actions + np.random.normal(0, self.args.noise_var, size=self.args.action_size)).clip(-1, 1)
+					
+					# add noise
+					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
+					actions = (actions + noise).clip(-1, 1)
 
-					logits, ranking_model_loss, _ = sess.run([self.main_agent.logits, 
-						self.main_agent.ranking_model_loss, self.main_agent.model_optim], 
+					ranking_model_loss, _ = sess.run([
+						self.main_agent.ranking_model_loss, 
+						self.main_agent.model_optim], 
 						feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.actor_out_: actions,
+						# self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
+
+					# target logits
+					logits = sess.run(self.target_agent.logits,
+						feed_dict={
+						self.target_agent.inputs: state, 
+						self.target_agent.len_state: len_state,
+						self.target_agent.actor_out_: actions,
+						# self.target_agent.actions: actions,
+						self.target_agent.is_training: False})
 					rewards = self.cal_rewards(logits, target_items)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
@@ -251,16 +264,22 @@ if __name__ == '__main__':
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--action_size', type=int, default=64)
 	parser.add_argument('--mlr', type=float, default=1e-3)
-
-	parser.add_argument('--noise_var', type=float, default=0.1)
-	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--alr', type=float, default=1e-4)
 	parser.add_argument('--clr', type=float, default=1e-3)
+
+	parser.add_argument('--noise_var', type=float, default=0.1)
+	parser.add_argument('--noise_clip', type=float, default=0.5)
+	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=1.0)
+
+	parser.add_argument('--note', default='None......')
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
+	parser.add_argument('--cuda', default='0')
 	args = parser.parse_args()
+
+	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
 
 	random.seed(args.seed)
 	np.random.seed(args.seed)

@@ -278,9 +278,9 @@ def parse_args():
 	parser.add_argument('--noise_clip', type=float, default=0.5)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
+
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--note', default="None......")
-
 	parser.add_argument('--cuda', default='0')
 	return parser.parse_args()
 

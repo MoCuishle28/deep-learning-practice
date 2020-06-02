@@ -125,9 +125,9 @@ class Agent:
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
 			# caser
-			self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			self.ranking_model_input = self.actions + self.state_hidden
-			# self.ranking_model_input = self.actor_out_ + self.state_hidden
+			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
+			# self.ranking_model_input = self.actions + self.state_hidden
+			self.ranking_model_input = self.actor_out_ + self.state_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,
@@ -206,20 +206,30 @@ class Run(object):
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
-					# add noise (clip in action's range)
-					actions = (actions + np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size)).clip(-1, 1)
 
-					logits, ranking_model_loss, _ = sess.run([ 
-						self.main_agent.logits, 
+					# add noise
+					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
+					actions = (actions + noise).clip(-1, 1)
+
+					ranking_model_loss, _ = sess.run([
 						self.main_agent.ranking_model_loss, 
 						self.main_agent.model_optim], 
 						feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
-						# self.main_agent.actor_out_: actions,
-						self.main_agent.actions: actions,
+						self.main_agent.actor_out_: actions,
+						# self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
+
+					# target logits
+					logits = sess.run(self.target_agent.logits,
+						feed_dict={
+						self.target_agent.inputs: state, 
+						self.target_agent.len_state: len_state,
+						self.target_agent.actor_out_: actions,
+						# self.target_agent.actions: actions,
+						self.target_agent.is_training: False})
 					rewards = self.cal_rewards(logits, target_items)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
@@ -256,7 +266,8 @@ class Run(object):
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
 						# change
-						evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
@@ -304,10 +315,14 @@ def parse_args():
 	parser.add_argument('--weight_decay', default=1e-4, type=float)
 
 	parser.add_argument('--noise_var', type=float, default=0.1)
+	parser.add_argument('--noise_clip', type=float, default=0.5)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
+
+	parser.add_argument('--note', default='None...')
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--note', default='None......')
+	parser.add_argument('--cuda', default='0')
 	return parser.parse_args()
 
 def init_log(args):
@@ -326,8 +341,10 @@ def init_log(args):
 
 if __name__ == '__main__':
 	args = parse_args()
-	random.seed(args.seed)
-	np.random.seed(args.seed)
-	tf.set_random_seed(args.seed)
+	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
+	if args.seed != -1:
+		random.seed(args.seed)
+		np.random.seed(args.seed)
+		tf.set_random_seed(args.seed)
 	init_log(args)
 	main(args)

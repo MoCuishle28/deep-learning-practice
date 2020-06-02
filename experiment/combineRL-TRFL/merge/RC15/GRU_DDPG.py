@@ -40,9 +40,10 @@ class Agent(object):
 				dtype = tf.float32,
 				sequence_length = self.len_state,
 			)
+
+			# ddpg
 			if args.layer_trick == 'ln':
 				self.states_hidden = tf.contrib.layers.layer_norm(self.states_hidden)
-
 			self.actor_output = tf.contrib.layers.fully_connected(self.states_hidden, args.action_size, 
 				activation_fn=tf.nn.tanh, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
@@ -196,6 +197,7 @@ class Run(object):
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
 						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
@@ -258,13 +260,17 @@ if __name__ == '__main__':
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
-	parser.add_argument('--dropout', type=float, default=1.0)
+
+	parser.add_argument('--note', default='None...')
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
+	parser.add_argument('--cuda', default='0')
 	args = parser.parse_args()
 
-	random.seed(args.seed)
-	np.random.seed(args.seed)
-	tf.set_random_seed(args.seed)
+	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
+	if args.seed != -1:
+		random.seed(args.seed)
+		np.random.seed(args.seed)
+		tf.set_random_seed(args.seed)
 
 	init_log(args)
 	main(args)

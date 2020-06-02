@@ -272,8 +272,6 @@ def parse_args():
 	parser.add_argument('--alr', type=float, default=1e-3)
 	parser.add_argument('--clr', type=float, default=1e-3)
 
-	parser.add_argument('--reward_buy', type=float, default=1.0)
-	parser.add_argument('--reward_click', type=float, default=0.5)
 	parser.add_argument('--reward_top', type=int, default=20)
 
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
@@ -291,9 +289,8 @@ def parse_args():
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--note', default="None......")
+	parser.add_argument('--cuda', default='0')
 
-	parser.add_argument('--w1', type=float, default=1.0, help='HR weight')
-	parser.add_argument('--w2', type=float, default=1.0, help='NDCG weight')
 	return parser.parse_args()
 
 
@@ -313,6 +310,8 @@ def init_log(args):
 
 if __name__ == '__main__':
 	args = parse_args()
+
+	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
 	random.seed(args.seed)
 	np.random.seed(args.seed)
 	tf.set_random_seed(args.seed)

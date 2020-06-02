@@ -92,6 +92,7 @@ def init_log(args):
 if __name__ == '__main__':
 	# Network parameters
 	args = parse_args()
+	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
 	init_log(args)
 
 	data_directory = args.base_data_dir
