@@ -130,5 +130,6 @@ if __name__ == '__main__':
 				total_step += 1
 				if total_step % 200 == 0:
 					print("the loss in %dth batch is: %f" % (total_step, loss))
+					logging.info("the loss in %dth batch is: %f" % (total_step, loss))
 				if total_step % args.eval_interval == 0:
 					evaluate(args, GRUnet, sess, max_ndcg_and_epoch, total_step, logging)
