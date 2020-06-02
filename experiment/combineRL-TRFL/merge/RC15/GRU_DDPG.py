@@ -233,7 +233,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC15')
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--seed', type=int, default=1)
-	parser.add_argument('--eval_interval', type=int, default=2000)
+	parser.add_argument('--eval_interval', type=int, default=1000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--epoch', type=int, default=30)
 	parser.add_argument('--batch_size', type=int, default=256)
@@ -251,11 +251,11 @@ if __name__ == '__main__':
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--action_size', type=int, default=64)
 	parser.add_argument('--mlr', type=float, default=1e-3)
+	parser.add_argument('--alr', type=float, default=1e-3)
+	parser.add_argument('--clr', type=float, default=1e-3)
 
 	parser.add_argument('--noise_var', type=float, default=0.1)
 	parser.add_argument('--tau', type=float, default=0.001)
-	parser.add_argument('--alr', type=float, default=1e-4)
-	parser.add_argument('--clr', type=float, default=1e-3)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
 	parser.add_argument('--dropout', type=float, default=1.0)

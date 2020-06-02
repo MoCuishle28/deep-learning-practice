@@ -31,6 +31,7 @@ def parse_args():
 	parser.add_argument('--lr', type=float, default=0.005,
 						help='Learning rate.')
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
+	parser.add_argument('--cuda', default='0')
 	return parser.parse_args()
 
 
@@ -58,7 +59,7 @@ class GRUnetwork:
 			sequence_length=self.len_state,
 		)
 
-		self.output = tf.contrib.layers.fully_connected(self.states_hidden,self.item_num,activation_fn=None,scope='fc')
+		self.output = tf.contrib.layers.fully_connected(self.states_hidden,self.item_num,activation_fn=None,scope='fc', weights_regularizer=tf.contrib.layers.l2_regularizer(1e-4))
 
 		self.loss=tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target,logits=self.output)
 		self.loss = tf.reduce_mean(self.loss)
