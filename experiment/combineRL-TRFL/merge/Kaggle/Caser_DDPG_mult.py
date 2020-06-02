@@ -125,9 +125,13 @@ class Agent:
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
 			# caser
-			self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			self.ranking_model_input = self.actions + self.state_hidden
-			# self.ranking_model_input = self.actor_out_ + self.state_hidden
+			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
+
+			# self.ranking_model_input = self.actions * self.state_hidden
+			# self.ranking_model_input = tf.nn.softmax(self.actions) * self.state_hidden
+
+			# self.ranking_model_input = self.actor_out_ * self.state_hidden
+			self.ranking_model_input = tf.nn.softmax(self.actor_out_) * self.state_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,
@@ -206,7 +210,7 @@ class Run(object):
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
-
+					
 					# add noise
 					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
 					actions = (actions + noise).clip(-1, 1)
@@ -217,8 +221,8 @@ class Run(object):
 						feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
-						# self.main_agent.actor_out_: actions,
-						self.main_agent.actions: actions,
+						self.main_agent.actor_out_: actions,
+						# self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
 
@@ -227,8 +231,8 @@ class Run(object):
 						feed_dict={
 						self.target_agent.inputs: state, 
 						self.target_agent.len_state: len_state,
-						# self.target_agent.actor_out_: actions,
-						self.target_agent.actions: actions,
+						self.target_agent.actor_out_: actions,
+						# self.target_agent.actions: actions,
 						self.target_agent.is_training: False})
 					rewards = self.cal_rewards(logits, target_items)
 
@@ -266,8 +270,8 @@ class Run(object):
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
 						# change
-						# evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
-						evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
@@ -288,7 +292,7 @@ def parse_args():
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--base_log_dir', default="log/")
-	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC15')
+	parser.add_argument('--base_data_dir', default=base_data_dir + 'kaggle-RL4REC')
 	parser.add_argument('--topk', default='5,10,20')
 
 	parser.add_argument('--epoch', type=int, default=30)
@@ -301,9 +305,9 @@ def parse_args():
 
 	parser.add_argument('--reward_buy', type=float, default=1.0)
 	parser.add_argument('--reward_click', type=float, default=0.5)
-	parser.add_argument('--reward_top', type=int, default=50)
+	parser.add_argument('--reward_top', type=int, default=20)
 
-	parser.add_argument('--max_iid', type=int, default=26702)	# 0~26702
+	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
 
 	parser.add_argument('--num_filters', type=int, default=16,
 						help='Number of filters per filter size (default: 128)')
@@ -319,7 +323,7 @@ def parse_args():
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 
-	parser.add_argument('--note', default='None...')
+	parser.add_argument('--note', default='None......')
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
 	return parser.parse_args()
@@ -341,9 +345,9 @@ def init_log(args):
 if __name__ == '__main__':
 	args = parse_args()
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
-	if args.seed != -1:
-		random.seed(args.seed)
-		np.random.seed(args.seed)
-		tf.set_random_seed(args.seed)
+
+	random.seed(args.seed)
+	np.random.seed(args.seed)
+	tf.set_random_seed(args.seed)
 	init_log(args)
 	main(args)

@@ -320,7 +320,7 @@ def parse_args():
 
 	parser.add_argument('--note', default='None......')
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
-	parser.add_argument('--cuda'm default='0')
+	parser.add_argument('--cuda', default='0')
 	return parser.parse_args()
 
 def init_log(args):
