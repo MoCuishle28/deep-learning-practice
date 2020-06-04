@@ -115,7 +115,7 @@ class Caser:
 									 training=tf.convert_to_tensor(self.is_training))
 		self.state_hidden=self.final    # shape=(?, 112)
 
-		self.output = tf.contrib.layers.fully_connected(self.state_hidden,self.item_num,activation_fn=None,scope='fc',, weights_regularizer=tf.contrib.layers.l2_regularizer(1e-4))
+		self.output = tf.contrib.layers.fully_connected(self.state_hidden,self.item_num,activation_fn=None,scope='fc',weights_regularizer=tf.contrib.layers.l2_regularizer(1e-4))
 
 		self.loss=tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target,logits=self.output)
 		self.loss = tf.reduce_mean(self.loss)

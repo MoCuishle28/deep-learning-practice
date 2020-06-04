@@ -303,8 +303,6 @@ def parse_args():
 	parser.add_argument('--alr', type=float, default=1e-4)
 	parser.add_argument('--clr', type=float, default=1e-3)
 
-	parser.add_argument('--reward_buy', type=float, default=1.0)
-	parser.add_argument('--reward_click', type=float, default=0.5)
 	parser.add_argument('--reward_top', type=int, default=20)
 
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851

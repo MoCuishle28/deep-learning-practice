@@ -98,9 +98,9 @@ class Agent:
 				activation_fn=None,
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
-			self.ranking_model_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
+			self.ce_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
 				logits=self.logits)
-			self.ranking_model_loss = tf.reduce_mean(self.ranking_model_loss)
+			self.ranking_model_loss = tf.reduce_mean(self.ce_loss)
 			self.model_optim = tf.train.AdamOptimizer(args.mlr).minimize(self.ranking_model_loss)
 
 	def initialize_embeddings(self):
@@ -152,6 +152,10 @@ class Run(object):
 			rewards.append(ndcg)
 		return rewards
 
+	def loss_reward(self, ce_loss):
+		rewards = -ce_loss.reshape((-1))
+		return rewards
+
 	def train(self):
 		num_rows = self.replay_buffer.shape[0]
 		num_batches = int(num_rows / self.args.batch_size)
@@ -176,26 +180,30 @@ class Run(object):
 					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
 					actions = (actions + noise).clip(-1, 1)
 
-					ranking_model_loss, _ = sess.run([
+					ce_loss, ranking_model_loss, _ = sess.run([
+						self.main_agent.ce_loss,
 						self.main_agent.ranking_model_loss, 
 						self.main_agent.model_optim], 
 						feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
-						# self.main_agent.actor_out_: actions,
-						self.main_agent.actions: actions,
+						self.main_agent.actor_out_: actions,
+						# self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
 
-					# target logits
-					logits = sess.run(self.target_agent.logits,
-						feed_dict={
-						self.target_agent.inputs: state, 
-						self.target_agent.len_state: len_state,
-						# self.target_agent.actor_out_: actions,
-						self.target_agent.actions: actions,
-						self.target_agent.is_training: False})
-					rewards = self.cal_rewards(logits, target_items)
+					if self.args.reward == 'ndcg':
+						# target logits
+						logits = sess.run(self.target_agent.logits,
+							feed_dict={
+							self.target_agent.inputs: state, 
+							self.target_agent.len_state: len_state,
+							self.target_agent.actor_out_: actions,
+							# self.target_agent.actions: actions,
+							self.target_agent.is_training: False})
+						rewards = self.cal_rewards(logits, target_items)
+					else:
+						rewards = self.loss_reward(ce_loss)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
 						self.target_agent.inputs: next_state,
@@ -231,8 +239,8 @@ class Run(object):
 					if total_step % self.args.eval_interval == 0:
 						t1 = time.time()
 						# debug
-						evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
-						# evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
@@ -284,8 +292,9 @@ def parse_args():
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--note', default="None......")
 
-	parser.add_argument('--w1', type=float, default=1.0, help='HR weight')
+	parser.add_argument('--w1', type=float, default=0.0, help='HR weight')
 	parser.add_argument('--w2', type=float, default=1.0, help='NDCG weight')
+	parser.add_argument('--reward', default='ndcg')		# ndcg/loss
 	return parser.parse_args()
 
 def init_log(args):

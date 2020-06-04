@@ -262,15 +262,13 @@ def parse_args():
 	parser.add_argument('--topk', default='5,10,20')
 
 	parser.add_argument('--epoch', type=int, default=30)
-	parser.add_argument('--eval_interval', type=int, default=2000)
+	parser.add_argument('--eval_interval', type=int, default=1000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--mlr', type=float, default=1e-3)
 	parser.add_argument('--alr', type=float, default=1e-4)
 	parser.add_argument('--clr', type=float, default=1e-3)
 
-	parser.add_argument('--reward_buy', type=float, default=1.0)
-	parser.add_argument('--reward_click', type=float, default=0.5)
 	parser.add_argument('--reward_top', type=int, default=20)
 
 	parser.add_argument('--max_iid', type=int, default=26702)	# 0~26702

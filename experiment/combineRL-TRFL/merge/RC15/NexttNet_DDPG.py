@@ -252,7 +252,7 @@ def parse_args():
 	parser.add_argument('--topk', default='5,10,20')
 
 	parser.add_argument('--epoch', type=int, default=30)
-	parser.add_argument('--eval_interval', type=int, default=2000)
+	parser.add_argument('--eval_interval', type=int, default=1000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--mlr', type=float, default=1e-3)
