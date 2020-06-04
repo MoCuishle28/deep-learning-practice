@@ -7,6 +7,11 @@ import pandas as pd
 import numpy as np
 
 
+def loss_reward(self, ce_loss):
+	rewards = -ce_loss.reshape((-1))
+	return rewards
+
+
 def mlp(x, is_training, hidden_sizes=(32,), activation=tf.nn.relu, output_activation=tf.nn.tanh, 
 	dropout_rate=0.1, l2=None):
 	for h in hidden_sizes[:-1]:

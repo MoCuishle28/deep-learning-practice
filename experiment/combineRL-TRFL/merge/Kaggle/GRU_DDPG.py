@@ -151,7 +151,7 @@ class Run(object):
 						self.main_agent.is_training: False})
 					
 					# add noise
-					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
+					noise = np.random.normal(0, self.args.noise_var, size=self.args.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
 					actions = (actions + noise).clip(-1, 1)
 
 					ranking_model_loss, _ = sess.run([

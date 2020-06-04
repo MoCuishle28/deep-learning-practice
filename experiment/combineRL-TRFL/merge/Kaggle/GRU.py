@@ -32,6 +32,7 @@ def parse_args():
 						help='Learning rate.')
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
+	parser.add_argument('--layer_trick', default='ln')
 	return parser.parse_args()
 
 
@@ -58,6 +59,8 @@ class GRUnetwork:
 			dtype=tf.float32,
 			sequence_length=self.len_state,
 		)
+		if args.layer_trick == 'ln':
+			self.states_hidden = tf.contrib.layers.layer_norm(self.states_hidden)
 
 		self.output = tf.contrib.layers.fully_connected(self.states_hidden,self.item_num,activation_fn=None,scope='fc', weights_regularizer=tf.contrib.layers.l2_regularizer(1e-4))
 
