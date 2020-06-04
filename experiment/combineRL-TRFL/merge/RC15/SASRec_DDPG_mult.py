@@ -104,7 +104,7 @@ class Agent:
 			self.ranking_model_input = atten * self.state_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
-				activation_fn=None)
+				activation_fn=None, weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			self.ranking_model_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
 				logits=self.logits)
