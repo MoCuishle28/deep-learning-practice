@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 
 
-def loss_reward(self, ce_loss):
+def loss_reward(ce_loss):
 	rewards = -ce_loss.reshape((-1))
 	return rewards
 
