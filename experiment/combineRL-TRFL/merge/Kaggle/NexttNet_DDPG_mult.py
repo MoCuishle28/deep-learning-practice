@@ -243,7 +243,7 @@ class Run(object):
 						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
 						logging.info(info)
-					if total_step % self.args.eval_interval == 0:
+					if total_step >= self.args.start_eval and (total_step % self.args.eval_interval == 0):
 						t1 = time.time()
 						# debug
 						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
@@ -286,7 +286,6 @@ def parse_args():
 
 	parser.add_argument('--hidden_factor', type=int, default=64)
 
-	parser.add_argument('--dropout_rate', default=0.5, type=float)
 	parser.add_argument('--weight_decay', default=1e-4, type=float)
 
 	parser.add_argument('--noise_var', type=float, default=0.1)
@@ -302,6 +301,7 @@ def parse_args():
 	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
 	parser.add_argument('--actor_layers', default="[]")
 	parser.add_argument('--critic_layers', default="[]")
+	parser.add_argument('--start_eval', type=int, default=2000)
 	return parser.parse_args()
 
 def init_log(args):
