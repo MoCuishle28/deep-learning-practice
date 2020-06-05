@@ -62,15 +62,21 @@ class Agent:
 			self.action_size = int(self.state_hidden.shape[-1])
 
 			# ddpg
-			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
-					activation_fn=tf.nn.tanh, 
-					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			actor = eval(args.actor_layers)
+			actor.append(self.action_size)
+			with tf.variable_scope("actor"):
+				self.actor_output = mlp(self.state_hidden, self.is_training, hidden_sizes=actor, 
+					dropout_rate=args.atten_dropout_rate, 
+					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			self.actor_out_ = self.actor_output * max_action
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
-			self.critic_output = tf.contrib.layers.fully_connected(self.critic_input, 1, 
-				activation_fn=None, 
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			critic = eval(args.critic_layers)
+			critic.append(1)
+			with tf.variable_scope("critic"):
+				self.critic_output = mlp(self.critic_input, self.is_training, hidden_sizes=critic, 
+					output_activation=None, dropout_rate=args.atten_dropout_rate, 
+					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			self.dpg_return = trfl.dpg(self.critic_output, self.actor_out_, 
 				dqda_clipping=dqda_clipping, clip_norm=clip_norm)
@@ -276,7 +282,6 @@ def parse_args():
 
 	parser.add_argument('--hidden_factor', type=int, default=64)
 
-	parser.add_argument('--dropout_rate', default=0.5, type=float)
 	parser.add_argument('--weight_decay', default=1e-4, type=float)
 
 	parser.add_argument('--noise_var', type=float, default=0.1)
@@ -288,6 +293,10 @@ def parse_args():
 	parser.add_argument('--note', default="None......")
 	parser.add_argument('--cuda', default='0')
 	parser.add_argument('--reward', default='ndcg')
+
+	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
+	parser.add_argument('--actor_layers', default="[]")
+	parser.add_argument('--critic_layers', default="[]")
 	return parser.parse_args()
 
 def init_log(args):
