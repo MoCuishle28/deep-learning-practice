@@ -151,7 +151,7 @@ class Run(object):
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
 					# add noise (clip in action's range)
-					actions = (actions + np.random.normal(0, self.args.noise_var, size=self.args.action_size)).clip(-1, 1)
+					actions = (actions + np.random.normal(0, self.args.noise_var, size=self.args.action_size)).clip(-self.args.max_action, self.args.max_action)
 
 					ce_loss, logits, ranking_model_loss, _ = sess.run([
 						self.main_agent.ce_loss,
@@ -218,8 +218,8 @@ class Run(object):
 
 def main(args):
 	tf.reset_default_graph()
-	main_agent = Agent(args, name='train')
-	target_agent = Agent(args, name='target')
+	main_agent = Agent(args, name='train', max_action=args.max_action)
+	target_agent = Agent(args, name='target', max_action=args.max_action)
 
 	run = Run(args, main_agent, target_agent)
 	run.train()
@@ -276,6 +276,7 @@ if __name__ == '__main__':
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
 	parser.add_argument('--reward', default='ndcg')
+	parser.add_argument('--max_action', type=float, default=1.0)
 	args = parser.parse_args()
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda

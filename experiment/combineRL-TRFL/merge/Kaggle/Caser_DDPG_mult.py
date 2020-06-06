@@ -213,7 +213,7 @@ class Run(object):
 					
 					# add noise
 					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
-					actions = (actions + noise).clip(-1, 1)
+					actions = (actions + noise).clip(-self.args.max_action, self.args.max_action)
 
 					ce_loss, ranking_model_loss, _ = sess.run([
 						self.main_agent.ce_loss,
@@ -290,8 +290,8 @@ class Run(object):
 
 def main(args):
 	tf.reset_default_graph()
-	main_agent = Agent(args, name='train')
-	target_agent = Agent(args, name='target')
+	main_agent = Agent(args, name='train', max_action=args.max_action)
+	target_agent = Agent(args, name='target', max_action=args.max_action)
 
 	run = Run(args, main_agent, target_agent)
 	run.train()
@@ -336,6 +336,7 @@ def parse_args():
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
 	parser.add_argument('--reward', default='ndcg')
+	parser.add_argument('--max_action', type=float, default=1.0)
 	return parser.parse_args()
 
 def init_log(args):
