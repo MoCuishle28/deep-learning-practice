@@ -217,7 +217,7 @@ class Run(object):
 						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
 						logging.info(info)
-					if total_step % self.args.eval_interval == 0:
+					if (total_step >= self.args.start_eval) and (total_step % self.args.eval_interval == 0):
 						t1 = time.time()
 						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
@@ -258,6 +258,7 @@ if __name__ == '__main__':
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--eval_interval', type=int, default=1000)
+	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--epoch', type=int, default=30)
 	parser.add_argument('--batch_size', type=int, default=256)
@@ -273,15 +274,14 @@ if __name__ == '__main__':
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--action_size', type=int, default=64)
 	parser.add_argument('--mlr', type=float, default=1e-3)
-	parser.add_argument('--alr', type=float, default=1e-3)
-	parser.add_argument('--clr', type=float, default=1e-3)
+	parser.add_argument('--alr', type=float, default=3e-4)
+	parser.add_argument('--clr', type=float, default=3e-4)
 
 	parser.add_argument('--noise_var', type=float, default=0.1)
 	parser.add_argument('--noise_clip', type=float, default=0.5)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
-	parser.add_argument('--dropout', type=float, default=1.0)
 
 	parser.add_argument('--note', default='None......')
 	parser.add_argument('--mem_ratio', type=float, default=0.2)

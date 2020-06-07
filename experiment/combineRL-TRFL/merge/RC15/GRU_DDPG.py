@@ -207,7 +207,7 @@ class Run(object):
 						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
 						logging.info(info)
-					if total_step % self.args.eval_interval == 0:
+					if (total_step >= self.args.start_eval) and (total_step % self.args.eval_interval == 0):
 						t1 = time.time()
 						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
@@ -249,6 +249,7 @@ if __name__ == '__main__':
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--eval_interval', type=int, default=1000)
+	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--epoch', type=int, default=30)
 	parser.add_argument('--batch_size', type=int, default=256)
