@@ -107,7 +107,7 @@ def print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, t
 		logging.info(info)
 
 
-def evaluate(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging, pre_train=False):
+def evaluate(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging, RL=False):
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	topk = [int(x) for x in args.topk.split(',')]
 	max_topk = max(topk)
@@ -141,12 +141,10 @@ def evaluate(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging,
 				true_items.append(target_item)
 				history.append(row['item_id'])
 			evaluated += 1
-		if pre_train:
-			actions = [[0] * ranking_model.action_size] * len(states)
-			prediction = sess.run(ranking_model.logits, feed_dict={ranking_model.inputs: states,
-				ranking_model.len_state: len_states, 
-				ranking_model.is_training: False, 
-				ranking_model.actions: actions})
+		if RL:
+			prediction = sess.run(ranking_model.output2, feed_dict={ranking_model.inputs: states,
+				ranking_model.len_state:len_states,
+				ranking_model.is_training:False})
 		else:
 			prediction = sess.run(ranking_model.output, feed_dict={ranking_model.inputs: states, 
 				ranking_model.len_state: len_states, 
