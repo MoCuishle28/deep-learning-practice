@@ -19,6 +19,7 @@ def parse_args():
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
+	parser.add_argument('--layer_trick', default='ln')
 
 	parser.add_argument('--epoch', type=int, default=30,
 						help='Number of max epochs.')
@@ -78,6 +79,8 @@ class QNetwork:
 				dtype=tf.float32,
 				sequence_length=self.len_state,
 			)
+			if args.layer_trick == 'ln':
+				self.states_hidden = tf.contrib.layers.layer_norm(self.states_hidden)
 
 			self.output1 = tf.contrib.layers.fully_connected(self.states_hidden, self.item_num,
 															 activation_fn=None, scope="q-value")  # all q-values
