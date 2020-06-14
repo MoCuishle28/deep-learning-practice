@@ -68,7 +68,11 @@ class Agent:
 				self.actor_output = mlp(self.state_hidden, self.is_training, hidden_sizes=actor, 
 					dropout_rate=args.atten_dropout_rate, 
 					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
+
 			self.actor_out_ = self.actor_output * max_action
+			# learnable
+			# self.alpha = tf.Variable(np.array([max_action for _ in range(self.action_size)], dtype=np.float32), name="a")
+			# self.actor_out_ = self.actor_output * self.alpha
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
 			critic = eval(args.critic_layers)
@@ -178,7 +182,10 @@ class Run(object):
 
 					# add noise
 					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
+
 					actions = (actions + noise).clip(-self.args.max_action, self.args.max_action)
+					# learnable
+					# actions = (actions + noise).clip(-1, 1)
 
 					ce_loss, ranking_model_loss, _ = sess.run([
 						self.main_agent.ce_loss,
