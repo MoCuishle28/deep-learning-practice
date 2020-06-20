@@ -150,8 +150,12 @@ class Run(object):
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
-					# add noise (clip in action's range)
-					actions = (actions + np.random.normal(0, self.args.noise_var, size=self.args.action_size)).clip(-self.args.max_action, self.args.max_action)
+					
+					# add noise
+					noise = np.random.normal(0, self.args.noise_var, size=self.args.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
+					actions = (actions + noise).clip(-self.args.max_action, self.args.max_action)
+					# # add noise (clip in action's range)
+					# actions = (actions + np.random.normal(0, self.args.noise_var, size=self.args.action_size)).clip(-self.args.max_action, self.args.max_action)
 
 					ce_loss, logits, ranking_model_loss, _ = sess.run([
 						self.main_agent.ce_loss,
@@ -165,6 +169,14 @@ class Run(object):
 						self.main_agent.is_training: True})
 
 					if self.args.reward == 'ndcg':
+						# target logits
+						# logits = sess.run(self.target_agent.logits,
+						# 	feed_dict={
+						# 	self.target_agent.inputs: state, 
+						# 	self.target_agent.len_state: len_state,
+						# 	self.target_agent.actor_out_: actions,
+						# 	# self.target_agent.actions: actions,
+						# 	self.target_agent.is_training: False})
 						rewards = self.cal_rewards(logits, target_items)
 					elif self.args.reward == 'loss':
 						# ce_loss = sess.run(self.target_agent.ce_loss, feed_dict={
@@ -248,10 +260,10 @@ if __name__ == '__main__':
 	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC15')
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--seed', type=int, default=1)
-	parser.add_argument('--eval_interval', type=int, default=1000)
+	parser.add_argument('--eval_interval', type=int, default=2000)
 	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
-	parser.add_argument('--epoch', type=int, default=30)
+	parser.add_argument('--epoch', type=int, default=100)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--topk', default='5,10,20')
 
@@ -264,11 +276,12 @@ if __name__ == '__main__':
 
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--action_size', type=int, default=64)
-	parser.add_argument('--mlr', type=float, default=1e-3)
+	parser.add_argument('--mlr', type=float, default=3e-4)
 	parser.add_argument('--alr', type=float, default=1e-3)
-	parser.add_argument('--clr', type=float, default=1e-3)
+	parser.add_argument('--clr', type=float, default=3e-4)
 
-	parser.add_argument('--noise_var', type=float, default=0.1)
+	parser.add_argument('--noise_var', type=float, default=0.01)
+	parser.add_argument('--noise_clip', type=float, default=0.05)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
@@ -277,7 +290,7 @@ if __name__ == '__main__':
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
 	parser.add_argument('--reward', default='ndcg')
-	parser.add_argument('--max_action', type=float, default=1.0)
+	parser.add_argument('--max_action', type=float, default=0.1)
 	args = parser.parse_args()
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
