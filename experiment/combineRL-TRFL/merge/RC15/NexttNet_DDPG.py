@@ -146,6 +146,17 @@ class Run(object):
 			rewards.append(ndcg)
 		return rewards
 
+	def state_trans(self, rewards, state, next_state, len_state, len_next_states):
+		true_next_state, true_next_state_len = [], []
+		for r, s, s_, sl, sl_ in zip(rewards, state, next_state, len_state, len_next_states):
+			if r == 0:
+				true_next_state.append(s)
+				true_next_state_len.append(sl)
+			else:
+				true_next_state.append(s_)
+				true_next_state_len.append(sl_)
+		return true_next_state, true_next_state_len
+
 	def train(self):
 		num_rows = self.replay_buffer.shape[0]
 		num_batches = int(num_rows / self.args.batch_size)
@@ -192,6 +203,7 @@ class Run(object):
 							# self.target_agent.actions: actions,
 							self.target_agent.is_training: False})
 						rewards = self.cal_rewards(logits, target_items)
+						# true_next_state, true_next_state_len = self.state_trans(rewards, state, next_state, len_state, len_next_states)
 					elif self.args.reward == 'loss':
 						# ce_loss = sess.run(self.target_agent.ce_loss, feed_dict={
 						# 	self.target_agent.inputs: state, 
@@ -205,6 +217,9 @@ class Run(object):
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
 						self.target_agent.inputs: next_state,
 						self.target_agent.len_state: len_next_states,
+						# self.target_agent.inputs: true_next_state,
+						# self.target_agent.len_state: true_next_state_len,
+
 						self.target_agent.is_training: False})
 					target_v = target_v.squeeze()
 					for index in range(self.args.batch_size):
