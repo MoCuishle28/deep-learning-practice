@@ -36,6 +36,10 @@ def parse_args():
 	parser.add_argument('--dropout_rate', default=0.1, type=float)
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
+
+	parser.add_argument('--atten_layers', default='[112,112]')
+	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
+	parser.add_argument('--note', default='None...')
 	return parser.parse_args()
 
 
@@ -114,6 +118,15 @@ class Caser:
 									 rate=args.dropout_rate,
 									 training=tf.convert_to_tensor(self.is_training))
 		self.state_hidden=self.final    # shape=(?, 112)
+
+		# atten
+		# atten_layers = eval(args.atten_layers)
+		# atten_layers.append(int(self.state_hidden.shape[-1]))
+		# with tf.variable_scope("atten"):
+		# 	self.atten = mlp(self.state_hidden, self.is_training, hidden_sizes=atten_layers, 
+		# 		dropout_rate=args.atten_dropout_rate, 
+		# 		l2=tf.contrib.layers.l2_regularizer(1e-4))
+		# self.state_hidden = tf.nn.softmax(self.atten) * self.state_hidden
 
 		self.output = tf.contrib.layers.fully_connected(self.state_hidden,self.item_num,activation_fn=None,scope='fc',weights_regularizer=tf.contrib.layers.l2_regularizer(1e-4))
 
