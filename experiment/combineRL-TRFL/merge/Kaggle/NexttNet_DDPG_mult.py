@@ -75,6 +75,12 @@ class Agent:
 			# self.alpha = tf.Variable(max_action, name="a")
 			# self.actor_out_ = self.actor_output * self.alpha
 
+			# learnable A (MLP)
+			# A = tf.contrib.layers.fully_connected(tf.concat([self.actor_output, self.state_hidden], axis=1), 1,
+			# 	activation_fn=None,
+			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			# self.actor_out_ = self.actor_output * A
+
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
 			critic = eval(args.critic_layers)
 			critic.append(1)
