@@ -247,6 +247,7 @@ class Run(object):
 							self.target_agent.actions: actions,
 							self.target_agent.is_training: False})
 						rewards = hit_reward(self.args, logits, target_items)
+						# true_next_state, true_next_state_len = self.state_trans(rewards, state, next_state, len_state, len_next_states)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
 						self.target_agent.inputs: next_state,

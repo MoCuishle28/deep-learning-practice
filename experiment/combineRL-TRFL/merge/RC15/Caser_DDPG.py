@@ -131,9 +131,9 @@ class Agent:
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
 			# caser
-			self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			self.ranking_model_input = self.actions + self.state_hidden
-			# self.ranking_model_input = self.actor_out_ + self.state_hidden
+			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
+			# self.ranking_model_input = self.actions + self.state_hidden
+			self.ranking_model_input = self.actor_out_ + self.state_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,
@@ -193,6 +193,17 @@ class Run(object):
 			rewards.append(ndcg)
 		return rewards
 
+	def state_trans(self, rewards, state, next_state, len_state, len_next_states):
+		true_next_state, true_next_state_len = [], []
+		for r, s, s_, sl, sl_ in zip(rewards, state, next_state, len_state, len_next_states):
+			if r == 0:
+				true_next_state.append(s)
+				true_next_state_len.append(sl)
+			else:
+				true_next_state.append(s_)
+				true_next_state_len.append(sl_)
+		return true_next_state, true_next_state_len
+
 	def train(self):
 		num_rows = self.replay_buffer.shape[0]
 		num_batches = int(num_rows / self.args.batch_size)
@@ -225,8 +236,8 @@ class Run(object):
 						feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
-						# self.main_agent.actor_out_: actions,
-						self.main_agent.actions: actions,
+						self.main_agent.actor_out_: actions,
+						# self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
 
@@ -235,16 +246,17 @@ class Run(object):
 						logits = sess.run(self.target_agent.logits, feed_dict={
 							self.target_agent.inputs: state, 
 							self.target_agent.len_state: len_state,
-							# self.target_agent.actor_out_: actions,
-							self.target_agent.actions: actions,
+							self.target_agent.actor_out_: actions,
+							# self.target_agent.actions: actions,
 							self.target_agent.is_training: False})
 						rewards = self.cal_rewards(logits, target_items)
+						# true_next_state, true_next_state_len = self.state_trans(rewards, state, next_state, len_state, len_next_states)
 					elif self.args.reward == 'loss':
 						# ce_loss = sess.run(self.target_agent.ce_loss, feed_dict={
 						# 	self.target_agent.inputs: state, 
 						# 	self.target_agent.len_state: len_state,
-						# 	# self.target_agent.actor_out_: actions,
-						# 	self.target_agent.actions: actions,
+						# 	self.target_agent.actor_out_: actions,
+						# 	# self.target_agent.actions: actions,
 						# 	self.target_agent.target_items: target_items,
 						# 	self.target_agent.is_training: False})
 						rewards = loss_reward(ce_loss)
@@ -253,14 +265,18 @@ class Run(object):
 						logits = sess.run(self.target_agent.logits, feed_dict={
 							self.target_agent.inputs: state, 
 							self.target_agent.len_state: len_state,
-							# self.target_agent.actor_out_: actions,
-							self.target_agent.actions: actions,
+							self.target_agent.actor_out_: actions,
+							# self.target_agent.actions: actions,
 							self.target_agent.is_training: False})
 						rewards = hit_reward(self.args, logits, target_items)
+						# true_next_state, true_next_state_len = self.state_trans(rewards, state, next_state, len_state, len_next_states)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
 						self.target_agent.inputs: next_state,
 						self.target_agent.len_state: len_next_states,
+						# self.target_agent.inputs: true_next_state,
+						# self.target_agent.len_state: true_next_state_len,
+
 						self.target_agent.is_training: False})
 					target_v = target_v.squeeze()
 					for index in range(self.args.batch_size):
@@ -292,8 +308,8 @@ class Run(object):
 					if (total_step >= self.args.start_eval) and (total_step % self.args.eval_interval == 0):
 						t1 = time.time()
 						# change
-						# evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
-						evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
