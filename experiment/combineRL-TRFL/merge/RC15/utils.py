@@ -11,6 +11,15 @@ def loss_reward(ce_loss):
 	rewards = -ce_loss.reshape((-1))
 	return rewards
 
+def hit_reward(args, logits, target_items):
+	logits = torch.tensor(logits)
+	_, rankings = logits.topk(args.reward_top)
+	rankings = rankings.tolist()	# (batch, topk)
+	rewards = []
+	for target_iid, rec_list in zip(target_items, rankings):
+		rewards.append(1.0 if target_iid in set(rec_list) else args.init_r) 	# init_r: don't hit reward (0/-1)
+	return rewards
+
 
 def mlp(x, is_training, hidden_sizes=(32,), activation=tf.nn.relu, output_activation=tf.nn.tanh, 
 	dropout_rate=0.1, l2=None):

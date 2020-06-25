@@ -202,6 +202,7 @@ class Run(object):
 					# actions = (actions + noise).clip(-1, 1)
 
 					ce_loss, ranking_model_loss, _ = sess.run([
+						# self.main_agent.logits, 
 						self.main_agent.ce_loss,
 						self.main_agent.ranking_model_loss, 
 						self.main_agent.model_optim], 
@@ -233,6 +234,15 @@ class Run(object):
 						# 	self.target_agent.target_items: target_items,
 						# 	self.target_agent.is_training: False})
 						rewards = loss_reward(ce_loss)
+					elif self.args.reward == 'hit':
+						# target logits
+						logits = sess.run(self.target_agent.logits, feed_dict={
+							self.target_agent.inputs: state, 
+							self.target_agent.len_state: len_state,
+							# self.target_agent.actor_out_: actions,
+							self.target_agent.actions: actions,
+							self.target_agent.is_training: False})
+						rewards = hit_reward(self.args, logits, target_items)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
 						self.target_agent.inputs: next_state,
@@ -328,6 +338,8 @@ def parse_args():
 	parser.add_argument('--actor_layers', default="[]")
 	parser.add_argument('--critic_layers', default="[]")
 	parser.add_argument('--max_action', type=float, default=0.1)
+
+	parser.add_argument('--init_r' type=float, default=-1.0)
 	return parser.parse_args()
 
 def init_log(args):
