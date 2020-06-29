@@ -96,16 +96,16 @@ class Agent:
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
 			# SASRec
-			self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			self.ranking_model_input = self.actions + self.state_hidden
-			# self.ranking_model_input = self.actor_out_ + self.state_hidden
+			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
+			# self.ranking_model_input = self.actions + self.state_hidden
+			self.ranking_model_input = self.actor_out_ + self.state_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
 				activation_fn=None, weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
-			self.ranking_model_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
+			self.ce_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
 				logits=self.logits)
-			self.ranking_model_loss = tf.reduce_mean(self.ranking_model_loss)
+			self.ranking_model_loss = tf.reduce_mean(self.ce_loss)
 			self.model_optim = tf.train.AdamOptimizer(args.mlr).minimize(self.ranking_model_loss)
 
 
@@ -145,21 +145,33 @@ class Run(object):
 		len_next_states = list(batch['len_next_states'].values())
 		target_items = list(batch['action'].values())
 		is_done = list(batch['is_done'].values())
-		return state, len_state, next_state, len_next_states, target_items, is_done
+		is_buy = list(batch['is_buy'].values())
+		return state, len_state, next_state, len_next_states, target_items, is_done, is_buy
 
-	def cal_rewards(self, logits, target_items):
+	def cal_rewards(self, logits, target_items, is_buy):
 		logits = torch.tensor(logits)
 		_, rankings = logits.topk(self.args.reward_top)
 		rankings = rankings.tolist()	# (batch, topk)
 		rewards = []
-		for target_iid, rec_list in zip(target_items, rankings):
+		for target_iid, rec_list, buy in zip(target_items, rankings, is_buy):
 			ndcg = 0.0
 			for i, iid in enumerate(rec_list):
 				if iid == target_iid:
 					ndcg = 1.0 / np.log2(i + 2.0).item()
 					break
-			rewards.append(ndcg)
+			rewards.append(self.args.buy_weight * ndcg if buy == 1 else ndcg)
 		return rewards
+
+	def state_trans(self, rewards, state, next_state, len_state, len_next_states):
+		true_next_state, true_next_state_len = [], []
+		for r, s, s_, sl, sl_ in zip(rewards, state, next_state, len_state, len_next_states):
+			if r == 0:
+				true_next_state.append(s)
+				true_next_state_len.append(sl)
+			else:
+				true_next_state.append(s_)
+				true_next_state_len.append(sl_)
+		return true_next_state, true_next_state_len
 
 	def train(self):
 		num_rows = self.replay_buffer.shape[0]
@@ -175,39 +187,54 @@ class Run(object):
 			discount = [self.args.gamma] * self.args.batch_size
 			for i_epoch in range(self.args.epoch):
 				for j in range(num_batches):
-					state, len_state, next_state, len_next_states, target_items, is_done = self.sample_data()
+					state, len_state, next_state, len_next_states, target_items, is_done, is_buy = self.sample_data()
 					actions = sess.run(self.main_agent.actor_out_, feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
 					# add noise
 					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
-					actions = (actions + noise).clip(-1, 1)
+					actions = (actions + noise).clip(-self.args.max_action, self.args.max_action)
 
-					ranking_model_loss, _ = sess.run([
+					ce_loss, ranking_model_loss, _ = sess.run([
+						self.main_agent.ce_loss,
 						self.main_agent.ranking_model_loss, 
 						self.main_agent.model_optim], 
 						feed_dict={
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
-						# self.main_agent.actor_out_: actions,
-						self.main_agent.actions: actions,
+						self.main_agent.actor_out_: actions,
+						# self.main_agent.actions: actions,
 						self.main_agent.target_items: target_items,
 						self.main_agent.is_training: True})
 
-					# target logits
-					logits = sess.run(self.target_agent.logits,
-						feed_dict={
-						self.target_agent.inputs: state, 
-						self.target_agent.len_state: len_state,
-						# self.target_agent.actor_out_: actions,
-						self.target_agent.actions: actions,
-						self.target_agent.is_training: False})
-					rewards = self.cal_rewards(logits, target_items)
+					if self.args.reward == 'ndcg':
+						# target logits
+						logits = sess.run(self.target_agent.logits,
+							feed_dict={
+							self.target_agent.inputs: state, 
+							self.target_agent.len_state: len_state,
+							self.target_agent.actor_out_: actions,
+							# self.target_agent.actions: actions,
+							self.target_agent.is_training: False})
+						rewards = self.cal_rewards(logits, target_items, is_buy)
+						# true_next_state, true_next_state_len = self.state_trans(rewards, state, next_state, len_state, len_next_states)
+					elif self.args.reward == 'loss':
+						# ce_loss = sess.run(self.target_agent.ce_loss, feed_dict={
+						# 	self.target_agent.inputs: state, 
+						# 	self.target_agent.len_state: len_state,
+						# 	self.target_agent.actor_out_: actions,
+						# 	# self.target_agent.actions: actions,
+						# 	self.target_agent.target_items: target_items,
+						# 	self.target_agent.is_training: False})
+						rewards = loss_reward(ce_loss)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
 						self.target_agent.inputs: next_state,
 						self.target_agent.len_state: len_next_states,
+						# self.target_agent.inputs: true_next_state,
+						# self.target_agent.len_state: true_next_state_len,
+
 						self.target_agent.is_training: False})
 					target_v = target_v.squeeze()
 					for index in range(self.args.batch_size):
@@ -236,10 +263,10 @@ class Run(object):
 						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
 						logging.info(info)
-					if total_step % self.args.eval_interval == 0:
+					if (total_step >= self.args.start_eval) and (total_step % self.args.eval_interval == 0):
 						t1 = time.time()
-						# evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
-						evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
@@ -247,8 +274,8 @@ class Run(object):
 
 def main(args):
 	tf.reset_default_graph()
-	main_agent = Agent(args, name='train')
-	target_agent = Agent(args, name='target')
+	main_agent = Agent(args, name='train', max_action=args.max_action)
+	target_agent = Agent(args, name='target', max_action=args.max_action)
 
 	run = Run(args, main_agent, target_agent)
 	run.train()
@@ -261,21 +288,21 @@ def parse_args():
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--base_log_dir', default="log/")
-	parser.add_argument('--base_pic_dir', default="pic/")
 	parser.add_argument('--base_data_dir', default=base_data_dir + 'kaggle-RL4REC')
 	parser.add_argument('--topk', default='5,10,20')
 
-	parser.add_argument('--epoch', type=int, default=30)
-	parser.add_argument('--eval_interval', type=int, default=1000)
+	parser.add_argument('--epoch', type=int, default=100)
+	parser.add_argument('--eval_interval', type=int, default=2000)
+	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--mlr', type=float, default=1e-3)
-	parser.add_argument('--alr', type=float, default=1e-3)
-	parser.add_argument('--clr', type=float, default=1e-3)
+	parser.add_argument('--alr', type=float, default=3e-4)
+	parser.add_argument('--clr', type=float, default=3e-4)
 
-	parser.add_argument('--reward_buy', type=float, default=1.0)
-	parser.add_argument('--reward_click', type=float, default=0.5)
 	parser.add_argument('--reward_top', type=int, default=20)
+	parser.add_argument('--reward_click', type=float, default=1.0)
+	parser.add_argument('--reward_buy', type=float, default=5.0)
 
 	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
 	parser.add_argument('--hidden_factor', type=int, default=64)
@@ -286,23 +313,23 @@ def parse_args():
 	parser.add_argument('--dropout_rate', default=0.1, type=float)
 	parser.add_argument('--weight_decay', default=1e-4, type=float)
 
-	parser.add_argument('--noise_var', type=float, default=0.1)
-	parser.add_argument('--noise_clip', type=float, default=0.5)
+	parser.add_argument('--noise_var', type=float, default=0.01)
+	parser.add_argument('--noise_clip', type=float, default=0.05)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
+
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--note', default="None......")
-
-	parser.add_argument('--w1', type=float, default=1.0, help='HR weight')
-	parser.add_argument('--w2', type=float, default=1.0, help='NDCG weight')
+	parser.add_argument('--cuda', default='0')
+	parser.add_argument('--reward', default='ndcg')
+	parser.add_argument('--max_action', type=float, default=0.1)
+	parser.add_argument('--buy_weight', type=float, default=5.0)
 	return parser.parse_args()
 
 
 def init_log(args):
 	if not os.path.exists(args.base_log_dir):
 		os.makedirs(args.base_log_dir)
-	if not os.path.exists(args.base_pic_dir):
-		os.makedirs(args.base_pic_dir)
 	start = datetime.datetime.now()
 	logging.basicConfig(level = logging.INFO,
 					filename = args.base_log_dir + args.v + '-' + str(time.time()) + '.log',
@@ -316,8 +343,11 @@ def init_log(args):
 
 if __name__ == '__main__':
 	args = parse_args()
-	random.seed(args.seed)
-	np.random.seed(args.seed)
-	tf.set_random_seed(args.seed)
+
+	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
+	if args.seed != -1:
+		random.seed(args.seed)
+		np.random.seed(args.seed)
+		tf.set_random_seed(args.seed)
 	init_log(args)
 	main(args)

@@ -103,27 +103,15 @@ class Agent:
 			self.action_size = int(self.state_hidden.shape[-1])
 
 			# ddpg
-			actor = eval(args.actor_layers)
-			actor.append(self.action_size)
-			with tf.variable_scope("actor"):
-				self.actor_output = mlp(self.state_hidden, self.is_training, hidden_sizes=actor, 
-					dropout_rate=args.atten_dropout_rate, 
-					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			self.actor_output = tf.contrib.layers.fully_connected(self.state_hidden, self.action_size, 
+					activation_fn=tf.nn.tanh, 
+					weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			self.actor_out_ = self.actor_output * max_action
 
-			# learnable A (MLP)
-			# A = tf.contrib.layers.fully_connected(tf.concat([self.actor_output, self.state_hidden], axis=1), 1,
-			# 	activation_fn=None,
-			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			# self.actor_out_ = self.actor_output * A
-
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
-			critic = eval(args.critic_layers)
-			critic.append(1)
-			with tf.variable_scope("critic"):
-				self.critic_output = mlp(self.critic_input, self.is_training, hidden_sizes=critic, 
-					output_activation=None, dropout_rate=args.atten_dropout_rate, 
-					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			self.critic_output = tf.contrib.layers.fully_connected(self.critic_input, 1, 
+				activation_fn=None, 
+				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			self.dpg_return = trfl.dpg(self.critic_output, self.actor_out_, 
 				dqda_clipping=dqda_clipping, clip_norm=clip_norm)
@@ -138,12 +126,12 @@ class Agent:
 
 			# caser
 			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			# atten = tf.nn.softmax(self.actions)
-			# self.ranking_model_input = atten * self.state_hidden
 
-			atten = tf.nn.softmax(self.actor_out_)
-			# atten = self.actor_out_
-			self.ranking_model_input = atten * self.state_hidden
+			# self.ranking_model_input = self.actions * self.state_hidden
+			# self.ranking_model_input = tf.nn.softmax(self.actions) * self.state_hidden
+
+			# self.ranking_model_input = self.actor_out_ * self.state_hidden
+			self.ranking_model_input = tf.nn.softmax(self.actor_out_) * self.state_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,
@@ -240,7 +228,6 @@ class Run(object):
 					actions = (actions + noise).clip(-self.args.max_action, self.args.max_action)
 
 					ce_loss, ranking_model_loss, _ = sess.run([
-						# self.main_agent.logits, 
 						self.main_agent.ce_loss,
 						self.main_agent.ranking_model_loss, 
 						self.main_agent.model_optim], 
@@ -272,16 +259,6 @@ class Run(object):
 						# 	self.target_agent.target_items: target_items,
 						# 	self.target_agent.is_training: False})
 						rewards = loss_reward(ce_loss)
-					elif self.args.reward == 'hit':
-						# target logits
-						logits = sess.run(self.target_agent.logits, feed_dict={
-							self.target_agent.inputs: state, 
-							self.target_agent.len_state: len_state,
-							self.target_agent.actor_out_: actions,
-							# self.target_agent.actions: actions,
-							self.target_agent.is_training: False})
-						rewards = hit_reward(self.args, logits, target_items)
-						# true_next_state, true_next_state_len = self.state_trans(rewards, state, next_state, len_state, len_next_states)
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
 						self.target_agent.inputs: next_state,
@@ -342,7 +319,7 @@ def parse_args():
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--base_log_dir', default="log/")
-	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC15')
+	parser.add_argument('--base_data_dir', default=base_data_dir + 'kaggle-RL4REC')
 	parser.add_argument('--topk', default='5,10,20')
 
 	parser.add_argument('--epoch', type=int, default=100)
@@ -354,11 +331,11 @@ def parse_args():
 	parser.add_argument('--alr', type=float, default=3e-4)
 	parser.add_argument('--clr', type=float, default=3e-4)
 
-	parser.add_argument('--reward_top', type=int, default=50)
+	parser.add_argument('--reward_top', type=int, default=20)
 	parser.add_argument('--reward_click', type=float, default=1.0)
 	parser.add_argument('--reward_buy', type=float, default=5.0)
 
-	parser.add_argument('--max_iid', type=int, default=26702)	# 0~26702
+	parser.add_argument('--max_iid', type=int, default=70851)	# 0~70851
 
 	parser.add_argument('--num_filters', type=int, default=16,
 						help='Number of filters per filter size (default: 128)')
@@ -373,18 +350,13 @@ def parse_args():
 	parser.add_argument('--noise_clip', type=float, default=0.05)
 	parser.add_argument('--tau', type=float, default=0.001)
 	parser.add_argument('--gamma', type=float, default=0.5)
-	parser.add_argument('--mem_ratio', type=float, default=0.2)
-	parser.add_argument('--note', default="None......")
 
-	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
-	parser.add_argument('--actor_layers', default="[112,112]")
-	parser.add_argument('--critic_layers', default="[]")
+	parser.add_argument('--note', default='None......')
+	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
 	parser.add_argument('--reward', default='ndcg')
 	parser.add_argument('--max_action', type=float, default=0.1)
-
-	parser.add_argument('--init_r', type=float, default=-1.0)
-	parser.add_argument('--buy_weight', type=float, default=5.0)	# 购买行为 reward 的权重
+	parser.add_argument('--buy_weight', type=float, default=5.0)
 	return parser.parse_args()
 
 def init_log(args):
@@ -404,6 +376,7 @@ def init_log(args):
 if __name__ == '__main__':
 	args = parse_args()
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
+
 	if args.seed != -1:
 		random.seed(args.seed)
 		np.random.seed(args.seed)
