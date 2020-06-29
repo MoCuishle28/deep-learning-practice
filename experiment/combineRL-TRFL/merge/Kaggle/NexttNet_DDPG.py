@@ -239,8 +239,8 @@ class Run(object):
 						logits = sess.run(self.target_agent.logits, feed_dict={
 							self.target_agent.inputs: state, 
 							self.target_agent.len_state: len_state,
-							# self.target_agent.actor_out_: actions,
-							self.target_agent.actions: actions,
+							self.target_agent.actor_out_: actions,
+							# self.target_agent.actions: actions,
 							self.target_agent.is_training: False})
 						rewards = hit_reward(self.args, logits, target_items)
 						# true_next_state, true_next_state_len = self.state_trans(rewards, state, next_state, len_state, len_next_states)
@@ -340,7 +340,7 @@ def parse_args():
 	parser.add_argument('--critic_layers', default="[]")
 	parser.add_argument('--max_action', type=float, default=0.1)
 
-	parser.add_argument('--init_r' type=float, default=-1.0)
+	parser.add_argument('--init_r', type=float, default=-1.0)
 	return parser.parse_args()
 
 def init_log(args):
@@ -362,8 +362,9 @@ if __name__ == '__main__':
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
 
-	random.seed(args.seed)
-	np.random.seed(args.seed)
-	tf.set_random_seed(args.seed)
+	if args.seed != -1:
+		random.seed(args.seed)
+		np.random.seed(args.seed)
+		tf.set_random_seed(args.seed)
 	init_log(args)
 	main(args)

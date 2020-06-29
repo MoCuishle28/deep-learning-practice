@@ -312,9 +312,10 @@ if __name__ == '__main__':
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
 
-	random.seed(args.seed)
-	np.random.seed(args.seed)
-	tf.set_random_seed(args.seed)
+	if args.seed != -1:
+		random.seed(args.seed)
+		np.random.seed(args.seed)
+		tf.set_random_seed(args.seed)
 
 	init_log(args)
 	main(args)
