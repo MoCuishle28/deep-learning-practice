@@ -11,7 +11,6 @@ import time
 import datetime
 
 def parse_args():
-	base_data_dir = '../../../data/'
 	parser = argparse.ArgumentParser(description="Run supervised GRU.")
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--v', default='v')
@@ -23,7 +22,7 @@ def parse_args():
 	parser.add_argument('--epoch', type=int, default=30,
 						help='Number of max epochs.')
 	parser.add_argument('--base_log_dir', default='baseline-log/')
-	parser.add_argument('--base_data_dir', default=base_data_dir + 'Cosmetics-Shop')
+	parser.add_argument('--base_data_dir', default='Cosmetics-Shop')
 	parser.add_argument('--batch_size', type=int, default=256,
 						help='Batch size.')
 	parser.add_argument('--hidden_factor', type=int, default=64,
@@ -143,6 +142,9 @@ if __name__ == '__main__':
 	args = parse_args()
 	init_log(args)
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
+
+	base_data_dir = '../../../data/'
+	args.base_data_dir = os.path.join(base_data_dir, args.base_data_dir)
 
 	data_directory = args.base_data_dir
 	data_statis = pd.read_pickle(

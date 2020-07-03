@@ -18,7 +18,8 @@ def to_pickled_df(data_directory, **kwargs):
 
 if __name__ == '__main__':
 
-	data_directory = '../data/Cosmetics-Shop'
+	# data_directory = '../data/Cosmetics-Shop'
+	data_directory = '../data/RC19'
 
 	length = 10
 

@@ -22,7 +22,7 @@ def parse_args():
 	parser.add_argument('--mode', default='valid')
 
 	parser.add_argument('--epoch', type=int, default=30)
-	parser.add_argument('--base_data_dir', nargs='?', default='../../../data/Cosmetics-Shop', help='data directory')
+	parser.add_argument('--base_data_dir', nargs='?', default='Cosmetics-Shop', help='data directory')
 
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--eval_interval', type=int, default=2000)
@@ -36,9 +36,9 @@ def parse_args():
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
 
-	parser.add_argument('--atten_layers', default='[]')
-	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
-	parser.add_argument('--note', default='None...')
+	# parser.add_argument('--atten_layers', default='[]')
+	# parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
+	# parser.add_argument('--note', default='None...')
 	return parser.parse_args()
 
 
@@ -119,6 +119,9 @@ if __name__ == '__main__':
 	args = parse_args()
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
 	init_log(args)
+
+	base_data_dir = '../../../data/'
+	args.base_data_dir = os.path.join(base_data_dir, args.base_data_dir)
 
 	data_directory = args.base_data_dir
 	data_statis = pd.read_pickle(

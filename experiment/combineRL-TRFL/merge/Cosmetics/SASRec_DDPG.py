@@ -269,6 +269,12 @@ class Run(object):
 
 
 def main(args):
+	base_data_dir = '../../../data/'
+	args.base_data_dir = os.path.join(base_data_dir, args.base_data_dir)
+	data_statis = pd.read_pickle(
+		os.path.join(args.base_data_dir, 'data_statis.df'))  # read data statistics, includeing state_size and item_num
+	args.max_iid = data_statis['item_num'][0].item()  				# total number of items
+
 	tf.reset_default_graph()
 	main_agent = Agent(args, name='train', max_action=args.max_action)
 	target_agent = Agent(args, name='target', max_action=args.max_action)
@@ -278,13 +284,12 @@ def main(args):
 
 
 def parse_args():
-	base_data_dir = '../../../data/'
 	parser = argparse.ArgumentParser(description="SASRec DDPG.")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--base_log_dir', default="log/")
-	parser.add_argument('--base_data_dir', default=base_data_dir + 'Cosmetics-Shop')
+	parser.add_argument('--base_data_dir', default='Cosmetics-Shop')
 	parser.add_argument('--topk', default='5,10,20')
 
 	parser.add_argument('--epoch', type=int, default=100)
