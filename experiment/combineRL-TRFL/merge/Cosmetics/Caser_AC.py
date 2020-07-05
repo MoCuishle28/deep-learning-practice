@@ -37,7 +37,7 @@ def parse_args():
 	parser.add_argument('--epoch', type=int, default=30,
 						help='Number of max epochs.')
 	parser.add_argument('--base_log_dir', default='baseline-log/')
-	parser.add_argument('--base_data_dir', default='Cosmetics-Shop')
+	parser.add_argument('--base_data_dir', default='RC19')
 	# parser.add_argument('--pretrain', type=int, default=1,
 	#                     help='flag for pretrain. 1: initialize from pretrain; 0: randomly initialize; -1: save the model to pretrain file')
 	parser.add_argument('--batch_size', type=int, default=256,

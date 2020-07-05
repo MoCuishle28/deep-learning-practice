@@ -22,7 +22,7 @@ def parse_args():
 	parser.add_argument('--epoch', type=int, default=30,
 						help='Number of max epochs.')
 	parser.add_argument('--base_log_dir', default='baseline-log/')
-	parser.add_argument('--base_data_dir', default='Cosmetics-Shop')
+	parser.add_argument('--base_data_dir', default='RC19')
 	parser.add_argument('--batch_size', type=int, default=256,
 						help='Batch size.')
 	parser.add_argument('--hidden_factor', type=int, default=64,

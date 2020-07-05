@@ -278,7 +278,7 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Hyperparameters")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--base_log_dir', default="log/")
-	parser.add_argument('--base_data_dir', default='Cosmetics-Shop')
+	parser.add_argument('--base_data_dir', default='RC19')
 	parser.add_argument('--mode', default='valid')		# test/valid
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--eval_interval', type=int, default=2000)

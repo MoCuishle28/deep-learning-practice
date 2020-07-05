@@ -133,7 +133,14 @@ class Agent:
 			# caser
 			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
 			# self.ranking_model_input = self.actions + self.state_hidden
-			self.ranking_model_input = self.actor_out_ + self.state_hidden
+			add_input = self.actor_out_ + self.state_hidden
+
+			atten = tf.nn.softmax(self.actor_out_)
+			# atten = self.actor_out_
+			mult_input = atten * self.state_hidden
+
+			self.ranking_model_input = tf.concat([add_input, mult_input], axis=1)
+			
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,

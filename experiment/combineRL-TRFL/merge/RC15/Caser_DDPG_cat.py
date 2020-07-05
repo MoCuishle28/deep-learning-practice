@@ -133,7 +133,13 @@ class Agent:
 			# caser
 			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
 			# self.ranking_model_input = self.actions + self.state_hidden
-			self.ranking_model_input = self.actor_out_ + self.state_hidden
+			add_input = self.actor_out_ + self.state_hidden
+
+			atten = tf.nn.softmax(self.actor_out_)
+			# atten = self.actor_out_
+			mult_input = atten * self.state_hidden
+
+			self.ranking_model_input = tf.concat([add_input, mult_input], axis=1)
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
 				activation_fn=None,
@@ -316,12 +322,6 @@ class Run(object):
 
 
 def main(args):
-	base_data_dir = '../../../data/'
-	args.base_data_dir = os.path.join(base_data_dir, args.base_data_dir)
-	data_statis = pd.read_pickle(
-		os.path.join(args.base_data_dir, 'data_statis.df'))  # read data statistics, includeing state_size and item_num
-	args.max_iid = data_statis['item_num'][0].item()  				# total number of items
-
 	tf.reset_default_graph()
 	main_agent = Agent(args, name='train', max_action=args.max_action)
 	target_agent = Agent(args, name='target', max_action=args.max_action)
@@ -330,12 +330,13 @@ def main(args):
 	run.train()
 
 def parse_args():
+	base_data_dir = '../../../data/'
 	parser = argparse.ArgumentParser(description="Run Caser DDPG.")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--base_log_dir', default="log/")
-	parser.add_argument('--base_data_dir', default='RC19')
+	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC15')
 	parser.add_argument('--topk', default='5,10,20')
 
 	parser.add_argument('--epoch', type=int, default=100)
@@ -343,13 +344,13 @@ def parse_args():
 	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
-	parser.add_argument('--mlr', type=float, default=5e-4)
-	parser.add_argument('--alr', type=float, default=1e-5)
-	parser.add_argument('--clr', type=float, default=1e-4)
+	parser.add_argument('--mlr', type=float, default=1e-3)
+	parser.add_argument('--alr', type=float, default=3e-4)
+	parser.add_argument('--clr', type=float, default=3e-4)
 
 	parser.add_argument('--reward_top', type=int, default=50)
 
-	parser.add_argument('--max_iid', type=int, default=0)	# 0~43629
+	parser.add_argument('--max_iid', type=int, default=26702)	# 0~26702
 
 	parser.add_argument('--num_filters', type=int, default=16,
 						help='Number of filters per filter size (default: 128)')

@@ -279,7 +279,7 @@ def parse_args():
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--seed', type=int, default=1)
 	parser.add_argument('--base_log_dir', default="log/")
-	parser.add_argument('--base_data_dir', default='Cosmetics-Shop')
+	parser.add_argument('--base_data_dir', default='RC19')
 	parser.add_argument('--topk', default='5,10,20')
 
 	parser.add_argument('--epoch', type=int, default=100)

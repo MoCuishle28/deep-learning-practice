@@ -18,7 +18,7 @@ def parse_args():
 	parser.add_argument('--mode', default='valid')
 
 	parser.add_argument('--epoch', type=int, default=30)
-	parser.add_argument('--base_data_dir', nargs='?', default='Cosmetics-Shop', help='data directory')
+	parser.add_argument('--base_data_dir', nargs='?', default='RC19', help='data directory')
 
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--eval_interval', type=int, default=2000)
