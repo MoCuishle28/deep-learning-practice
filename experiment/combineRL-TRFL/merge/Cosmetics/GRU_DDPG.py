@@ -44,15 +44,23 @@ class Agent(object):
 			# ddpg
 			if args.layer_trick == 'ln':
 				self.states_hidden = tf.contrib.layers.layer_norm(self.states_hidden)
-			self.actor_output = tf.contrib.layers.fully_connected(self.states_hidden, args.action_size, 
-				activation_fn=tf.nn.tanh, 
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			self.action_size = int(self.states_hidden.shape[-1])
+
+			actor = eval(args.actor_layers)
+			actor.append(self.action_size)
+			with tf.variable_scope("actor"):
+				self.actor_output = mlp(self.states_hidden, self.is_training, hidden_sizes=actor, 
+					dropout_rate=args.atten_dropout_rate, 
+					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 			self.actor_out_ = self.actor_output * max_action
 
 			self.critic_input = tf.concat([self.actor_out_, self.states_hidden], axis=1)
-			self.critic_output = tf.contrib.layers.fully_connected(self.critic_input, 1, 
-				activation_fn=None, 
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			critic = eval(args.critic_layers)
+			critic.append(1)
+			with tf.variable_scope("critic"):
+				self.critic_output = mlp(self.critic_input, self.is_training, hidden_sizes=critic, 
+					output_activation=None, dropout_rate=args.atten_dropout_rate, 
+					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			self.dpg_return = trfl.dpg(self.critic_output, self.actor_out_, 
 				dqda_clipping=dqda_clipping, clip_norm=clip_norm)
@@ -289,16 +297,16 @@ if __name__ == '__main__':
 
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	# embedding
-	parser.add_argument('--max_iid', type=int, default=39222)	# 0~39222
+	parser.add_argument('--max_iid', type=int, default=-1)
 	parser.add_argument('--i_emb_dim', type=int, default=64)
 
 	parser.add_argument('--reward_top', type=int, default=20)		# 取 top 多少计算 reward
 
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--action_size', type=int, default=64)
-	parser.add_argument('--mlr', type=float, default=3e-4)
-	parser.add_argument('--alr', type=float, default=1e-3)
-	parser.add_argument('--clr', type=float, default=3e-4)
+	parser.add_argument('--mlr', type=float, default=1e-3)
+	parser.add_argument('--alr', type=float, default=1e-5)
+	parser.add_argument('--clr', type=float, default=1e-5)
 
 	parser.add_argument('--noise_var', type=float, default=0.01)
 	parser.add_argument('--noise_clip', type=float, default=0.05)
@@ -307,6 +315,9 @@ if __name__ == '__main__':
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
 
 	parser.add_argument('--note', default='None...')
+	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
+	parser.add_argument('--actor_layers', default="[]")
+	parser.add_argument('--critic_layers', default="[]")
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
 	parser.add_argument('--reward', default='ndcg')

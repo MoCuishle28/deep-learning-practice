@@ -31,7 +31,7 @@ def parse_args():
 	parser.add_argument('--hidden_factor', type=int, default=64,
 						help='Number of hidden factors, i.e., embedding size.')
 
-	parser.add_argument('--lr', type=float, default=0.01,
+	parser.add_argument('--lr', type=float, default=0.005,
 						help='Learning rate.')
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')

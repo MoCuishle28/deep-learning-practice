@@ -357,12 +357,12 @@ def parse_args():
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--mlr', type=float, default=1e-3)
-	parser.add_argument('--alr', type=float, default=3e-4)
-	parser.add_argument('--clr', type=float, default=3e-4)
+	parser.add_argument('--alr', type=float, default=1e-5)
+	parser.add_argument('--clr', type=float, default=1e-5)
 
 	parser.add_argument('--reward_top', type=int, default=50)
 
-	parser.add_argument('--max_iid', type=int, default=39222)	# 0~39222
+	parser.add_argument('--max_iid', type=int, default=-1)
 
 	parser.add_argument('--num_filters', type=int, default=16,
 						help='Number of filters per filter size (default: 128)')

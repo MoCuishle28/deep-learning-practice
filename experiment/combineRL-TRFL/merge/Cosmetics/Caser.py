@@ -27,7 +27,7 @@ def parse_args():
 	parser.add_argument('--hidden_factor', type=int, default=64,
 						help='Number of hidden factors, i.e., embedding size.')
 
-	parser.add_argument('--lr', type=float, default=0.01,
+	parser.add_argument('--lr', type=float, default=0.001,
 						help='Learning rate.')
 	parser.add_argument('--num_filters', type=int, default=16,
 						help='Number of filters per filter size (default: 128)')
