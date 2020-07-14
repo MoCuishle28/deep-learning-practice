@@ -304,8 +304,8 @@ def parse_args():
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--mlr', type=float, default=1e-3)
-	parser.add_argument('--alr', type=float, default=1e-4)
-	parser.add_argument('--clr', type=float, default=1e-4)
+	parser.add_argument('--alr', type=float, default=3e-4)
+	parser.add_argument('--clr', type=float, default=3e-4)
 
 	parser.add_argument('--reward_top', type=int, default=20)
 
@@ -326,7 +326,7 @@ def parse_args():
 	parser.add_argument('--note', default='None...')
 	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
 	parser.add_argument('--actor_layers', default="[]")
-	parser.add_argument('--critic_layers', default="[]")
+	parser.add_argument('--critic_layers', default="[64,32]")
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')
 	parser.add_argument('--reward', default='ndcg')

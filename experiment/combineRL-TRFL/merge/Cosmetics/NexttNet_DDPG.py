@@ -299,7 +299,7 @@ def parse_args():
 
 	parser.add_argument('--reward_top', type=int, default=20)
 
-	parser.add_argument('--max_iid', type=int, default=39222)	# 0~39222
+	parser.add_argument('--max_iid', type=int, default=-1)
 
 	parser.add_argument('--hidden_factor', type=int, default=64)
 

@@ -304,7 +304,7 @@ if __name__ == '__main__':
 
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--action_size', type=int, default=64)
-	parser.add_argument('--mlr', type=float, default=1e-3)
+	parser.add_argument('--mlr', type=float, default=0.0005)
 	parser.add_argument('--alr', type=float, default=1e-5)
 	parser.add_argument('--clr', type=float, default=1e-5)
 
@@ -315,8 +315,8 @@ if __name__ == '__main__':
 	parser.add_argument('--layer_trick', default='ln')			# ln/bn/none
 
 	parser.add_argument('--note', default='None...')
-	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
-	parser.add_argument('--actor_layers', default="[]")
+	parser.add_argument('--atten_dropout_rate', type=float, default=0.9)
+	parser.add_argument('--actor_layers', default="[64,64]")
 	parser.add_argument('--critic_layers', default="[]")
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--cuda', default='0')

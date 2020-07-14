@@ -84,9 +84,9 @@ class QNetwork:
 				self.states_hidden = tf.contrib.layers.layer_norm(self.states_hidden)
 
 			self.output1 = tf.contrib.layers.fully_connected(self.states_hidden, self.item_num,
-															 activation_fn=None, scope="q-value")  # all q-values
+															 activation_fn=None, scope="q-value",weights_regularizer=tf.contrib.layers.l2_regularizer(1e-4))  # all q-values
 			self.output2 = tf.contrib.layers.fully_connected(self.states_hidden, self.item_num,
-															 activation_fn=None, scope="ce-logits")  # all logits
+															 activation_fn=None, scope="ce-logits",weights_regularizer=tf.contrib.layers.l2_regularizer(1e-4))  # all logits
 
 			# TRFL way
 			self.actions = tf.placeholder(tf.int32, [None])

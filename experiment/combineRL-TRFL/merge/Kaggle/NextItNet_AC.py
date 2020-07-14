@@ -92,9 +92,9 @@ class NextItNet:
 			self.state_hidden = extract_axis_1(dilate_output, self.len_state - 1)
 
 			self.output1 = tf.contrib.layers.fully_connected(self.state_hidden, self.item_num,
-															 activation_fn=None, scope="q-value")  # all q-values
+															 activation_fn=None, scope="q-value",weights_regularizer=tf.contrib.layers.l2_regularizer(1e-4))  # all q-values
 			self.output2 = tf.contrib.layers.fully_connected(self.state_hidden, self.item_num,
-															 activation_fn=None, scope="ce-logits")  # all ce logits
+															 activation_fn=None, scope="ce-logits",weights_regularizer=tf.contrib.layers.l2_regularizer(1e-4))  # all ce logits
 
 			# TRFL way
 			self.actions = tf.placeholder(tf.int32, [None])
