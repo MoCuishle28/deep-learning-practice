@@ -91,15 +91,16 @@ def calculate_hit(sorted_list, topk, true_items, hit_inters, ndcg_inters):
 					ndcg_inters[i] += 1.0 / np.log2(rank + 2.0).item()
 
 
-def print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging):
+def print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging, session_num):
 	info = f'total interaction:{total_inter}'
 	print(info)
 	logging.info(info)
 	for i in range(len(topk)):
 		hr_inter = hit_inters[i] / total_inter
 		ng_inter = ndcg_inters[i] / total_inter
+		session_cumulative_reward = hit_inters[i] / session_num
 
-		hr_inter, ng_inter = round(hr_inter, 4), round(ng_inter, 4)
+		hr_inter, ng_inter, session_cumulative_reward = round(hr_inter, 4), round(ng_inter, 4), round(session_cumulative_reward, 4)
 
 		tup = max_ndcg_and_epoch[i]		# (ng_inter, step)
 		if ng_inter > tup[0]:
@@ -108,7 +109,7 @@ def print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, t
 
 		print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 		logging.info('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-		info = f'@ {topk[i]} : HR: {hr_inter}, NDCG: {ng_inter}'
+		info = f'@ {topk[i]} : HR: {hr_inter}, NDCG: {ng_inter}, Aver Session\'s cumulative reward: {session_cumulative_reward}'
 		print(info)
 		logging.info(info)
 		info = f'Current Max NDCG:{max_ndcg_and_epoch[i][0]}. (step:{max_ndcg_and_epoch[i][1]})'
@@ -126,6 +127,7 @@ def evaluate(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging,
 		eval_sessions = pd.read_pickle(os.path.join(args.base_data_dir, 'sampled_test.df'))
 	eval_ids = eval_sessions.session_id.unique()
 	groups = eval_sessions.groupby('session_id')
+	session_num = len(eval_ids)
 
 	batch = args.eval_batch
 	evaluated = 0
@@ -163,7 +165,7 @@ def evaluate(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging,
 		_, sorted_list = prediction.topk(max_topk)
 		del prediction
 		calculate_hit(sorted_list, topk, true_items, hit_inters, ndcg_inters)
-	print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging)
+	print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging, session_num)
 
 
 def evaluate_multi_head(args, agent, sess, max_ndcg_and_epoch, total_step, logging):
@@ -176,6 +178,7 @@ def evaluate_multi_head(args, agent, sess, max_ndcg_and_epoch, total_step, loggi
 		eval_sessions = pd.read_pickle(os.path.join(args.base_data_dir, 'sampled_test.df'))
 	eval_ids = eval_sessions.session_id.unique()
 	groups = eval_sessions.groupby('session_id')
+	session_num = len(eval_ids)
 
 	batch = args.eval_batch
 	evaluated = 0
@@ -214,7 +217,7 @@ def evaluate_multi_head(args, agent, sess, max_ndcg_and_epoch, total_step, loggi
 		_, sorted_list = prediction.topk(max_topk)
 		del prediction
 		calculate_hit(sorted_list, topk, true_items, hit_inters, ndcg_inters)
-	print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging)
+	print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging, session_num)
 
 
 def evaluate_with_actions(args, agent, sess, max_ndcg_and_epoch, total_step, logging):
@@ -227,6 +230,7 @@ def evaluate_with_actions(args, agent, sess, max_ndcg_and_epoch, total_step, log
 		eval_sessions = pd.read_pickle(os.path.join(args.base_data_dir, 'sampled_test.df'))
 	eval_ids = eval_sessions.session_id.unique()
 	groups = eval_sessions.groupby('session_id')
+	session_num = len(eval_ids)
 
 	batch = args.eval_batch
 	evaluated = 0
@@ -267,4 +271,4 @@ def evaluate_with_actions(args, agent, sess, max_ndcg_and_epoch, total_step, log
 		_, sorted_list = prediction.topk(max_topk)
 		del prediction
 		calculate_hit(sorted_list, topk, true_items, hit_inters, ndcg_inters)
-	print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging)
+	print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging, session_num)
