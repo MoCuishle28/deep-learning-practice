@@ -272,3 +272,50 @@ def evaluate_with_actions(args, agent, sess, max_ndcg_and_epoch, total_step, log
 		del prediction
 		calculate_hit(sorted_list, topk, true_items, hit_inters, ndcg_inters)
 	print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging, session_num)
+
+
+def evaluate_DDPG(args, ranking_model, sess, max_ndcg_and_epoch, total_step, logging):
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+	topk = [int(x) for x in args.topk.split(',')]
+	max_topk = max(topk)
+	if args.mode == 'valid':
+		eval_sessions = pd.read_pickle(os.path.join(args.base_data_dir, 'sampled_val.df'))
+	elif args.mode == 'test':
+		eval_sessions = pd.read_pickle(os.path.join(args.base_data_dir, 'sampled_test.df'))
+	eval_ids = eval_sessions.session_id.unique()
+	groups = eval_sessions.groupby('session_id')
+	session_num = len(eval_ids)
+
+	batch = args.eval_batch
+	evaluated = 0
+	total_inter = 0.0
+	hit_inters, ndcg_inters = [0 for _ in topk], [0 for _ in topk]
+	
+	while evaluated < len(eval_ids):
+		states, len_states, true_items = [], [], []
+		for i in range(batch):
+			if evaluated == len(eval_ids):
+				break
+			sid = eval_ids[evaluated]
+			group = groups.get_group(sid)
+			history = []
+			for index, row in group.iterrows():
+				state = list(history)
+				len_states.append(ranking_model.hw if len(state) >= ranking_model.hw else 1 if len(state) == 0 else len(state))
+				state = pad_history(state, ranking_model.hw, ranking_model.item_num)
+				states.append(state)
+				target_item = row['item_id']
+				total_inter += 1.0
+				true_items.append(target_item)
+				history.append(row['item_id'])
+			evaluated += 1
+
+		prediction = sess.run(ranking_model.scores, feed_dict={ranking_model.inputs: states, 
+			ranking_model.len_state: len_states, 
+			ranking_model.is_training: False})
+
+		prediction = torch.tensor(prediction)
+		_, sorted_list = prediction.topk(max_topk)
+		del prediction
+		calculate_hit(sorted_list, topk, true_items, hit_inters, ndcg_inters)
+	print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging, session_num)

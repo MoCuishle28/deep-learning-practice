@@ -23,7 +23,7 @@ class Agent:
 		self.name = name
 		self.hw = 10
 		self.hidden_size = args.hidden_factor
-		self.item_num = args.max_iid + 1
+		self.item_num = args.max_iid
 		self.is_training = tf.placeholder(tf.bool, shape=())
 
 		with tf.variable_scope(self.name):

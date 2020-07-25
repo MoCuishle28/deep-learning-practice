@@ -21,7 +21,7 @@ class Agent(object):
 		super(Agent, self).__init__()
 		self.args = args
 		self.hw = 10		# history window(过去多少次交互记录作为输入)
-		self.item_num = args.max_iid + 1
+		self.item_num = args.max_iid
 		# self.is_training = tf.placeholder(tf.bool, shape=())
 		self.name = name
 		self.is_training = tf.placeholder(tf.bool, shape=())
@@ -81,7 +81,7 @@ class Agent(object):
 			# self.ranking_model_input = self.actions + self.states_hidden
 			self.ranking_model_input = self.actor_out_ + self.states_hidden
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, 
-				args.max_iid + 1, 
+				self.item_num, 
 				activation_fn=None, 
 				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
@@ -92,7 +92,7 @@ class Agent(object):
 
 	def initialize_embeddings(self):
 		all_embeddings = dict()
-		item_embeddings = tf.Variable(tf.random_normal([self.args.max_iid + 2, self.args.i_emb_dim], 
+		item_embeddings = tf.Variable(tf.random_normal([self.item_num + 1, self.args.i_emb_dim], 
 			0.0, 0.01), name='item_embeddings')
 		all_embeddings['item_embeddings'] = item_embeddings
 		return all_embeddings
