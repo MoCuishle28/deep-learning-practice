@@ -282,7 +282,7 @@ def parse_args():
 	parser = argparse.ArgumentParser(description="SASRec DDPG.")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--mode', default='valid')
-	parser.add_argument('--seed', type=int, default=1)
+	parser.add_argument('--seed', type=int, default=-1)
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC15')
 	parser.add_argument('--topk', default='5,10,20')

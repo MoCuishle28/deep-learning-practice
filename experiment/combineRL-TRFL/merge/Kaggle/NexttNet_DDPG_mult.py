@@ -307,7 +307,7 @@ def parse_args():
 	parser = argparse.ArgumentParser(description="NextItNet DDPG")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--mode', default='valid')
-	parser.add_argument('--seed', type=int, default=1)
+	parser.add_argument('--seed', type=int, default=-1)
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_data_dir', default=base_data_dir + 'kaggle-RL4REC')
 	parser.add_argument('--topk', default='5,10,20')

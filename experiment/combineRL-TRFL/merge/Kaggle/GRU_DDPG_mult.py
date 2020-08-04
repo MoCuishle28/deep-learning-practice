@@ -275,7 +275,7 @@ if __name__ == '__main__':
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_data_dir', default=base_data_dir + 'kaggle-RL4REC')
 	parser.add_argument('--mode', default='valid')		# test/valid
-	parser.add_argument('--seed', type=int, default=1)
+	parser.add_argument('--seed', type=int, default=-1)
 	parser.add_argument('--eval_interval', type=int, default=2000)
 	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)

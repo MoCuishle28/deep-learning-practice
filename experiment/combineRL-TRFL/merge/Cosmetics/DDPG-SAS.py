@@ -14,92 +14,64 @@ import torch
 import matplotlib.pyplot as plt
 
 from utils import *
+from SASRecModules import *
 
 
-class Agent:
-	def __init__(self, args, name='Agent', dqda_clipping=None, clip_norm=False, max_action=1.0):
+class Agent(object):
+	def __init__(self, args, item_num, name='Agent', dqda_clipping=None, clip_norm=False, max_action=1.0):
+		super(Agent, self).__init__()
 		self.args = args
-		self.name = name
-		self.hw = 10
+		self.hw = 10		# history window(过去多少次交互记录作为输入)
+		self.item_num = item_num
 		self.hidden_size = args.hidden_factor
-		self.item_num = args.max_iid
+		self.name = name
+		self.is_training = tf.placeholder(tf.bool, shape=())
 		with tf.variable_scope(self.name):
 			self.is_training = tf.placeholder(tf.bool, shape=())
+
 			all_embeddings = self.initialize_embeddings()
 
 			self.inputs = tf.placeholder(tf.int32, [None, self.hw],name='inputs')
 			self.len_state = tf.placeholder(tf.int32, [None],name='len_state')
+			self.target_items = tf.placeholder(tf.int32, [None], name='target_items')
 
 			self.discount = tf.placeholder(tf.float32, [None] , name="discount")
 			self.reward = tf.placeholder(tf.float32, [None], name='reward')
 			self.target = tf.placeholder(tf.float32, [None],name='target')
-			# ranking model
-			self.target_items = tf.placeholder(tf.int32, [None], name='target_items')
-
-			mask = tf.expand_dims(tf.to_float(tf.not_equal(self.inputs, self.item_num)), -1)
 
 			self.input_emb = tf.nn.embedding_lookup(all_embeddings['state_embeddings'],self.inputs)
-			self.input_emb *= mask
-			self.embedded_chars_expanded = tf.expand_dims(self.input_emb, -1)	# (batch, 10, 64, 1)
-			# (B, height, width, channels)
+			# Positional Encoding
+			pos_emb = tf.nn.embedding_lookup(all_embeddings['pos_embeddings'],tf.tile(tf.expand_dims(tf.range(tf.shape(self.inputs)[1]), 0), [tf.shape(self.inputs)[0], 1]))
+			self.seq = self.input_emb+pos_emb
 
-			# Create a convolution + maxpool layer for each filter size
-			pooled_outputs = []
-			num_filters = args.num_filters
-			filter_sizes = eval(args.filter_sizes)
-			for i, filter_size in enumerate(filter_sizes):
-				with tf.name_scope("conv-maxpool-%s" % filter_size):
-					# Convolution Layer
-					# (filter_height, filter_width, in_channels, out_channels)
-					filter_shape = [filter_size, self.hidden_size, 1, num_filters]
-					W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
-					b = tf.Variable(tf.constant(0.1, shape=[num_filters]), name="b")
-
-					conv = tf.nn.conv2d(
-						self.embedded_chars_expanded,
-						W,
-						strides=[1, 1, 1, 1],
-						padding="VALID",
-						name="conv")
-					h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
-					# Maxpooling over the outputs
-					# new shape after max_pool[?, 1, 1, num_filters]
-					# be carefyul, the  new_sequence_length has changed because of wholesession[:, 0:-1]
-					pooled = tf.nn.max_pool(
-						h,
-						ksize=[1, self.hw - filter_size + 1, 1, 1],		# 窗口大小 [1, x, y, 1]
-						strides=[1, 1, 1, 1],
-						padding='VALID',
-						name="pool")
-					pooled_outputs.append(pooled)
-
-			# Combine all the pooled features
-			num_filters_total = num_filters * len(filter_sizes)
-			self.h_pool = tf.concat(pooled_outputs, 3)
-			# (batch, 48)
-			self.h_pool_flat = tf.reshape(self.h_pool, [-1, num_filters_total])  # shape=[batch_size, 384]
-			# design the veritcal cnn
-			with tf.name_scope("conv-verical"):
-				filter_shape = [self.hw, 1, 1, 1]
-				W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
-				b = tf.Variable(tf.constant(0.1, shape=[1]), name="b")
-				conv = tf.nn.conv2d(
-					self.embedded_chars_expanded,
-					W,
-					strides=[1, 1, 1, 1],
-					padding="VALID",
-					name="conv")
-				h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
-			# (batch, 64)
-			self.vcnn_flat = tf.reshape(h, [-1, self.hidden_size])
-			self.final = tf.concat([self.h_pool_flat, self.vcnn_flat], 1)  # shape=[batch_size, 384+100]
-
-			# Add dropout
-			with tf.name_scope("dropout"):
-				self.state_hidden = tf.layers.dropout(self.final,
+			mask = tf.expand_dims(tf.to_float(tf.not_equal(self.inputs, self.item_num)), -1)
+			#Dropout
+			self.seq = tf.layers.dropout(self.seq,
 										 rate=args.dropout_rate,
 										 training=tf.convert_to_tensor(self.is_training))
-			self.state_hidden = self.final
+			self.seq *= mask
+
+			# Build blocks
+			for i in range(args.num_blocks):
+				with tf.variable_scope("num_blocks_%d" % i):
+					# Self-attention
+					self.seq = multihead_attention(queries=normalize(self.seq),
+												   keys=self.seq,
+												   num_units=self.hidden_size,
+												   num_heads=args.num_heads,
+												   dropout_rate=args.dropout_rate,
+												   is_training=self.is_training,
+												   causality=True,
+												   scope="self_attention")
+
+					# Feed forward
+					self.seq = feedforward(normalize(self.seq), num_units=[self.hidden_size, self.hidden_size],
+										   dropout_rate=args.dropout_rate,
+										   is_training=self.is_training)
+					self.seq *= mask
+
+			self.seq = normalize(self.seq)
+			self.state_hidden = extract_axis_1(self.seq, self.len_state - 1)
 			self.action_size = int(self.state_hidden.shape[-1])
 
 			# ddpg
@@ -130,25 +102,18 @@ class Agent:
 			self.critic_loss = tf.reduce_mean(self.td_return.loss)
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
-			# caser
-			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-			# self.ranking_model_input = self.actions + self.state_hidden
-			self.ranking_model_input = self.actor_out_ + self.state_hidden
-
-			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num, 
-				activation_fn=None,
-				weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-
-			self.ce_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
-				logits=self.logits)
-			self.ranking_model_loss = tf.reduce_mean(self.ce_loss)
-			self.model_optim = tf.train.AdamOptimizer(args.mlr).minimize(self.ranking_model_loss)
+			# print(all_embeddings['state_embeddings'].shape)	# (26704, 64)
+			# print(self.actor_out_.shape, self.action_size)						# (batch, 64), 64
+			self.scores = tf.matmul(self.actor_out_, tf.transpose(all_embeddings['state_embeddings'][:-1, :]))	# (batch, item num)
 
 	def initialize_embeddings(self):
 		all_embeddings = dict()
 		state_embeddings= tf.Variable(tf.random_normal([self.item_num+1, self.hidden_size], 0.0, 0.01),
 			name='state_embeddings')
-		all_embeddings['state_embeddings'] = state_embeddings
+		pos_embeddings=tf.Variable(tf.random_normal([self.hw, self.hidden_size], 0.0, 0.01),
+			name='pos_embeddings')
+		all_embeddings['state_embeddings']=state_embeddings
+		all_embeddings['pos_embeddings']=pos_embeddings
 		return all_embeddings
 
 	def get_qnetwork_variables(self):
@@ -179,9 +144,9 @@ class Run(object):
 		is_done = list(batch['is_done'].values())
 		return state, len_state, next_state, len_next_states, target_items, is_done
 
-	def cal_rewards(self, logits, target_items):
-		logits = torch.tensor(logits)
-		_, rankings = logits.topk(self.args.reward_top)
+	def cal_rewards(self, scores, target_items):
+		scores = torch.tensor(scores)
+		_, rankings = scores.topk(self.args.reward_top)
 		rankings = rankings.tolist()	# (batch, topk)
 		rewards = []
 		for target_iid, rec_list in zip(target_items, rankings):
@@ -189,6 +154,7 @@ class Run(object):
 			for i, iid in enumerate(rec_list):
 				if iid == target_iid:
 					ndcg = 1.0 / np.log2(i + 2.0).item()
+					# ndcg = 1.0
 					break
 			rewards.append(ndcg)
 		return rewards
@@ -223,53 +189,23 @@ class Run(object):
 						self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: False})
-
+					
 					# add noise
-					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
+					noise = np.random.normal(0, self.args.noise_var, size=self.args.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
 					actions = (actions + noise).clip(-self.args.max_action, self.args.max_action)
+					# # add noise (clip in action's range)
+					# actions = (actions + np.random.normal(0, self.args.noise_var, size=self.args.action_size)).clip(-self.args.max_action, self.args.max_action)
 
-					ce_loss, ranking_model_loss, _ = sess.run([
-						# self.main_agent.logits, 
-						self.main_agent.ce_loss,
-						self.main_agent.ranking_model_loss, 
-						self.main_agent.model_optim], 
-						feed_dict={
-						self.main_agent.inputs: state, 
-						self.main_agent.len_state: len_state,
-						self.main_agent.actor_out_: actions,
-						# self.main_agent.actions: actions,
-						self.main_agent.target_items: target_items,
-						self.main_agent.is_training: True})
+					scores = sess.run(self.main_agent.scores, 
+						feed_dict = {
+							self.main_agent.actor_out_: actions
+						})
 
 					if self.args.reward == 'ndcg':
-						# target logits
-						logits = sess.run(self.target_agent.logits, feed_dict={
-							self.target_agent.inputs: state, 
-							self.target_agent.len_state: len_state,
-							self.target_agent.actor_out_: actions,
-							# self.target_agent.actions: actions,
-							self.target_agent.is_training: False})
-						rewards = self.cal_rewards(logits, target_items)
+						rewards = self.cal_rewards(scores, target_items)
 						# true_next_state, true_next_state_len = self.state_trans(rewards, state, next_state, len_state, len_next_states)
-					elif self.args.reward == 'loss':
-						# ce_loss = sess.run(self.target_agent.ce_loss, feed_dict={
-						# 	self.target_agent.inputs: state, 
-						# 	self.target_agent.len_state: len_state,
-						# 	self.target_agent.actor_out_: actions,
-						# 	# self.target_agent.actions: actions,
-						# 	self.target_agent.target_items: target_items,
-						# 	self.target_agent.is_training: False})
-						rewards = loss_reward(ce_loss)
 					elif self.args.reward == 'hit':
-						# target logits
-						logits = sess.run(self.target_agent.logits, feed_dict={
-							self.target_agent.inputs: state, 
-							self.target_agent.len_state: len_state,
-							self.target_agent.actor_out_: actions,
-							# self.target_agent.actions: actions,
-							self.target_agent.is_training: False})
-						rewards = hit_reward(self.args, logits, target_items)
-						# true_next_state, true_next_state_len = self.state_trans(rewards, state, next_state, len_state, len_next_states)
+						pass
 
 					target_v = sess.run(self.target_agent.critic_output, feed_dict={
 						self.target_agent.inputs: next_state,
@@ -301,81 +237,30 @@ class Run(object):
 					total_step += 1
 					if (total_step == 1) or (total_step % 200 == 0):
 						aver_reward = round(np.array(rewards).mean().item(), 5)
-						ranking_model_loss, actor_loss, critic_loss = round(ranking_model_loss.item(), 5), round(actor_loss.item(), 5), round(critic_loss.item(), 5)
-						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
+						actor_loss, critic_loss = round(actor_loss.item(), 5), round(critic_loss.item(), 5)
+						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
 						logging.info(info)
 					if (total_step >= self.args.start_eval) and (total_step % self.args.eval_interval == 0):
 						t1 = time.time()
-						# change
-						evaluate_multi_head(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
-						# evaluate_with_actions(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
+						evaluate_DDPG(self.args, self.main_agent, sess, max_ndcg_and_epoch, total_step, logging)
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
 
 
 def main(args):
-	base_data_dir = '../../../data/'
-	args.base_data_dir = os.path.join(base_data_dir, args.base_data_dir)
 	data_statis = pd.read_pickle(
 		os.path.join(args.base_data_dir, 'data_statis.df'))  # read data statistics, includeing state_size and item_num
-	args.max_iid = data_statis['item_num'][0].item()  				# total number of items
+	item_num = data_statis['item_num'][0].item()  				# total number of items
 
 	tf.reset_default_graph()
-	main_agent = Agent(args, name='train', max_action=args.max_action)
-	target_agent = Agent(args, name='target', max_action=args.max_action)
+	main_agent = Agent(args, item_num, name='train', max_action=args.max_action)
+	target_agent = Agent(args, item_num, name='target', max_action=args.max_action)
 
 	run = Run(args, main_agent, target_agent)
 	run.train()
 
-def parse_args():
-	parser = argparse.ArgumentParser(description="Run Caser DDPG.")
-	parser.add_argument('--v', default="v")
-	parser.add_argument('--mode', default='valid')
-	parser.add_argument('--seed', type=int, default=-1)
-	parser.add_argument('--base_log_dir', default="log/")
-	parser.add_argument('--base_data_dir', default='RC19')
-	parser.add_argument('--topk', default='5,10,20')
-
-	parser.add_argument('--epoch', type=int, default=100)
-	parser.add_argument('--eval_interval', type=int, default=2000)
-	parser.add_argument('--start_eval', type=int, default=2000)
-	parser.add_argument('--eval_batch', type=int, default=10)
-	parser.add_argument('--batch_size', type=int, default=256)
-	parser.add_argument('--mlr', type=float, default=5e-4)
-	parser.add_argument('--alr', type=float, default=1e-4)
-	parser.add_argument('--clr', type=float, default=1e-4)
-
-	parser.add_argument('--reward_top', type=int, default=50)
-
-	parser.add_argument('--max_iid', type=int, default=0)	# 0~43629
-
-	parser.add_argument('--num_filters', type=int, default=16,
-						help='Number of filters per filter size (default: 128)')
-	parser.add_argument('--filter_sizes', nargs='?', default='[2,3,4]',
-						help='Specify the filter_size')
-	parser.add_argument('--hidden_factor', type=int, default=64)
-
-	parser.add_argument('--dropout_rate', default=0.1, type=float)
-	parser.add_argument('--weight_decay', default=1e-4, type=float)
-
-	parser.add_argument('--noise_var', type=float, default=0.01)
-	parser.add_argument('--noise_clip', type=float, default=0.05)
-	parser.add_argument('--tau', type=float, default=0.001)
-	parser.add_argument('--gamma', type=float, default=0.5)
-
-	parser.add_argument('--note', default='None...')
-	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
-	parser.add_argument('--actor_layers', default="[112,112]")
-	parser.add_argument('--critic_layers', default="[112,112]")
-	parser.add_argument('--mem_ratio', type=float, default=0.2)
-	parser.add_argument('--cuda', default='0')
-	parser.add_argument('--reward', default='ndcg')
-	parser.add_argument('--max_action', type=float, default=0.1)
-
-	parser.add_argument('--init_r', type=float, default=-1.0)
-	return parser.parse_args()
 
 def init_log(args):
 	if not os.path.exists(args.base_log_dir):
@@ -391,12 +276,58 @@ def init_log(args):
 	logging.info(str(args))
 	logging.info('\n-------------------------------------------------------------\n')
 
+
 if __name__ == '__main__':
-	args = parse_args()
+	base_data_dir = '../../../data/'
+	parser = argparse.ArgumentParser(description="Hyperparameters")
+	parser.add_argument('--v', default="v")
+	parser.add_argument('--base_log_dir', default="log/")
+	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC19')
+	parser.add_argument('--mode', default='valid')		# test/valid
+	parser.add_argument('--seed', type=int, default=-1)
+	parser.add_argument('--eval_interval', type=int, default=2000)
+	parser.add_argument('--start_eval', type=int, default=2000)
+	parser.add_argument('--eval_batch', type=int, default=10)
+	parser.add_argument('--epoch', type=int, default=100)
+	parser.add_argument('--batch_size', type=int, default=256)
+	parser.add_argument('--topk', default='5,10,20')
+
+	parser.add_argument('--weight_decay', type=float, default=1e-4)
+	# embedding
+	parser.add_argument('--max_iid', type=int, default=0)
+	parser.add_argument('--i_emb_dim', type=int, default=64)
+
+	parser.add_argument('--reward_top', type=int, default=20)		# 取 top 多少计算 reward
+
+	parser.add_argument('--hidden_factor', type=int, default=64)
+	parser.add_argument('--num_heads', default=1, type=int)
+	parser.add_argument('--num_blocks', default=1, type=int)
+	parser.add_argument('--dropout_rate', default=0.1, type=float)
+
+	parser.add_argument('--action_size', type=int, default=64)
+	parser.add_argument('--alr', type=float, default=3e-4)
+	parser.add_argument('--clr', type=float, default=3e-4)
+
+	parser.add_argument('--noise_var', type=float, default=0.1)
+	parser.add_argument('--noise_clip', type=float, default=0.5)
+	parser.add_argument('--tau', type=float, default=0.001)
+	parser.add_argument('--gamma', type=float, default=0.5)
+
+	parser.add_argument('--note', default='None...')
+	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
+	parser.add_argument('--actor_layers', default="[]")
+	parser.add_argument('--critic_layers', default="[]")
+	parser.add_argument('--mem_ratio', type=float, default=0.2)
+	parser.add_argument('--cuda', default='0')
+	parser.add_argument('--reward', default='ndcg')
+	parser.add_argument('--max_action', type=float, default=1.0)
+	args = parser.parse_args()
+
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
 	if args.seed != -1:
 		random.seed(args.seed)
 		np.random.seed(args.seed)
 		tf.set_random_seed(args.seed)
+
 	init_log(args)
 	main(args)
