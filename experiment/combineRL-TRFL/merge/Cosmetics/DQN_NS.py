@@ -41,7 +41,7 @@ def parse_args():
                         help='Discount factor for RL.')
 
     parser.add_argument('--eval_batch', type=int, default=10)
-    parser.add_argument('--start_eval', type=int, default=10000)
+    parser.add_argument('--start_eval', type=int, default=2000)
     parser.add_argument('--mem_ratio', type=float, default=0.2)
     parser.add_argument('--cuda', default='0')
     return parser.parse_args()
@@ -332,5 +332,6 @@ if __name__ == '__main__':
                 total_step += 1
                 if total_step % 200 == 0:
                     print("the loss in %dth batch is: %f" % (total_step, loss))
-                if (total_step >= args.start_eval) and total_step % 10000 == 0:
+                    logging.info("the loss in %dth batch is: %f" % (total_step, loss))
+                if (total_step >= args.start_eval) and total_step % 2000 == 0:
                     evaluate(args, mainQN, sess, max_ndcg_and_epoch, total_step, logging)
