@@ -7,6 +7,10 @@ import pandas as pd
 import numpy as np
 
 
+def count2():
+    print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
+    assert 0>1
+
 def loss_reward(ce_loss):
 	rewards = -ce_loss.reshape((-1))
 	return rewards

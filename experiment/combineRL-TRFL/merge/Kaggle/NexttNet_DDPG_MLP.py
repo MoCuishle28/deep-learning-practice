@@ -98,7 +98,7 @@ class Agent:
 			interact_layers = eval(args.interact_layers)
 			interact_layers.append(self.action_size)										# 64
 			with tf.variable_scope("interaction"):
-				self.ranking_model_input = mlp(self.interact_input, self.is_training, hidden_sizes=interact_layers, 
+				self.ranking_model_input = mlp(self.interact_input, self.is_training, hidden_sizes=interact_layers, output_activation=None,
 					dropout_rate=args.interact_dropout_rate, 
 					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
