@@ -27,23 +27,31 @@ def statistic(sid_to_len):
 			cnt[6] += 1
 	return cnt
 
+def aver_len(sid_to_len):
+	sum_len = 0
+	for k, v in sid_to_len.items():
+		sum_len += v
+	print(sum_len, sum_len / len(sid_to_len.keys()))
 
-data_directory = '../../../data/RC15'
-# replay_buffer = pd.read_pickle(os.path.join(data_directory, 'replay_buffer.df'))
+
+# data_directory = '../../../data/RC15'
+# # replay_buffer = pd.read_pickle(os.path.join(data_directory, 'replay_buffer.df'))
 # sampled_train = pd.read_pickle(os.path.join(data_directory, 'sampled_train.df'))
 # # print(sampled_train)
 
 # sid_to_len = {}
 # count_len(sampled_train, sid_to_len)
-# print(min(sid_to_len.values()), max(sid_to_len.values()))	# 3 198
+# print(min(sid_to_len.values()), max(sid_to_len.values()), len(sid_to_len.keys()))	# 3 198
 
 # sampled_val = pd.read_pickle(os.path.join(data_directory, 'sampled_val.df'))
 # count_len(sampled_val, sid_to_len)
-# print(min(sid_to_len.values()), max(sid_to_len.values()))	# 
+# print(min(sid_to_len.values()), max(sid_to_len.values()), len(sid_to_len.keys()))	# 
 
 # sampled_test = pd.read_pickle(os.path.join(data_directory, 'sampled_test.df'))
 # count_len(sampled_test, sid_to_len)
-# print(min(sid_to_len.values()), max(sid_to_len.values()))	# 
+# print(min(sid_to_len.values()), max(sid_to_len.values()), len(sid_to_len.keys()))	# 
+
+# aver_len(sid_to_len)	# 1154911 5.774555
 
 # cnt = statistic(sid_to_len)
 # # [195698, 3727, 418, 109, 32, 16]
@@ -60,15 +68,17 @@ data_directory = '../../../data/RC15'
 
 # sid_to_len = {}
 # count_len(sampled_train, sid_to_len)
-# print(min(sid_to_len.values()), max(sid_to_len.values()))	# 1 7018
+# print(min(sid_to_len.values()), max(sid_to_len.values()), len(sid_to_len.keys()))	# 1 7018
 
 # sampled_val = pd.read_pickle(os.path.join(data_directory, 'sampled_val.df'))
 # count_len(sampled_val, sid_to_len)
-# print(min(sid_to_len.values()), max(sid_to_len.values()))	# 
+# print(min(sid_to_len.values()), max(sid_to_len.values()), len(sid_to_len.keys()))	# 
 
 # sampled_test = pd.read_pickle(os.path.join(data_directory, 'sampled_test.df'))
 # count_len(sampled_test, sid_to_len)
-# print(min(sid_to_len.values()), max(sid_to_len.values()))	# 
+# print(min(sid_to_len.values()), max(sid_to_len.values()), len(sid_to_len.keys()))	# 
+
+# aver_len(sid_to_len)	# 1233949 6.310984840735665
 
 # cnt = statistic(sid_to_len)
 # # [89.16%, 7.78%, 2.16%, 0.44%, 0.16%, 0.07%, 0.2%]
@@ -77,16 +87,32 @@ data_directory = '../../../data/RC15'
 # assert 0>1
 
 data_directory = '../../../data/RC19'
-click_df = pd.read_pickle(os.path.join(data_directory, 'click_df.df'))
-print(click_df)
+# click_df = pd.read_pickle(os.path.join(data_directory, 'click_df.df'))
+# print(click_df)
 
-sid_to_len = {}
-for _, row in click_df.iterrows():
-	if row['user_session'] in sid_to_len:
-		sid_to_len[row['user_session']] += 1
-	else:
-		sid_to_len[row['user_session']] = 1
+# sid_to_len = {}
+# for _, row in click_df.iterrows():
+# 	if row['user_session'] in sid_to_len:
+# 		sid_to_len[row['user_session']] += 1
+# 	else:
+# 		sid_to_len[row['user_session']] = 1
 
-cnt = statistic(sid_to_len)
-# [94.22%, 5.1%, 0.63%, 0.03%, 0.006%, 0.002%, 0%]
-print(cnt)	# [149170, 8079, 997, 59, 10, 4, 0]
+# cnt = statistic(sid_to_len)
+# # [94.22%, 5.1%, 0.63%, 0.03%, 0.006%, 0.002%, 0%]
+# print(cnt)	# [149170, 8079, 997, 59, 10, 4, 0]
+
+# click_df = pd.read_pickle(os.path.join(data_directory, 'click_df.df'))
+
+# sid_to_len = {}
+# for _, row in click_df.iterrows():
+# 	if row['user_session'] in sid_to_len:
+# 		sid_to_len[row['user_session']] += 1
+# 	else:
+# 		sid_to_len[row['user_session']] = 1
+
+# sum_len = 0
+# for k, v in sid_to_len.items():
+# 	sum_len += v
+
+# print(sum_len)
+# print(sum_len / len(sid_to_len.keys()))	# 752548 4.753365041466911
