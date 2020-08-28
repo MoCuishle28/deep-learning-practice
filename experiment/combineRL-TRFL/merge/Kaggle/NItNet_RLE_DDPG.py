@@ -18,7 +18,7 @@ from NextItNetModules import *
 
 
 class Agent:
-	def __init__(self, args, name='Agent', dqda_clipping=None, clip_norm=False, max_action=1.0):
+	def __init__(self, args, name='Agent', dqda_clipping=None, clip_norm=False):
 		self.args = args
 		self.name = name
 		self.hw = 10
@@ -34,6 +34,11 @@ class Agent:
 			self.discount = tf.placeholder(tf.float32, [None] , name="discount")
 			self.reward = tf.placeholder(tf.float32, [None], name='reward')
 			self.target = tf.placeholder(tf.float32, [None],name='target')
+
+			# A
+			self.A_discount = tf.placeholder(tf.float32, [None] , name="A_discount")
+			self.A_reward = tf.placeholder(tf.float32, [None], name='A_reward')
+			self.A_target = tf.placeholder(tf.float32, [None],name='A_target')
 
 			# ranking model
 			self.target_items = tf.placeholder(tf.int32, [None], name='target_items')
@@ -61,6 +66,7 @@ class Agent:
 			self.state_hidden = extract_axis_1(dilate_output, self.len_state - 1)
 			self.action_size = int(self.state_hidden.shape[-1])
 
+
 			# ddpg
 			actor = eval(args.actor_layers)
 			actor.append(self.action_size)
@@ -69,17 +75,9 @@ class Agent:
 					dropout_rate=args.atten_dropout_rate, 
 					l2=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
-			self.actor_out_ = self.actor_output * max_action
-			# learnable
-			# self.alpha = tf.Variable(np.array([max_action for _ in range(self.action_size)], dtype=np.float32), name="a")
-			# self.alpha = tf.Variable(max_action, name="a")
-			# self.actor_out_ = self.actor_output * self.alpha
+			self.get_A()
 
-			# learnable A (MLP)
-			# A = tf.contrib.layers.fully_connected(tf.concat([self.actor_output, self.state_hidden], axis=1), 1,
-			# 	activation_fn=None,
-			# 	weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			# self.actor_out_ = self.actor_output * A
+			self.actor_out_ = self.actor_output * self.A_actor_output
 
 			self.critic_input = tf.concat([self.actor_out_, self.state_hidden], axis=1)
 			critic = eval(args.critic_layers)
@@ -102,12 +100,8 @@ class Agent:
 
 			# NextItNet
 			# self.actions = tf.placeholder(tf.float32, [None, self.action_size], name='actions')
-
-			# self.ranking_model_input = self.actions * self.state_hidden
-			# self.ranking_model_input = tf.nn.softmax(self.actions) * self.state_hidden
-
-			# self.ranking_model_input = self.actor_out_ * self.state_hidden
-			self.ranking_model_input = tf.nn.softmax(self.actor_out_) * self.state_hidden
+			# self.ranking_model_input = self.actions + self.state_hidden
+			self.ranking_model_input = self.actor_out_ + self.state_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
 				activation_fn=None,
@@ -117,6 +111,39 @@ class Agent:
 				logits=self.logits)
 			self.ranking_model_loss = tf.reduce_mean(self.ce_loss)
 			self.model_optim = tf.train.AdamOptimizer(args.mlr).minimize(self.ranking_model_loss)
+
+
+	def get_A(self):
+		# A
+		A_actor = eval(self.args.A_actor_layers)
+		A_actor.append(1)	# 1/action_size 
+		# A_actor.append(self.action_size)
+
+		with tf.variable_scope("A_actor"):
+			self.state = tf.concat([self.state_hidden, self.actor_output], axis=1)	# (batch, 128)
+			self.A_actor_output = mlp(self.state, self.is_training, hidden_sizes=A_actor, output_activation=tf.nn.sigmoid,
+				dropout_rate=self.args.A_dropout_rate, 
+				l2=tf.contrib.layers.l2_regularizer(self.args.weight_decay))
+
+		self.A_critic_input = tf.concat([self.A_actor_output, self.state], axis=1)	# (batch, 128 + A_actor_output)
+		A_critic = eval(self.args.A_critic_layers)
+		A_critic.append(1)
+		with tf.variable_scope("A_critic"):
+			self.A_critic_output = mlp(self.A_critic_input, self.is_training, hidden_sizes=A_critic, 
+				output_activation=None, dropout_rate=self.args.A_dropout_rate, 
+				l2=tf.contrib.layers.l2_regularizer(self.args.weight_decay))
+
+		self.A_dpg_return = trfl.dpg(self.A_critic_output, self.A_actor_output, 
+			dqda_clipping=None, clip_norm=False)
+
+		self.A_actor_loss = tf.reduce_mean(self.A_dpg_return.loss)
+		self.A_actor_optim = tf.train.AdamOptimizer(self.args.aalr).minimize(self.A_actor_loss)
+
+		self.A_td_return = trfl.td_learning(tf.squeeze(self.A_critic_output), self.A_reward, 
+			self.A_discount, self.A_target)
+		self.A_critic_loss = tf.reduce_mean(self.A_td_return.loss)
+		self.A_critic_optim = tf.train.AdamOptimizer(self.args.aclr).minimize(self.A_critic_loss)
+
 
 	def initialize_embeddings(self):
 		all_embeddings = dict()
@@ -190,6 +217,7 @@ class Run(object):
 			sess.graph.finalize()
 			sess.run(self.copy_weight)		# copy weights
 			discount = [self.args.gamma] * self.args.batch_size
+			A_discount = [self.args.A_discount] * self.args.batch_size
 			for i_epoch in range(self.args.epoch):
 				for j in range(num_batches):
 					state, len_state, next_state, len_next_states, target_items, is_done = self.sample_data()
@@ -200,10 +228,7 @@ class Run(object):
 
 					# add noise
 					noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
-
-					actions = (actions + noise).clip(-self.args.max_action, self.args.max_action)
-					# learnable
-					# actions = (actions + noise).clip(-1, 1)
+					actions = (actions + noise).clip(-1, 1)
 
 					ce_loss, ranking_model_loss, _ = sess.run([
 						# self.main_agent.logits, 
@@ -249,28 +274,35 @@ class Run(object):
 						rewards = hit_reward(self.args, logits, target_items)
 						# true_next_state, true_next_state_len = self.state_trans(rewards, state, next_state, len_state, len_next_states)
 
-					target_v = sess.run(self.target_agent.critic_output, feed_dict={
+					target_v, A_target = sess.run([self.target_agent.critic_output, self.target_agent.A_critic_output], feed_dict={
 						self.target_agent.inputs: next_state,
 						self.target_agent.len_state: len_next_states,
 						# self.target_agent.inputs: true_next_state,
 						# self.target_agent.len_state: true_next_state_len,
 
 						self.target_agent.is_training: False})
-					target_v = target_v.squeeze()
+
+					target_v, A_target = target_v.squeeze(), A_target.squeeze()
 					for index in range(self.args.batch_size):
 						if is_done[index]:
-							target_v[index] = 0.0
+							target_v[index], A_target[index] = 0.0, 0.0
 
-					critic_loss, _ = sess.run([self.main_agent.critic_loss, 
-						self.main_agent.critic_optim], 
+					critic_loss, A_critic_loss, _, _ = sess.run([self.main_agent.critic_loss, self.main_agent.A_critic_loss, 
+						self.main_agent.critic_optim, self.main_agent.A_critic_optim], 
 						feed_dict={self.main_agent.inputs:state, 
 						self.main_agent.len_state:len_state,
 						self.main_agent.actor_out_: actions, 
 						self.main_agent.reward: rewards,
 						self.main_agent.discount: discount,
 						self.main_agent.target: target_v,
+
+						self.main_agent.A_reward: rewards,
+						self.main_agent.A_discount: A_discount,
+						self.main_agent.A_target: A_target,
+
 						self.main_agent.is_training: True})
-					actor_loss, _ = sess.run([self.main_agent.actor_loss, self.main_agent.actor_optim],
+					actor_loss, A_actor_loss, _, _ = sess.run([self.main_agent.actor_loss, self.main_agent.A_actor_loss,
+						self.main_agent.actor_optim, self.main_agent.A_actor_optim],
 						feed_dict={self.main_agent.inputs: state, 
 						self.main_agent.len_state: len_state,
 						self.main_agent.is_training: True})
@@ -279,8 +311,9 @@ class Run(object):
 					total_step += 1
 					if (total_step == 1) or (total_step % 200 == 0):
 						aver_reward = round(np.array(rewards).mean().item(), 5)
+						A_actor_loss, A_critic_loss = round(A_actor_loss.item(), 5), round(A_critic_loss.item(), 5)
 						ranking_model_loss, actor_loss, critic_loss = round(ranking_model_loss.item(), 5), round(actor_loss.item(), 5), round(critic_loss.item(), 5)
-						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
+						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}, Aa loss:{A_actor_loss}, Ac loss:{A_critic_loss}"
 						print(info)
 						logging.info(info)
 					if (total_step >= self.args.start_eval) and (total_step % self.args.eval_interval == 0):
@@ -295,8 +328,8 @@ class Run(object):
 
 def main(args):
 	tf.reset_default_graph()
-	main_agent = Agent(args, name='train', max_action=args.max_action)
-	target_agent = Agent(args, name='target', max_action=args.max_action)
+	main_agent = Agent(args, name='train')
+	target_agent = Agent(args, name='target')
 
 	run = Run(args, main_agent, target_agent)
 	run.train()
@@ -317,9 +350,9 @@ def parse_args():
 	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
-	parser.add_argument('--mlr', type=float, default=0.005)
-	parser.add_argument('--alr', type=float, default=1e-2)
-	parser.add_argument('--clr', type=float, default=1e-2)
+	parser.add_argument('--mlr', type=float, default=1e-3)
+	parser.add_argument('--alr', type=float, default=5e-3)
+	parser.add_argument('--clr', type=float, default=5e-3)
 
 	parser.add_argument('--reward_top', type=int, default=20)
 
@@ -332,7 +365,7 @@ def parse_args():
 	parser.add_argument('--noise_var', type=float, default=0.01)
 	parser.add_argument('--noise_clip', type=float, default=0.05)
 	parser.add_argument('--tau', type=float, default=0.001)
-	parser.add_argument('--gamma', type=float, default=0.5)
+	parser.add_argument('--gamma', type=float, default=0.1)
 
 	parser.add_argument('--mem_ratio', type=float, default=0.2)
 	parser.add_argument('--note', default="None......")
@@ -342,7 +375,13 @@ def parse_args():
 	parser.add_argument('--atten_dropout_rate', type=float, default=0.1)
 	parser.add_argument('--actor_layers', default="[]")
 	parser.add_argument('--critic_layers', default="[]")
-	parser.add_argument('--max_action', type=float, default=0.1)
+
+	parser.add_argument('--A_actor_layers', default="[]")
+	parser.add_argument('--A_critic_layers', default="[]")
+	parser.add_argument('--A_dropout_rate', type=float, default=0.1)
+	parser.add_argument('--aalr', type=float, default=1e-3)
+	parser.add_argument('--aclr', type=float, default=1e-3)
+	parser.add_argument('--A_discount', type=float, default=0.99)
 
 	parser.add_argument('--init_r', type=float, default=-1.0)
 	return parser.parse_args()
@@ -363,7 +402,9 @@ def init_log(args):
 
 if __name__ == '__main__':
 	args = parse_args()
+
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
+
 	if args.seed != -1:
 		random.seed(args.seed)
 		np.random.seed(args.seed)
