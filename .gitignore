@@ -9,6 +9,9 @@
 *.pyc
 *.npy
 *.pkl
+*.df
+*.meta
+*.index
 
 /Pipfile
 
@@ -49,3 +52,8 @@ rec-learn/RL_combine_RS/data
 
 /experiment/data/ml_1M
 /experiment/data/ml-latest-small
+
+/experiment/meal/model-gru/
+/experiment/meal/model-caser/
+/experiment/meal/model-next/
+/experiment/meal/model-sas/
