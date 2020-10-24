@@ -7,7 +7,7 @@ from utils import *
 
 
 class GRUnetwork:
-	def __init__(self, args, hidden_size, learning_rate, item_num, state_size, embeddings, name='gru_teacher'):
+	def __init__(self, args, hidden_size, learning_rate, clr, item_num, state_size, embeddings, name='gru_teacher'):
 		self.args = args
 		self.state_size = state_size
 		self.learning_rate = learning_rate
@@ -50,8 +50,8 @@ class GRUnetwork:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - self.dis_loss
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(self.dis_loss)
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + self.dis_loss
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + tf.stop_gradient(self.dis_loss)
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params
@@ -76,12 +76,12 @@ class GRUnetwork:
 			labels=self.hard_label)
 		self.dis_loss = tf.reduce_mean(self.dis_loss)
 		train_dis_var_list = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
-		self.dis_opt = tf.train.AdamOptimizer(self.learning_rate
+		self.dis_opt = tf.train.AdamOptimizer(self.clr
 			).minimize(self.dis_loss, var_list=train_dis_var_list)
 
 
 class Caser:
-	def __init__(self, args, hidden_size, learning_rate, item_num, state_size, embeddings, name='caser_teacher'):
+	def __init__(self, args, hidden_size, learning_rate, clr, item_num, state_size, embeddings, name='caser_teacher'):
 		self.args = args
 		self.state_size = state_size
 		self.hw = state_size
@@ -174,8 +174,8 @@ class Caser:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - self.dis_loss
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(self.dis_loss)
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + self.dis_loss
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + tf.stop_gradient(self.dis_loss)
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params
@@ -200,12 +200,12 @@ class Caser:
 			labels=self.hard_label)
 		self.dis_loss = tf.reduce_mean(self.dis_loss)
 		train_dis_var_list = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
-		self.dis_opt = tf.train.AdamOptimizer(self.learning_rate
+		self.dis_opt = tf.train.AdamOptimizer(self.clr
 			).minimize(self.dis_loss, var_list=train_dis_var_list)
 
 
 class NextItNet:
-	def __init__(self, args, hidden_size,learning_rate,item_num,state_size, embeddings, name='next_teacher'):
+	def __init__(self, args, hidden_size,learning_rate, clr, item_num,state_size, embeddings, name='next_teacher'):
 		self.args = args
 		self.state_size = state_size
 		self.hw = state_size
@@ -258,8 +258,8 @@ class NextItNet:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - self.dis_loss
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(self.dis_loss)
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + self.dis_loss
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + tf.stop_gradient(self.dis_loss)
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params
@@ -284,12 +284,12 @@ class NextItNet:
 			labels=self.hard_label)
 		self.dis_loss = tf.reduce_mean(self.dis_loss)
 		train_dis_var_list = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
-		self.dis_opt = tf.train.AdamOptimizer(self.learning_rate
+		self.dis_opt = tf.train.AdamOptimizer(self.clr
 			).minimize(self.dis_loss, var_list=train_dis_var_list)
 
 
 class SASRecnetwork:
-	def __init__(self, args, hidden_size,learning_rate,item_num,state_size,embeddings,name='sas_teacher'):
+	def __init__(self, args, hidden_size,learning_rate, clr,item_num,state_size,embeddings,name='sas_teacher'):
 		self.args = args
 		self.state_size = state_size
 		self.hw = state_size
@@ -356,8 +356,8 @@ class SASRecnetwork:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - self.dis_loss
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(self.dis_loss)
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + self.dis_loss
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + tf.stop_gradient(self.dis_loss)
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params
@@ -382,7 +382,7 @@ class SASRecnetwork:
 			labels=self.hard_label)
 		self.dis_loss = tf.reduce_mean(self.dis_loss)
 		train_dis_var_list = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
-		self.dis_opt = tf.train.AdamOptimizer(self.learning_rate
+		self.dis_opt = tf.train.AdamOptimizer(self.clr
 			).minimize(self.dis_loss, var_list=train_dis_var_list)
 
 

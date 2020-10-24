@@ -165,6 +165,7 @@ def parse_args():
 	parser.add_argument('--eval_batch', type=int, default=10)
 
 	parser.add_argument('--lr', type=float, default=1e-3)
+	parser.add_argument('--clr', type=float, default=1e-3)
 	parser.add_argument('--batch_size', type=int, default=256)
 
 	# discriminator
