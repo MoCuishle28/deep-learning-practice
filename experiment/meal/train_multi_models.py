@@ -50,6 +50,8 @@ def main(args):
 
 	saved_model = {k:False for k in teacher_models}
 	loss_dict = {k:0 for k in teacher_models}
+	print(saved_model, '\n', loss_dict)
+
 	total_step = 0
 	max_ndcg_and_epoch_dict = {k:[[0, 0] for _ in args.topk.split(',')] for k in teacher_models}	# (ng_inter, step)
 	gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.mem_ratio)
@@ -68,7 +70,8 @@ def main(args):
 
 				for model in teacher_models:
 					if saved_model[model]:
-						print(f'model:{model} has saved...')
+						# print(f'model:{model} has saved...')
+						# logging.info(f'model:{model} has saved...')
 						continue
 					ranking_model = ensemble.get(model)
 					loss_dict[model], _ = sess.run([ranking_model.loss, ranking_model.opt],
@@ -80,7 +83,8 @@ def main(args):
 				total_step += 1
 				if (total_step % 200) == 0 or (total_step == 1):
 					for k,v in loss_dict.items():
-						loss_dict[k] = round(loss_dict[k].item(), 5)
+						if not saved_model[k]:
+							loss_dict[k] = round(loss_dict[k].item(), 5)
 					l1, l2, l3, l4 = loss_dict.get('gru'), loss_dict.get('caser'), loss_dict.get('next'), loss_dict.get('sas')
 					info = f'batch:[{total_step}] loss: GRU->{l1}, Caser->{l2}, NItNet->{l3}, SASRec->{l4}'
 					print(info)
@@ -91,6 +95,7 @@ def main(args):
 					for model in teacher_models:
 						if saved_model[model]:
 							print(f'model:{model} has saved...')
+							logging.info(f'model:{model} has saved...')
 							continue
 						ranking_model = ensemble.get(model)
 						info = f'\n\n===============================evaluating {model}==============================='
@@ -105,7 +110,7 @@ def main(args):
 					logging.info(f'Time:{t2 - t1}')
 
 				for model in teacher_models:
-					if (total_step - max_ndcg_and_epoch_dict[model][0][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[model][1][1] >= 6000) and (total_step - max_ndcg_and_epoch[2][1] >= 6000):
+					if (total_step - max_ndcg_and_epoch_dict[model][0][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[model][1][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[model][2][1] >= 6000):
 						saved_model[model] = True
 				if saved_model['gru'] and saved_model['caser'] and saved_model['next'] and saved_model['sas']:
 					break
