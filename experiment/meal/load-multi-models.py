@@ -28,16 +28,16 @@ def main(args):
 	for model in teacher_models:
 		if model == 'gru':
 			gru_all_embeddings = initialize_embeddings(item_num, args.hidden_factor)
-			GRU = GRUnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=gru_all_embeddings)
+			GRU = GRUnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=0, item_num=item_num, state_size=state_size, embeddings=gru_all_embeddings)
 		elif model == 'caser':
 			caser_all_embeddings = initialize_embeddings(item_num, args.hidden_factor)
-			CaserNet = Caser(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=caser_all_embeddings)
+			CaserNet = Caser(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=0, item_num=item_num, state_size=state_size, embeddings=caser_all_embeddings)
 		elif model == 'next':
 			next_all_embeddings = initialize_embeddings(item_num, args.hidden_factor)
-			NItNet = NextItNet(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=next_all_embeddings)
+			NItNet = NextItNet(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=0, item_num=item_num, state_size=state_size, embeddings=next_all_embeddings)
 		elif model == 'sas':
 			sas_all_embeddings = initialize_embeddings(item_num, args.hidden_factor, state_size=state_size, pos=True)
-			SASRec = SASRecnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=sas_all_embeddings)
+			SASRec = SASRecnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=0, item_num=item_num, state_size=state_size, embeddings=sas_all_embeddings)
 		else:
 			info = f'wrong model:{model}...'
 			print(info)

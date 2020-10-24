@@ -30,16 +30,16 @@ def main(args):
 	for model in teacher_models:
 		if model == 'gru':
 			gru_all_embeddings = initialize_embeddings(item_num, args.hidden_factor)
-			GRU = GRUnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=gru_all_embeddings)
+			GRU = GRUnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=0, item_num=item_num, state_size=state_size, embeddings=gru_all_embeddings)
 		elif model == 'caser':
 			caser_all_embeddings = initialize_embeddings(item_num, args.hidden_factor)
-			CaserNet = Caser(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=caser_all_embeddings)
+			CaserNet = Caser(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=0, item_num=item_num, state_size=state_size, embeddings=caser_all_embeddings)
 		elif model == 'next':
 			next_all_embeddings = initialize_embeddings(item_num, args.hidden_factor)
-			NItNet = NextItNet(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=next_all_embeddings)
+			NItNet = NextItNet(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=0, item_num=item_num, state_size=state_size, embeddings=next_all_embeddings)
 		elif model == 'sas':
 			sas_all_embeddings = initialize_embeddings(item_num, args.hidden_factor, state_size=state_size, pos=True)
-			SASRec = SASRecnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=sas_all_embeddings)
+			SASRec = SASRecnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=0, item_num=item_num, state_size=state_size, embeddings=sas_all_embeddings)
 		else:
 			info = f'wrong model:{model}...'
 			print(info)
@@ -54,13 +54,13 @@ def main(args):
 	student_model = None
 	all_embeddings = initialize_embeddings(item_num, args.hidden_factor) if args.model != 'sas' else initialize_embeddings(item_num, args.hidden_factor, state_size=state_size, pos=True)
 	if args.model == 'gru':		
-		student_model = GRUnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=all_embeddings, name='gru_student')
+		student_model = GRUnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=args.dlr, item_num=item_num, state_size=state_size, embeddings=all_embeddings, name='gru_student')
 	elif args.model == 'caser':
-		student_model = Caser(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=all_embeddings, name='caser_student')
+		student_model = Caser(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=args.dlr, item_num=item_num, state_size=state_size, embeddings=all_embeddings, name='caser_student')
 	elif args.model == 'next':
-		student_model = NextItNet(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=all_embeddings, name='next_student')
+		student_model = NextItNet(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=args.dlr, item_num=item_num, state_size=state_size, embeddings=all_embeddings, name='next_student')
 	elif args.model == 'sas':
-		student_model = SASRecnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, item_num=item_num, state_size=state_size, embeddings=all_embeddings, name='sas_student')
+		student_model = SASRecnetwork(args, hidden_size=args.hidden_factor, learning_rate=args.lr, dlr=args.dlr, item_num=item_num, state_size=state_size, embeddings=all_embeddings, name='sas_student')
 	else:
 		info = f'wrong model:{args.model}...'
 		print(info)
@@ -165,7 +165,7 @@ def parse_args():
 	parser.add_argument('--eval_batch', type=int, default=10)
 
 	parser.add_argument('--lr', type=float, default=1e-3)
-	parser.add_argument('--clr', type=float, default=1e-3)
+	parser.add_argument('--dlr', type=float, default=1e-3)
 	parser.add_argument('--batch_size', type=int, default=256)
 
 	# discriminator

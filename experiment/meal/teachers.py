@@ -7,10 +7,11 @@ from utils import *
 
 
 class GRUnetwork:
-	def __init__(self, args, hidden_size, learning_rate, clr, item_num, state_size, embeddings, name='gru_teacher'):
+	def __init__(self, args, hidden_size, learning_rate, dlr, item_num, state_size, embeddings, name='gru_teacher'):
 		self.args = args
 		self.state_size = state_size
 		self.learning_rate = learning_rate
+		self.dlr = dlr
 		self.hidden_size=hidden_size
 		self.item_num=int(item_num)
 		self.hw = state_size
@@ -76,16 +77,17 @@ class GRUnetwork:
 			labels=self.hard_label)
 		self.dis_loss = tf.reduce_mean(self.dis_loss)
 		train_dis_var_list = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
-		self.dis_opt = tf.train.AdamOptimizer(self.clr
+		self.dis_opt = tf.train.AdamOptimizer(self.dlr
 			).minimize(self.dis_loss, var_list=train_dis_var_list)
 
 
 class Caser:
-	def __init__(self, args, hidden_size, learning_rate, clr, item_num, state_size, embeddings, name='caser_teacher'):
+	def __init__(self, args, hidden_size, learning_rate, dlr, item_num, state_size, embeddings, name='caser_teacher'):
 		self.args = args
 		self.state_size = state_size
 		self.hw = state_size
 		self.learning_rate = learning_rate
+		self.dlr = dlr
 		self.hidden_size = hidden_size
 		self.item_num = int(item_num)
 		self.name = name
@@ -200,16 +202,17 @@ class Caser:
 			labels=self.hard_label)
 		self.dis_loss = tf.reduce_mean(self.dis_loss)
 		train_dis_var_list = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
-		self.dis_opt = tf.train.AdamOptimizer(self.clr
+		self.dis_opt = tf.train.AdamOptimizer(self.dlr
 			).minimize(self.dis_loss, var_list=train_dis_var_list)
 
 
 class NextItNet:
-	def __init__(self, args, hidden_size,learning_rate, clr, item_num,state_size, embeddings, name='next_teacher'):
+	def __init__(self, args, hidden_size,learning_rate, dlr, item_num,state_size, embeddings, name='next_teacher'):
 		self.args = args
 		self.state_size = state_size
 		self.hw = state_size
 		self.learning_rate = learning_rate
+		self.dlr = dlr
 		self.hidden_size=hidden_size
 		self.item_num=int(item_num)
 		self.name = name
@@ -284,16 +287,17 @@ class NextItNet:
 			labels=self.hard_label)
 		self.dis_loss = tf.reduce_mean(self.dis_loss)
 		train_dis_var_list = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
-		self.dis_opt = tf.train.AdamOptimizer(self.clr
+		self.dis_opt = tf.train.AdamOptimizer(self.dlr
 			).minimize(self.dis_loss, var_list=train_dis_var_list)
 
 
 class SASRecnetwork:
-	def __init__(self, args, hidden_size,learning_rate, clr,item_num,state_size,embeddings,name='sas_teacher'):
+	def __init__(self, args, hidden_size,learning_rate, dlr,item_num,state_size,embeddings,name='sas_teacher'):
 		self.args = args
 		self.state_size = state_size
 		self.hw = state_size
 		self.learning_rate = learning_rate
+		self.dlr = dlr
 		self.hidden_size = hidden_size
 		self.item_num = int(item_num)
 		self.name = name
@@ -382,7 +386,7 @@ class SASRecnetwork:
 			labels=self.hard_label)
 		self.dis_loss = tf.reduce_mean(self.dis_loss)
 		train_dis_var_list = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
-		self.dis_opt = tf.train.AdamOptimizer(self.clr
+		self.dis_opt = tf.train.AdamOptimizer(self.dlr
 			).minimize(self.dis_loss, var_list=train_dis_var_list)
 
 
