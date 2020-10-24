@@ -95,6 +95,7 @@ def main(args):
 				len_state = list(batch['len_state'].values())
 				# target = list(batch['action'].values())
 
+				# aver soft label
 				teacher_prob_sum = 0
 				dis_input = []
 				for k, model in ensemble.items():
@@ -103,6 +104,8 @@ def main(args):
 					teacher_prob_sum += prob
 					dis_input.append(prob)
 				soft_label = teacher_prob_sum / len(ensemble.keys())
+				# DQN select teacher's soft label TODO
+				# DDPG re-weight soft label 	  TODO
 
 				# train student
 				student_prob, stu_loss, _ = sess.run([student_model.predict_prob, 

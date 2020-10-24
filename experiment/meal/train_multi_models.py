@@ -50,7 +50,6 @@ def main(args):
 
 	saved_model = {k:False for k in teacher_models}
 	loss_dict = {k:0 for k in teacher_models}
-	print(saved_model, '\n', loss_dict)
 
 	total_step = 0
 	max_ndcg_and_epoch_dict = {k:[[0, 0] for _ in args.topk.split(',')] for k in teacher_models}	# (ng_inter, step)
@@ -94,8 +93,8 @@ def main(args):
 					t1 = time.time()
 					for model in teacher_models:
 						if saved_model[model]:
-							print(f'model:{model} has saved...')
-							logging.info(f'model:{model} has saved...')
+							print(f'\nmodel:{model} has saved...')
+							logging.info(f'\nmodel:{model} has saved...')
 							continue
 						ranking_model = ensemble.get(model)
 						info = f'\n\n===============================evaluating {model}==============================='
@@ -110,7 +109,7 @@ def main(args):
 					logging.info(f'Time:{t2 - t1}')
 
 				for model in teacher_models:
-					if (total_step - max_ndcg_and_epoch_dict[model][0][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[model][1][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[model][2][1] >= 6000):
+					if (total_step >= args.start_eval) and (total_step - max_ndcg_and_epoch_dict[model][0][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[model][1][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[model][2][1] >= 6000):
 						saved_model[model] = True
 				if saved_model['gru'] and saved_model['caser'] and saved_model['next'] and saved_model['sas']:
 					break

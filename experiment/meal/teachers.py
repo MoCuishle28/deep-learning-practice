@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 
-from discriminator import *
 from NextItNetModules import *
 from SASRecModules import *
 from utils import *
@@ -51,8 +50,8 @@ class GRUnetwork:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.nn.sigmoid(self.discriminator_output)
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(tf.nn.sigmoid(self.discriminator_output))
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - self.dis_loss
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(self.dis_loss)
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params
@@ -175,8 +174,8 @@ class Caser:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.nn.sigmoid(self.discriminator_output)
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(tf.nn.sigmoid(self.discriminator_output))
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - self.dis_loss
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(self.dis_loss)
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params
@@ -259,8 +258,8 @@ class NextItNet:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.nn.sigmoid(self.discriminator_output)
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(tf.nn.sigmoid(self.discriminator_output))
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - self.dis_loss
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(self.dis_loss)
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params
@@ -357,8 +356,8 @@ class SASRecnetwork:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.nn.sigmoid(self.discriminator_output)
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(tf.nn.sigmoid(self.discriminator_output))
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - self.dis_loss
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * self.predict_prob) - tf.stop_gradient(self.dis_loss)
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params
