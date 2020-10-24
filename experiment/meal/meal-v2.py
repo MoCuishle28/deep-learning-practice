@@ -108,19 +108,21 @@ def main(args):
 				# DDPG re-weight soft label 	  TODO
 
 				# train student
+				stu_output_label = np.array([0.0 for _ in range(args.batch_size)]).reshape(-1, 1)	# BCE Loss
 				student_prob, stu_loss, _ = sess.run([student_model.predict_prob, 
 					student_model.stu_loss, 
 					student_model.stu_opt], 
 					feed_dict={student_model.inputs: state, 
 						student_model.len_state: len_state, 
 						student_model.is_training: True,
+						student_model.hard_label: stu_output_label,		# BCE Loss
 						student_model.soft_label: soft_label})
 
 				# prepare discriminator input
 				dis_input.append(student_prob)
 				dis_input = np.array(dis_input).reshape((-1, item_num))	# (256, 26702) in RC15
-				dis_label = [1.0 for _ in range(len(ensemble.keys())*args.batch_size)]
-				dis_label.extend([0.0 for _ in range(args.batch_size)])
+				dis_label = [1.0 for _ in range(len(ensemble.keys())*args.batch_size)]	# teacher
+				dis_label.extend([0.0 for _ in range(args.batch_size)])					# student
 				dis_label = np.array(dis_label).reshape(-1, 1)	# (1280, 1) in RC15
 
 				# train discriminator
