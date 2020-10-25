@@ -157,7 +157,7 @@ def main(args):
 				total_step += 1
 				if (total_step % 200) == 0 or (total_step == 1):
 					stu_loss, dis_loss = round(stu_loss.item(), 5), round(dis_loss.item(), 5)
-					info = f'Epoch:[{i}] batch:[{total_step}] student loss: {stu_loss}, discriminator loss: {dis_loss}'
+					info = f'Epoch:[{i+1}/{args.epoch}] batch:[{total_step}] student loss: {stu_loss}, discriminator loss: {dis_loss}'
 					print(info)
 					logging.info(info)
 				if (total_step >= args.start_eval) and (total_step % args.eval_interval == 0):

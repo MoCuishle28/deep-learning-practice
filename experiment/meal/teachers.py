@@ -28,16 +28,17 @@ class GRUnetwork:
 
 			self.input_emb=tf.nn.embedding_lookup(all_embeddings['state_embeddings'],self.inputs)
 
-			gru_out, self.states_hidden= tf.nn.dynamic_rnn(
+			gru_out, self.state_hidden= tf.nn.dynamic_rnn(
 				tf.contrib.rnn.GRUCell(self.hidden_size),
 				self.input_emb,
 				dtype=tf.float32,
 				sequence_length=self.len_state,
 			)
 			if args.layer_trick == 'ln':
-				self.states_hidden = tf.contrib.layers.layer_norm(self.states_hidden)
+				self.state_hidden = tf.contrib.layers.layer_norm(self.state_hidden)
+			self.state_size = self.state_hidden.shape[-1]
 
-			self.output = tf.contrib.layers.fully_connected(self.states_hidden,self.item_num,activation_fn=None)
+			self.output = tf.contrib.layers.fully_connected(self.state_hidden,self.item_num,activation_fn=None)
 			self.predict_prob = tf.nn.softmax(self.output)
 
 			self.loss=tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target,logits=self.output)
@@ -169,6 +170,7 @@ class Caser:
 										 rate=args.dropout_rate,
 										 training=tf.convert_to_tensor(self.is_training))
 			self.state_hidden=self.final    # shape=(?, 112)
+			self.state_size = self.state_hidden.shape[-1]
 
 			self.output = tf.contrib.layers.fully_connected(self.state_hidden,self.item_num,activation_fn=None)
 			self.predict_prob = tf.nn.softmax(self.output)
@@ -254,6 +256,7 @@ class NextItNet:
 				dilate_output *= mask
 
 			self.state_hidden = extract_axis_1(dilate_output, self.len_state - 1)
+			self.state_size = self.state_hidden.shape[-1]
 
 			self.output = tf.contrib.layers.fully_connected(self.state_hidden,self.item_num,activation_fn=None)
 			self.predict_prob = tf.nn.softmax(self.output)
@@ -353,6 +356,7 @@ class SASRecnetwork:
 
 			self.seq = normalize(self.seq)
 			self.state_hidden=extract_axis_1(self.seq, self.len_state - 1)
+			self.state_size = self.state_hidden.shape[-1]
 
 			self.output = tf.contrib.layers.fully_connected(self.state_hidden,self.item_num,activation_fn=None)
 			self.predict_prob = tf.nn.softmax(self.output)

@@ -275,3 +275,75 @@ def evaluate_aver_ensemble(args, ensemble, sess, max_ndcg_and_epoch, total_step,
 		del prediction
 		calculate_hit(sorted_list, topk, true_items, hit_inters, ndcg_inters)
 	print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging, session_num)
+
+
+def evaluate_reWeight(args, ensemble, ddpg_agent, sess, max_ndcg_and_epoch, total_step, logging, RC19=False):
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+	topk = [int(x) for x in args.topk.split(',')]
+	max_topk = max(topk)
+	if args.mode == 'valid':
+		eval_sessions = pd.read_pickle(os.path.join(args.base_data_dir, 'sampled_val.df'))
+	elif args.mode == 'test':
+		eval_sessions = pd.read_pickle(os.path.join(args.base_data_dir, 'sampled_test.df'))
+	eval_ids = eval_sessions.session_id.unique()
+	if RC19:
+		groups = eval_sessions.groupby('user_session')
+	else:
+		groups = eval_sessions.groupby('session_id')
+	session_num = len(eval_ids)
+
+	batch = args.eval_batch
+	evaluated = 0
+	total_inter = 0.0
+	hit_inters, ndcg_inters = [0 for _ in topk], [0 for _ in topk]
+	for k,v in ensemble.items():
+		ranking_model = ensemble[k]
+		break
+	
+	while evaluated < len(eval_ids):
+		states, len_states, true_items = [], [], []
+		for i in range(batch):
+			if evaluated == len(eval_ids):
+				break
+			sid = eval_ids[evaluated]
+			group = groups.get_group(sid)
+			history = []
+			for index, row in group.iterrows():
+				state = list(history)
+				len_states.append(ranking_model.hw if len(state) >= ranking_model.hw else 1 if len(state) == 0 else len(state))
+				state = pad_history(state, ranking_model.hw, ranking_model.item_num)
+				states.append(state)
+				if RC19:
+					target_item = row['product_id']
+				else:
+					target_item = row['item_id']
+				total_inter += 1.0
+				true_items.append(target_item)
+
+				if RC19:
+					history.append(row['product_id'])
+				else:
+					history.append(row['item_id'])
+			evaluated += 1
+
+		logits_list, rl_input_state, state_size = [], [], ddpg_agent.state_size
+		for k, model in ensemble.items():
+			logits, s = sess.run([model.output, model.state_hidden], feed_dict={model.inputs: states, 
+				model.len_state: len_states, model.is_training: False})
+			rl_input_state.append(s)
+			logits_list.append(logits)
+		# re-weighting
+		rl_input_state = np.concatenate(rl_input_state, axis=-1).reshape((-1, state_size)) # (batch, state_size)
+		actions = sess.run(ddpg_agent.actor_out_, feed_dict={
+						ddpg_agent.inputs: rl_input_state, ddpg_agent.is_training: False})
+		actor_weights = torch.nn.functional.softmax(torch.tensor(actions), dim=-1).numpy()
+		prediction = 0
+		for idx, logits in enumerate(logits_list):
+			weight = actor_weights[:, idx].reshape((-1, 1))
+			prediction += (weight * logits)
+
+		prediction = torch.tensor(prediction)
+		_, sorted_list = prediction.topk(max_topk)
+		del prediction
+		calculate_hit(sorted_list, topk, true_items, hit_inters, ndcg_inters)
+	print_eval(total_inter, hit_inters, ndcg_inters, topk, max_ndcg_and_epoch, total_step, logging, session_num)
