@@ -51,9 +51,13 @@ class GRUnetwork:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + self.dis_loss
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + tf.stop_gradient(self.dis_loss)
-				self.stu_loss = tf.reduce_mean(self.stu_loss)
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.nn.log_softmax(self.output) - self.dis_loss
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.nn.log_softmax(self.output) - tf.nn.sigmoid(self.discriminator_output)
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) - tf.stop_gradient(tf.nn.sigmoid(self.discriminator_output))
+				# self.stu_loss = tf.reduce_mean(self.stu_loss)
+				# new
+				self.stu_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.soft_label, logits=self.output)) - self.dis_loss
+				# self.stu_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.soft_label, logits=self.output)) + self.dis_loss
 
 				# fix discriminator params
 				train_var_list = [var for var in tf.trainable_variables() if (self.name in var.name) and ('discriminator' not in var.name)]
@@ -62,7 +66,11 @@ class GRUnetwork:
 
 	def discriminator(self):
 		self.hard_label = tf.placeholder(tf.float32, [None, 1], name='hard_label')	# {0, 1} -> student, teacher
-		self.dis_input = self.predict_prob * 1.0
+		# self.dis_input = self.output * 1.0
+
+		# co-perform
+		self.teacher_logits = tf.placeholder(tf.float32, [None, self.item_num], name='teacher_logits')
+		self.dis_input = tf.concat([self.teacher_logits, self.output], axis=0)
 
 		discriminator = eval(self.args.discriminator_layers)
 		discriminator.append(1)
@@ -176,8 +184,8 @@ class Caser:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + self.dis_loss
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + tf.stop_gradient(self.dis_loss)
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) - tf.nn.sigmoid(self.discriminator_output)
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) - tf.stop_gradient(tf.nn.sigmoid(self.discriminator_output))
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params
@@ -261,8 +269,8 @@ class NextItNet:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + self.dis_loss
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + tf.stop_gradient(self.dis_loss)
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) - tf.nn.sigmoid(self.discriminator_output)
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) - tf.stop_gradient(tf.nn.sigmoid(self.discriminator_output))
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params
@@ -360,8 +368,8 @@ class SASRecnetwork:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + self.dis_loss
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) + tf.stop_gradient(self.dis_loss)
+				self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) - tf.nn.sigmoid(self.discriminator_output)
+				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) - tf.stop_gradient(tf.nn.sigmoid(self.discriminator_output))
 				self.stu_loss = tf.reduce_mean(self.stu_loss)
 
 				# fix discriminator params

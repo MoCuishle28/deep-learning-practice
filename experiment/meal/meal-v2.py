@@ -97,44 +97,67 @@ def main(args):
 
 				# aver soft label
 				teacher_prob_sum = 0
+				teacher_feature_sum = 0
 				dis_input = []
 				for k, model in ensemble.items():
-					prob = sess.run(model.predict_prob, feed_dict={model.inputs: state, 
+					logits, prob = sess.run([model.output, model.predict_prob], feed_dict={model.inputs: state, 
 						model.len_state: len_state, model.is_training: False})
+					teacher_feature_sum += logits
 					teacher_prob_sum += prob
-					dis_input.append(prob)
+					# dis_input.append(logits)	# every teacher's logits
 				soft_label = teacher_prob_sum / len(ensemble.keys())
+				dis_input.append(teacher_feature_sum / len(ensemble.keys())) # aver teacher's logits
 				# DQN select teacher's soft label TODO
 				# DDPG re-weight soft label 	  TODO
 
-				# train student
-				stu_output_label = np.array([0.0 for _ in range(args.batch_size)]).reshape(-1, 1)	# BCE Loss
-				student_prob, stu_loss, _ = sess.run([student_model.predict_prob, 
+				# # train student
+				# stu_output_label = np.array([0.0 for _ in range(args.batch_size)]).reshape(-1, 1)	# BCE Loss
+				# student_logits, stu_loss, _ = sess.run([student_model.output, 
+				# 	student_model.stu_loss, 
+				# 	student_model.stu_opt], 
+				# 	feed_dict={student_model.inputs: state, 
+				# 		student_model.len_state: len_state, 
+				# 		student_model.is_training: True,
+				# 		student_model.hard_label: stu_output_label,		# BCE Loss
+				# 		student_model.soft_label: soft_label})
+
+				# # prepare discriminator input
+				# dis_input.append(student_logits)
+				# dis_input = np.array(dis_input).reshape((-1, item_num))	# (batch, 26702) in RC15
+				# dis_label = [1.0 for _ in range(args.batch_size)]		# teacher label
+				# dis_label.extend([0.0 for _ in range(args.batch_size)])	# student label
+				# dis_label = np.array(dis_label).reshape(-1, 1)	# (batch, 1) in RC15
+
+				# # train discriminator
+				# dis_loss, _ = sess.run([student_model.dis_loss, student_model.dis_opt], 
+				# 		feed_dict={student_model.dis_input: dis_input, 
+				# 		student_model.hard_label: dis_label, 
+				# 		student_model.is_training: True})
+
+				# co-perform
+				# prepare discriminator input
+				dis_input = np.array(dis_input).reshape((-1, item_num))	# (batch, 26702) in RC15
+				dis_label = [1.0 for _ in range(args.batch_size)]		# teacher label
+				dis_label.extend([0.0 for _ in range(args.batch_size)])	# student label
+				dis_label = np.array(dis_label).reshape(-1, 1)			# (batch, 1)
+
+				stu_loss, _, dis_loss, _ = sess.run([
 					student_model.stu_loss, 
-					student_model.stu_opt], 
+					student_model.stu_opt,
+					student_model.dis_loss,
+					student_model.dis_opt], 
 					feed_dict={student_model.inputs: state, 
 						student_model.len_state: len_state, 
 						student_model.is_training: True,
-						student_model.hard_label: stu_output_label,		# BCE Loss
-						student_model.soft_label: soft_label})
-
-				# prepare discriminator input
-				dis_input.append(student_prob)
-				dis_input = np.array(dis_input).reshape((-1, item_num))	# (256, 26702) in RC15
-				dis_label = [1.0 for _ in range(len(ensemble.keys())*args.batch_size)]	# teacher
-				dis_label.extend([0.0 for _ in range(args.batch_size)])					# student
-				dis_label = np.array(dis_label).reshape(-1, 1)	# (1280, 1) in RC15
-
-				# train discriminator
-				dis_loss, _ = sess.run([student_model.dis_loss, student_model.dis_opt], 
-						feed_dict={student_model.dis_input: dis_input, 
-						student_model.hard_label: dis_label, 
-						student_model.is_training: True})
+						student_model.soft_label: soft_label,
+						# discriminator
+						student_model.teacher_logits: dis_input, 
+						student_model.hard_label: dis_label})
 
 				total_step += 1
 				if (total_step % 200) == 0 or (total_step == 1):
 					stu_loss, dis_loss = round(stu_loss.item(), 5), round(dis_loss.item(), 5)
-					info = f'batch:[{total_step}] student loss: {stu_loss}, discriminator loss: {dis_loss}'
+					info = f'Epoch:[{i}] batch:[{total_step}] student loss: {stu_loss}, discriminator loss: {dis_loss}'
 					print(info)
 					logging.info(info)
 				if (total_step >= args.start_eval) and (total_step % args.eval_interval == 0):
@@ -153,7 +176,7 @@ def parse_args():
 	parser = argparse.ArgumentParser(description="Run Teacher Model.")
 	parser.add_argument('--v', default="v")
 	parser.add_argument('--teacher_models', default='gru,caser,next,sas')	# gru/caser/next/sas
-	parser.add_argument('--model', default='sas')	# gru/caser/next/sas
+	parser.add_argument('--model', default='gru')	# gru/caser/next/sas
 	parser.add_argument('--mode', default='valid')
 	parser.add_argument('--base_log_dir', default="log/")
 	parser.add_argument('--base_data_dir', default=base_dir+'RC15')
@@ -169,7 +192,7 @@ def parse_args():
 	parser.add_argument('--batch_size', type=int, default=256)
 
 	# discriminator
-	parser.add_argument('--dis_dropout_rate', type=float, default=0.1)
+	parser.add_argument('--dis_dropout_rate', type=float, default=0.5)
 	parser.add_argument('--discriminator_layers', default='[256,256,256]')
 	parser.add_argument('--weight_decay', type=float, default=1e-5)
 
