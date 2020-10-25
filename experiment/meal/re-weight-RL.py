@@ -110,8 +110,8 @@ def main(args):
 	logging.info(info)
 
 	saved_model = {k:False for k in teacher_models}
+	saved_model['rl'] = False
 	loss_dict = {k:0 for k in teacher_models}
-
 	total_step = 0
 	max_ndcg_and_epoch_dict = {k:[[0, 0] for _ in args.topk.split(',')] for k in teacher_models}	# (ng_inter, step)
 	max_ndcg_and_epoch_dict['rl'] = [[0, 0] for _ in args.topk.split(',')]
@@ -252,13 +252,14 @@ def main(args):
 				for model in teacher_models:
 					if (total_step >= args.start_eval) and (total_step - max_ndcg_and_epoch_dict[model][0][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[model][1][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[model][2][1] >= 6000):
 						saved_model[model] = True
-				if saved_model['gru'] and saved_model['caser'] and saved_model['next'] and saved_model['sas']:
+				if (total_step >= args.start_eval) and (total_step - max_ndcg_and_epoch_dict['rl'][0][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict['rl'][1][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict['rl'][2][1] >= 6000):
+					saved_model['rl'] = True
 					break
 
 				# debug	
 				# saver.save(sess, f"rl/rl-{args.v}", global_step=total_step) # save models
 				# break
-			if saved_model['gru'] and saved_model['caser'] and saved_model['next'] and saved_model['sas']:
+			if saved_model['rl']:
 				saver.save(sess, f"rl/rl-{args.v}", global_step=total_step) # save models
 				print('save rl-multi model')
 				logging.info('save rl-multi model')
