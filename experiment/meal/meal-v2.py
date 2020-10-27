@@ -182,7 +182,7 @@ def parse_args():
 	parser.add_argument('--base_data_dir', default=base_dir+'RC15')
 	parser.add_argument('--topk', default='5,10,20')
 
-	parser.add_argument('--epoch', type=int, default=100)
+	parser.add_argument('--epoch', type=int, default=500)
 	parser.add_argument('--eval_interval', type=int, default=2000)
 	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)

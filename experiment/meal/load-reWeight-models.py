@@ -74,7 +74,7 @@ def main(args):
 	with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 		saver = tf.train.Saver()
 
-		ckpt = tf.train.get_checkpoint_state(f'rl/')
+		ckpt = tf.train.get_checkpoint_state(f'rl-{args.v}/')
 		saver.restore(sess, ckpt.model_checkpoint_path)
 		info = f"loading with RL-Models."
 		print(info)
@@ -94,7 +94,7 @@ def main(args):
 def parse_args():
 	base_dir = '../data/'
 	parser = argparse.ArgumentParser(description="Run Teacher Model.")
-	parser.add_argument('--v', default="v")
+	parser.add_argument('--v', default="v")		# loading version
 	parser.add_argument('--models', default='gru,caser,next,sas')	# gru/caser/next/sas
 	parser.add_argument('--rl', default='ddpg')	# ddpg/dqn
 	parser.add_argument('--mode', default='test')

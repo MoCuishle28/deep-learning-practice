@@ -257,10 +257,10 @@ def main(args):
 					break
 
 				# debug	
-				# saver.save(sess, f"rl/rl-{args.v}", global_step=total_step) # save models
+				# saver.save(sess, f"rl-{args.v}/rl-{args.v}", global_step=total_step) # save models
 				# break
-			if saved_model['rl']:
-				saver.save(sess, f"rl/rl-{args.v}", global_step=total_step) # save models
+			if saved_model['rl'] and saved_model['gru'] and saved_model['caser'] and saved_model['next'] and saved_model['sas']:
+				saver.save(sess, f"rl-{args.v}/rl-{args.v}", global_step=total_step) # save models
 				print('save rl-multi model')
 				logging.info('save rl-multi model')
 				break
