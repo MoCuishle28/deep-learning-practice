@@ -357,7 +357,7 @@ def parse_args():
 
 	parser.add_argument('--reward_top', type=int, default=50)
 
-	parser.add_argument('--max_iid', type=int, default=26702)	# 0~26702
+	parser.add_argument('--max_iid', type=int, default=26701)	# 0~26702
 
 	parser.add_argument('--num_filters', type=int, default=16,
 						help='Number of filters per filter size (default: 128)')

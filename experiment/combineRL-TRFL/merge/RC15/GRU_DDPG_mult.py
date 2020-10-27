@@ -285,7 +285,7 @@ if __name__ == '__main__':
 
 	parser.add_argument('--weight_decay', type=float, default=1e-4)
 	# embedding
-	parser.add_argument('--max_iid', type=int, default=26702)	# 0~26702
+	parser.add_argument('--max_iid', type=int, default=26701)	# 0~26702
 	parser.add_argument('--i_emb_dim', type=int, default=64)
 
 	parser.add_argument('--reward_top', type=int, default=20)		# 取 top 多少计算 reward

@@ -91,8 +91,7 @@ class Agent(object):
 			# ranking model
 			self.target_items = tf.placeholder(tf.int32, [None], name='target_items')
 
-			atten = tf.nn.softmax(self.actor_out_)
-			self.ranking_model_input = atten * self.states_hidden
+			self.ranking_model_input = self.actor_out_ + self.states_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, 
 				args.max_iid + 1, 
@@ -318,7 +317,7 @@ if __name__ == '__main__':
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--action_size', type=int, default=64)
 	parser.add_argument('--mlr', type=float, default=1e-3)
-	parser.add_argument('--alr', type=float, default=3e-4)
+	parser.add_argument('--alr', type=float, default=1e-3)
 	parser.add_argument('--clr', type=float, default=3e-4)
 
 	parser.add_argument('--noise_var', type=float, default=0.01)

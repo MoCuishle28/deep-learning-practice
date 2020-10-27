@@ -285,13 +285,13 @@ def parse_args():
 	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
-	parser.add_argument('--mlr', type=float, default=5e-3)
+	parser.add_argument('--mlr', type=float, default=1e-3)
 	parser.add_argument('--alr', type=float, default=5e-3)
 	parser.add_argument('--clr', type=float, default=5e-3)
 
 	parser.add_argument('--reward_top', type=int, default=20)
 
-	parser.add_argument('--max_iid', type=int, default=26702)	# 0~26702
+	parser.add_argument('--max_iid', type=int, default=26701)	# 0~26702
 
 	parser.add_argument('--hidden_factor', type=int, default=64)
 
