@@ -190,6 +190,7 @@ class Run(object):
 		num_batches = int(num_rows / self.args.batch_size)
 		max_ndcg_and_epoch = [[0, 0] for _ in args.topk.split(',')]	# (ng_inter, step)
 		total_step = 0
+		fix_rec = False
 
 		gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.args.mem_ratio)
 		with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
@@ -215,7 +216,7 @@ class Run(object):
 						noise = np.random.normal(0, self.args.noise_var, size=self.main_agent.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
 						actions = (actions + noise).clip(-self.args.max_action, self.args.max_action)
 
-						if interaction_time == 0:
+						if (interaction_time == 0) and (not fix_rec):
 							ce_loss, ranking_model_loss, _ = sess.run([
 								self.main_agent.ce_loss,
 								self.main_agent.ranking_model_loss, 
@@ -297,6 +298,8 @@ class Run(object):
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
+						if (total_step >= self.args.start_eval) and (total_step - max_ndcg_and_epoch_dict[0][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[1][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[2][1] >= 6000):
+							fix_rec = True
 
 
 def main(args):
