@@ -91,7 +91,8 @@ class Agent(object):
 			# ranking model
 			self.target_items = tf.placeholder(tf.int32, [None], name='target_items')
 
-			self.ranking_model_input = self.actor_out_ + self.states_hidden
+			atten = tf.nn.softmax(self.actor_out_)
+			self.ranking_model_input = atten * self.states_hidden
 
 			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, 
 				args.max_iid + 1, 
@@ -156,6 +157,7 @@ class Run(object):
 	def train(self):
 		num_rows = self.replay_buffer.shape[0]
 		num_batches = int(num_rows / self.args.batch_size)
+		fix_rec = False
 		max_ndcg_and_epoch = [[0, 0] for _ in args.topk.split(',')]	# (ng_inter, step)
 		total_step = 0
 
@@ -183,7 +185,7 @@ class Run(object):
 						noise = np.random.normal(0, self.args.noise_var, size=self.args.action_size).clip(-self.args.noise_clip, self.args.noise_clip)
 						actions = (actions + noise).clip(-self.args.max_action, self.args.max_action)
 
-						if interaction_time == 0:
+						if interaction_time == 0 and (not fix_rec):
 							ce_loss, ranking_model_loss, _ = sess.run([
 								self.main_agent.ce_loss,
 								self.main_agent.ranking_model_loss, 
@@ -265,6 +267,8 @@ class Run(object):
 						t2 = time.time()
 						print(f'Time:{t2 - t1}')
 						logging.info(f'Time:{t2 - t1}')
+						if (total_step >= self.args.start_eval) and (total_step - max_ndcg_and_epoch_dict[0][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[1][1] >= 6000) and (total_step - max_ndcg_and_epoch_dict[2][1] >= 6000):
+							fix_rec = True
 
 
 def main(args):
@@ -316,7 +320,7 @@ if __name__ == '__main__':
 	parser.add_argument('--seq_hidden_size', type=int, default=64)
 	parser.add_argument('--action_size', type=int, default=64)
 	parser.add_argument('--mlr', type=float, default=1e-3)
-	parser.add_argument('--alr', type=float, default=1e-3)
+	parser.add_argument('--alr', type=float, default=3e-4)
 	parser.add_argument('--clr', type=float, default=3e-4)
 
 	parser.add_argument('--noise_var', type=float, default=0.01)
@@ -331,8 +335,8 @@ if __name__ == '__main__':
 	parser.add_argument('--reward', default='ndcg')
 	parser.add_argument('--max_action', type=float, default=0.1)
 	parser.add_argument('--maxlen', type=int, default=10000)
-	parser.add_argument('--max_interaction', type=int, default=300)
-	parser.add_argument('--train_interval', type=int, default=100)
+	parser.add_argument('--max_interaction', type=int, default=30)
+	parser.add_argument('--train_interval', type=int, default=10)
 	args = parser.parse_args()
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda

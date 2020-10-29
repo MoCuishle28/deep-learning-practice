@@ -217,7 +217,7 @@ class Run(object):
 							done = True if r != 0 else False
 							self.memory.push(s, a, s_, r, done)
 
-						if interaction_time % 100 == 0:
+						if interaction_time % self.args.train_interval == 0:
 							transitions = self.memory.sample(self.args.batch_size)
 							batch = Transition(*zip(*transitions))
 							state, actions = batch.state, batch.action
@@ -244,20 +244,19 @@ class Run(object):
 								feed_dict={self.main_agent.states_hidden: state, 
 								self.main_agent.is_training: True})
 							sess.run(self.target_network_update_ops)		# update target net
-							info = f'Step:[{total_step}] train agent, batch size:{len(state_new_list)}'
+							info = f'Step:[{total_step}] train agent, batch size:{len(state_new_list)} V:{self.args.v}'
 							print(info)
 							# logging.info(info)
 						interaction_time += 1
 						state = state_new_list		# next state
-						if (state_new_list == []) or (interaction_time >= 500):
+						if (state_new_list == []) or (interaction_time >= self.args.max_interaction):
 							print('Interaction END!')
 							break
 
 					total_step += 1
 					if (total_step == 1) or (total_step % 200 == 0):
-						aver_reward = round(np.array(rewards).mean().item(), 5)
 						ranking_model_loss, actor_loss, critic_loss = round(ranking_model_loss.item(), 5), round(actor_loss.item(), 5), round(critic_loss.item(), 5)
-						info = f"epoch:{i_epoch} Step:{total_step}, aver reward:{aver_reward}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
+						info = f"epoch:{i_epoch} Step:{total_step}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
 						logging.info(info)
 					if (total_step >= self.args.start_eval) and (total_step % self.args.eval_interval == 0):
@@ -333,6 +332,8 @@ if __name__ == '__main__':
 	parser.add_argument('--reward', default='ndcg')
 	parser.add_argument('--max_action', type=float, default=0.1)
 	parser.add_argument('--maxlen', type=int, default=10000)
+	parser.add_argument('--max_interaction', type=int, default=30)
+	parser.add_argument('--train_interval', type=int, default=10)
 	args = parser.parse_args()
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
