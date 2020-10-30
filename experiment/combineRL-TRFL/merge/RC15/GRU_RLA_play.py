@@ -254,7 +254,9 @@ class Run(object):
 
 					total_step += 1
 					if (total_step == 1) or (total_step % 200 == 0):
-						ranking_model_loss, actor_loss, critic_loss = round(ranking_model_loss.item(), 5), round(actor_loss.item(), 5), round(critic_loss.item(), 5)
+						if not fix_rec:
+							ranking_model_loss = round(ranking_model_loss.item(), 5)
+						actor_loss, critic_loss = round(actor_loss.item(), 5), round(critic_loss.item(), 5)
 						info = f"epoch:{i_epoch} Step:{total_step}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
 						print(info)
 						logging.info(info)
