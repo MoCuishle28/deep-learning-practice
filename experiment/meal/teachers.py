@@ -52,13 +52,8 @@ class GRUnetwork:
 				self.soft_label = tf.placeholder(tf.float32, [None, self.item_num], name='soft_label')	# after softmax
 				self.discriminator()
 
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.nn.log_softmax(self.output) - self.dis_loss
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.nn.log_softmax(self.output) - tf.nn.sigmoid(self.discriminator_output)
-				# self.stu_loss = -(tf.stop_gradient(self.soft_label) * tf.log(self.predict_prob)) - tf.stop_gradient(tf.nn.sigmoid(self.discriminator_output))
-				# self.stu_loss = tf.reduce_mean(self.stu_loss)
-				# new
-				self.stu_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.soft_label, logits=self.output)) - self.dis_loss
-				# self.stu_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.soft_label, logits=self.output)) + self.dis_loss
+				# self.stu_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.soft_label, logits=self.output)) - self.dis_loss
+				self.stu_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.soft_label, logits=self.output)) + self.dis_loss
 
 				# fix discriminator params
 				train_var_list = [var for var in tf.trainable_variables() if (self.name in var.name) and ('discriminator' not in var.name)]
@@ -66,7 +61,7 @@ class GRUnetwork:
 					).minimize(self.stu_loss, var_list=train_var_list)
 
 	def discriminator(self):
-		self.hard_label = tf.placeholder(tf.float32, [None, 1], name='hard_label')	# {0, 1} -> student, teacher
+		self.hard_label = tf.placeholder(tf.int32, [None], name='hard_label')	# [0,1]->teacher, [1,0]->student
 		# self.dis_input = self.output * 1.0
 
 		# co-perform
@@ -74,7 +69,7 @@ class GRUnetwork:
 		self.dis_input = tf.concat([self.teacher_logits, self.output], axis=0)
 
 		discriminator = eval(self.args.discriminator_layers)
-		discriminator.append(1)
+		discriminator.append(2)
 		with tf.variable_scope("discriminator"):
 			self.discriminator_output = mlp(self.dis_input, 
 				self.is_training, hidden_sizes=discriminator, 
@@ -82,9 +77,9 @@ class GRUnetwork:
 				output_activation=None,
 				l2=tf.contrib.layers.l2_regularizer(self.args.weight_decay))
 
-		self.dis_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=self.discriminator_output, 
+		self.dis_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.discriminator_output, 
 			labels=self.hard_label)
-		self.dis_loss = tf.reduce_mean(self.dis_loss)
+		self.dis_loss = tf.reduce_mean(self.dis_loss) + 1e-5	# avoid zero gradient
 		train_dis_var_list = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
 		self.dis_opt = tf.train.AdamOptimizer(self.dlr
 			).minimize(self.dis_loss, var_list=train_dis_var_list)

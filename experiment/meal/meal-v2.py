@@ -105,41 +105,20 @@ def main(args):
 					teacher_feature_sum += logits
 					teacher_prob_sum += prob
 					# dis_input.append(logits)	# every teacher's logits
-				soft_label = teacher_prob_sum / len(ensemble.keys())
+				soft_label = teacher_prob_sum / len(ensemble.keys())	# aver probability
+				# soft_label = teacher_feature_sum / len(ensemble.keys())	# aver logits
+
 				dis_input.append(teacher_feature_sum / len(ensemble.keys())) # aver teacher's logits
 				# DQN select teacher's soft label TODO
 				# DDPG re-weight soft label 	  TODO
 
 				# # train student
-				# stu_output_label = np.array([0.0 for _ in range(args.batch_size)]).reshape(-1, 1)	# BCE Loss
-				# student_logits, stu_loss, _ = sess.run([student_model.output, 
-				# 	student_model.stu_loss, 
-				# 	student_model.stu_opt], 
-				# 	feed_dict={student_model.inputs: state, 
-				# 		student_model.len_state: len_state, 
-				# 		student_model.is_training: True,
-				# 		student_model.hard_label: stu_output_label,		# BCE Loss
-				# 		student_model.soft_label: soft_label})
-
-				# # prepare discriminator input
-				# dis_input.append(student_logits)
-				# dis_input = np.array(dis_input).reshape((-1, item_num))	# (batch, 26702) in RC15
-				# dis_label = [1.0 for _ in range(args.batch_size)]		# teacher label
-				# dis_label.extend([0.0 for _ in range(args.batch_size)])	# student label
-				# dis_label = np.array(dis_label).reshape(-1, 1)	# (batch, 1) in RC15
-
-				# # train discriminator
-				# dis_loss, _ = sess.run([student_model.dis_loss, student_model.dis_opt], 
-				# 		feed_dict={student_model.dis_input: dis_input, 
-				# 		student_model.hard_label: dis_label, 
-				# 		student_model.is_training: True})
-
 				# co-perform
 				# prepare discriminator input
 				dis_input = np.array(dis_input).reshape((-1, item_num))	# (batch, 26702) in RC15
-				dis_label = [1.0 for _ in range(args.batch_size)]		# teacher label
-				dis_label.extend([0.0 for _ in range(args.batch_size)])	# student label
-				dis_label = np.array(dis_label).reshape(-1, 1)			# (batch, 1)
+				dis_label = [1 for _ in range(args.batch_size)]		# teacher label
+				dis_label.extend([0 for _ in range(args.batch_size)])	# student label
+				dis_label = np.array(dis_label).reshape(-1)			# (batch, 1)
 
 				stu_loss, _, dis_loss, _ = sess.run([
 					student_model.stu_loss, 
@@ -182,18 +161,18 @@ def parse_args():
 	parser.add_argument('--base_data_dir', default=base_dir+'RC15')
 	parser.add_argument('--topk', default='5,10,20')
 
-	parser.add_argument('--epoch', type=int, default=500)
+	parser.add_argument('--epoch', type=int, default=1000)
 	parser.add_argument('--eval_interval', type=int, default=2000)
 	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 
 	parser.add_argument('--lr', type=float, default=1e-3)
-	parser.add_argument('--dlr', type=float, default=1e-3)
+	parser.add_argument('--dlr', type=float, default=1e-4)
 	parser.add_argument('--batch_size', type=int, default=256)
 
 	# discriminator
 	parser.add_argument('--dis_dropout_rate', type=float, default=0.5)
-	parser.add_argument('--discriminator_layers', default='[256,256,256]')
+	parser.add_argument('--discriminator_layers', default='[1024,1024,1024]')
 	parser.add_argument('--weight_decay', type=float, default=1e-5)
 
 	# GRU4Rec/Caser/NItNet/SASRec
