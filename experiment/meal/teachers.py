@@ -55,6 +55,9 @@ class GRUnetwork:
 				# self.stu_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.soft_label, logits=self.output)) - self.dis_loss
 				self.stu_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.soft_label, logits=self.output)) + self.dis_loss
 
+				# without discriminator
+				# self.stu_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.soft_label, logits=self.output))
+
 				# fix discriminator params
 				train_var_list = [var for var in tf.trainable_variables() if (self.name in var.name) and ('discriminator' not in var.name)]
 				self.stu_opt = tf.train.AdamOptimizer(self.learning_rate
@@ -79,7 +82,7 @@ class GRUnetwork:
 
 		self.dis_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.discriminator_output, 
 			labels=self.hard_label)
-		self.dis_loss = tf.reduce_mean(self.dis_loss) + 1e-5	# avoid zero gradient
+		self.dis_loss = tf.reduce_mean(self.dis_loss) + 1e-6	# avoid zero gradient
 		train_dis_var_list = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
 		self.dis_opt = tf.train.AdamOptimizer(self.dlr
 			).minimize(self.dis_loss, var_list=train_dis_var_list)
