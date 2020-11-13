@@ -268,6 +268,7 @@ class Run(object):
 					})
 
 				interaction_time = 0
+				aver_r = 0
 				while True:
 					actions = self.sess.run(self.main_agent.actor_out_, feed_dict={
 						self.main_agent.state_hidden: state,
@@ -305,6 +306,7 @@ class Run(object):
 						self.target_agent.state_hidden: state, 
 						self.target_agent.is_training: False})
 					rewards = self.cal_diff(base_logits, rl_logits, target_items)	# get diff NDCG
+					aver_r = rewards.mean()
 
 					state_new_list = []		# continue play
 					for idx, (s, a, s_, r) in enumerate(zip(state, actions, state_new, rewards)):
@@ -347,18 +349,19 @@ class Run(object):
 					state = state_new_list		# next state
 					if (state_new_list == []) or (interaction_time >= self.args.max_interaction):
 						# print('Interaction END!')
-						aver_r = np.array(rewards).mean()
-						info = f'Step:[{total_step}], Aver Reward:{aver_r}, V:{self.args.v}'
+						# aver_r = np.array(rewards).mean()
+						# info = f'Step:[{total_step}], Aver Reward:{aver_r}, V:{self.args.v}'
 						# print(info)
-						self.logger.info(info)
+						# self.logger.info(info)
 						break
 
 				total_step += 1
 				if (total_step == 1) or (total_step % 200 == 0):
 					if not fix_rec:
 						ranking_model_loss = round(ranking_model_loss.item(), 5)
+					aver_r = round(aver_r.item(), 5)
 					actor_loss, critic_loss = round(actor_loss.item(), 5), round(critic_loss.item(), 5)
-					info = f"epoch:{i_epoch} Step:{total_step}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}"
+					info = f"epoch:{i_epoch} Step:{total_step}, ranking model loss:{ranking_model_loss}, actor loss:{actor_loss}, critic loss:{critic_loss}, aver reward:{aver_r}"
 					# print(info)
 					self.logger.info(info)
 				if (total_step == 1) or ((total_step >= self.args.start_eval) and (total_step % self.args.eval_interval == 0)):
@@ -390,16 +393,6 @@ def main(args, logger):
 def init_log(args):
 	if not os.path.exists(args.base_log_dir):
 		os.makedirs(args.base_log_dir)
-	# start = datetime.datetime.now()
-	# logging.basicConfig(level = logging.INFO,
-	# 				filename = args.base_log_dir + args.v + '-' + str(time.time()) + '.log',
-	# 				filemode = 'a',
-	# 				)
-	# print('start! '+str(start))
-	# logging.info('start! '+str(start))
-	# logging.info('Parameter:')
-	# logging.info(str(args))
-	# logging.info('\n-------------------------------------------------------------\n')
 
 	file_name = args.base_log_dir + args.v + '-' + str(time.time()) + '.log'
 	logger = logging.getLogger('mylogger')
@@ -413,6 +406,8 @@ def init_log(args):
 	ch.setFormatter(formatter)
 	logger.addHandler(fh)
 	logger.addHandler(ch)
+	logger.info(str(args))
+	logger.info('----------------------------------')
 	return logger
 
 

@@ -129,13 +129,12 @@ class Agent:
 			atten = tf.nn.softmax(self.actor_out_)
 			self.ranking_model_input = atten * self.state_hidden
 
-			with tf.variable_scope('output_layer'):
-				self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
-					activation_fn=None, weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			# pre-train
-			with tf.variable_scope('output_layer', reuse=True):
-				self.output = tf.contrib.layers.fully_connected(self.state_hidden, self.item_num,
-					activation_fn=None, weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			# when teach
+			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
+				activation_fn=None, weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			# when pre-train
+			self.output = tf.contrib.layers.fully_connected(self.state_hidden, self.item_num,
+				activation_fn=None, weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			self.ce_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
 				logits=self.logits)

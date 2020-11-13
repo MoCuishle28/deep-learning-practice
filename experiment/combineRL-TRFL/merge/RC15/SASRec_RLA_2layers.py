@@ -126,16 +126,14 @@ class Agent:
 			self.critic_optim = tf.train.AdamOptimizer(args.clr).minimize(self.critic_loss)
 
 			# SASRec
-			atten = tf.nn.softmax(self.actor_out_)
-			self.ranking_model_input = atten * self.state_hidden
+			self.ranking_model_input = self.actor_out_ + self.state_hidden
 
-			with tf.variable_scope('output_layer'):
-				self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
-					activation_fn=None, weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
-			# pre-train
-			with tf.variable_scope('output_layer', reuse=True):
-				self.output = tf.contrib.layers.fully_connected(self.state_hidden, self.item_num,
-					activation_fn=None, weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			# when teach
+			self.logits = tf.contrib.layers.fully_connected(self.ranking_model_input, self.item_num,
+				activation_fn=None, weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
+			# when pre-train
+			self.output = tf.contrib.layers.fully_connected(self.state_hidden, self.item_num,
+				activation_fn=None, weights_regularizer=tf.contrib.layers.l2_regularizer(args.weight_decay))
 
 			self.ce_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.target_items,
 				logits=self.logits)
@@ -343,7 +341,7 @@ class Run(object):
 							feed_dict={self.main_agent.state_hidden: state, 
 							self.main_agent.is_training: True})
 						self.sess.run(self.target_network_update_ops)		# update target net
-						# info = f'Step:[{total_step}] train agent, batch size:{len(state_new_list)} V:{self.args.v}'
+						info = f'Step:[{total_step}] train agent, batch size:{len(state_new_list)} V:{self.args.v}'
 						# print(info)
 						# self.logger.info(info)
 					interaction_time += 1
@@ -422,18 +420,18 @@ if __name__ == '__main__':
 	parser.add_argument('--base_data_dir', default=base_data_dir + 'RC15')
 	parser.add_argument('--topk', default='5,10,20')
 
-	parser.add_argument('--epoch', type=int, default=100)
+	parser.add_argument('--epoch', type=int, default=500)
 	parser.add_argument('--eval_interval', type=int, default=2000)
 	parser.add_argument('--start_eval', type=int, default=2000)
 	parser.add_argument('--eval_batch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=256)
 	parser.add_argument('--mlr', type=float, default=1e-3)
-	parser.add_argument('--alr', type=float, default=3e-4)
+	parser.add_argument('--alr', type=float, default=1e-3)
 	parser.add_argument('--clr', type=float, default=3e-4)
 
 	parser.add_argument('--reward_top', type=int, default=20)
 
-	parser.add_argument('--max_iid', type=int, default=26701)	# 0~26702
+	parser.add_argument('--max_iid', type=int, default=26701)	# 0~26701
 	parser.add_argument('--hidden_factor', type=int, default=64)
 
 	parser.add_argument('--num_heads', default=1, type=int)
